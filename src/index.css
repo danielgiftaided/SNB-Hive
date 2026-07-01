@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Prevent white flash on load */
+html, body, #root {
+  min-height: 100vh;
+  background-color: #F5F3EC;
+}
