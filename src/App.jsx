@@ -87,6 +87,7 @@ function exportCSV(bookings) {
 
 const STATUS_META = {
   paid:            { label: "Paid",             bg: "#E9F1EC", fg: TEAL,      icon: Banknote },
+  confirmed:       { label: "Booked",           bg: "#E9F1EC", fg: TEAL,      icon: Check },
   pending_payment: { label: "Awaiting payment", bg: "#FBF3E3", fg: "#9A7426", icon: Hourglass },
   cancelled:       { label: "Cancelled",        bg: "#F3E7E5", fg: "#9B3A2E", icon: Ban },
 };
@@ -680,22 +681,45 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
 /* ---- MY BOOKINGS ---- */
 
 function MyBookings({ bookings, currentUser }) {
-  const mine = bookings.filter(b => b.userId===currentUser.id || b.email===currentUser.email);
+  const mine = bookings
+    .filter(b => b.userId===currentUser.id || b.email===currentUser.email)
+    .filter(b => b.status !== "cancelled");
   return (
     <div className="max-w-md mx-auto flex flex-col gap-3">
       {mine.length===0
-        ? <p className="text-sm text-stone-500 text-center py-12">You don't have any bookings yet.</p>
-        : mine.slice().reverse().map(b => (
-          <div key={b.id} className="bg-white rounded-xl border border-stone-200 p-4">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-sm">{b.sessionName}</span>
-              <StatusBadge status={b.status}/>
-            </div>
-            <p className="text-xs text-stone-500 mt-1">
-              {b.plan} · £{typeof b.amount==="number" ? b.amount.toFixed(2) : b.amount}
-            </p>
+        ? <div className="text-center py-12">
+            <p className="text-sm text-stone-500">No bookings yet.</p>
+            <p className="text-xs text-stone-400 mt-1">Book a taster session to see it here.</p>
           </div>
-        ))
+        : mine.slice().reverse().map(b => {
+          const cls = DEFAULT_CLASSES.find(c => c.id === b.sessionId);
+          const Icon = cls ? (ICONS[cls.icon] || Sparkles) : Sparkles;
+          return (
+            <div key={b.id} className="bg-white rounded-xl border border-stone-200 p-4 flex gap-3 items-start">
+              {cls && (
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
+                  style={{ backgroundColor: cls.color + "1A" }}>
+                  <Icon size={16} style={{ color: cls.color }}/>
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="font-semibold text-sm" style={{ color: INK }}>{b.sessionName}</span>
+                  <StatusBadge status={b.status}/>
+                </div>
+                {cls && (
+                  <p className="text-xs text-stone-500 mt-1">{cls.day} · {cls.time}</p>
+                )}
+                {cls?.venue && (
+                  <a href={cls.venueMap} target="_blank" rel="noopener noreferrer"
+                    className="ff-body inline-flex items-center gap-1 text-xs text-stone-400 hover:text-stone-600 hover:underline mt-1 transition">
+                    <MapPin size={10}/> {cls.venue}
+                  </a>
+                )}
+              </div>
+            </div>
+          );
+        })
       }
     </div>
   );
