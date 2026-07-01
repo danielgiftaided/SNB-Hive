@@ -48,6 +48,12 @@ const STRIPE_LINKS = {
 // A real backend login is required before this goes live publicly.
 const ADMIN_PASSCODE = "admin123";
 
+// ── TASTER MODE ───────────────────────────────────────────────────────
+// true  = simple "Book taster" flow, no pricing or payments shown
+// false = full booking with PAYG / membership / Stripe payment
+// Change this one line to switch between the two modes.
+const TASTER_MODE = true;
+
 /* ===================================================================== */
 
 const INK  = "#1B2B26";
@@ -190,7 +196,7 @@ function AuthScreen({ onAuth }) {
       <Fonts />
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <img src={LOGO} alt="SNB Hive" className="h-20 mx-auto mb-2" />
+          <img src={LOGO} alt="SNB Hive" className="h-24 mx-auto mb-2" style={{ mixBlendMode:"multiply" }} />
           <p className="ff-body text-sm text-stone-500">{BRAND.tagline}</p>
         </div>
 
@@ -321,7 +327,7 @@ function ClassCard({ cls, booked, onBook, bookingType }) {
         <button onClick={() => onBook(cls)} disabled={disabled}
           className="ff-body inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full transition disabled:cursor-not-allowed"
           style={{ backgroundColor:disabled?"#E3DFD3":TEAL, color:disabled?"#8A8478":"#FFF", opacity: disabled ? 0.7 : 1 }}>
-          {full ? "Full" : isMember ? "Booked" : "Book"}{!disabled && <ArrowRight size={14}/>}
+          {full ? "Full" : isMember ? "Booked" : TASTER_MODE ? "Book taster" : "Book"}{!disabled && <ArrowRight size={14}/>}
         </button>
       </div>
     </div>
@@ -412,6 +418,24 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
     : (plan==="deposit" ? session.deposit : session.price);
 
   async function handleConfirm() {
+    // ── TASTER MODE — no payment, instant confirmation ──
+    if (TASTER_MODE) {
+      setSaving(true); setError("");
+      try {
+        await onConfirm({
+          id: uid(), sessionId: session.id, sessionName: session.name, type,
+          userId: currentUser.id, name: currentUser.name,
+          email: currentUser.email, phone: currentUser.phone,
+          plan: "Taster", amount: 0,
+          status: "confirmed", createdAt: new Date().toISOString(),
+        });
+        setStep(2);
+      } catch { setError("Couldn't save your booking — please try again."); }
+      finally { setSaving(false); }
+      return;
+    }
+
+    // ── FULL BOOKING MODE ──────────────────────────────────────────────
     if (needsClassPicker && selectedClasses.length < 2) {
       return setError("Please choose your second class before continuing.");
     }
@@ -432,14 +456,12 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
       };
 
       if (plan === "membership" && activities === 2) {
-        // Create one record per selected class
         const classes = DEFAULT_CLASSES.filter(c => selectedClasses.includes(c.id));
         for (let i = 0; i < classes.length; i++) {
           const cls = classes[i];
           await onConfirm({
             ...base, id: uid(),
             sessionId: cls.id, sessionName: cls.name,
-            // Full amount on the primary class; £0 on additional (covered by same membership)
             amount: cls.id === session.id ? amount : 0,
           });
         }
@@ -468,7 +490,32 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
         </div>
 
         <div className="p-5">
-          {step === 1 && (
+          {step === 1 && TASTER_MODE && type==="class" && (
+            <div className="flex flex-col gap-5">
+              <div className="rounded-xl bg-stone-50 px-4 py-3 text-sm text-stone-600">
+                Booking as <span className="font-semibold">{currentUser.name}</span> ({currentUser.email})
+              </div>
+              <div className="rounded-xl border border-stone-100 p-4 flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                  style={{ backgroundColor: (ICONS[DEFAULT_CLASSES.find(c=>c.id===session.id)?.icon] ? DEFAULT_CLASSES.find(c=>c.id===session.id)?.color : TEAL) + "1A" }}>
+                  <Sparkles size={16} style={{ color: TEAL }}/>
+                </div>
+                <div>
+                  <p className="font-semibold text-sm" style={{ color:INK }}>{session.name}</p>
+                  <p className="text-xs text-stone-500 mt-0.5">{session.day} · {session.time}</p>
+                  <p className="text-xs text-stone-400 mt-1">Free taster session — come and give it a try</p>
+                </div>
+              </div>
+              {error && <p className="text-xs text-red-600">{error}</p>}
+              <button onClick={handleConfirm} disabled={saving}
+                className="inline-flex items-center justify-center gap-1.5 font-semibold text-sm py-3 rounded-full transition"
+                style={{ backgroundColor:TEAL, color:"#fff" }}>
+                {saving ? <Loader2 size={15} className="animate-spin"/> : <>Confirm taster booking <Check size={15}/></>}
+              </button>
+            </div>
+          )}
+
+          {step === 1 && !TASTER_MODE && (
             <div className="flex flex-col gap-4">
               <div className="rounded-xl bg-stone-50 px-4 py-3 text-sm text-stone-600">
                 Booking as <span className="font-semibold">{currentUser.name}</span> ({currentUser.email})
@@ -577,7 +624,32 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
             </div>
           )}
 
-          {step === 2 && (
+          {step === 2 && TASTER_MODE && (
+            <div className="flex flex-col items-center text-center gap-4 py-4">
+              <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{ backgroundColor:"#E9F1EC" }}>
+                <Check size={26} style={{ color:TEAL }}/>
+              </div>
+              <div>
+                <h4 className="ff-display text-xl font-semibold" style={{ color:INK }}>Taster booked!</h4>
+                <p className="ff-body text-sm text-stone-500 mt-1">
+                  You're coming to <strong>{session.name}</strong>
+                </p>
+              </div>
+              <div className="w-full rounded-xl bg-stone-50 px-4 py-3 text-sm text-stone-600 text-left">
+                <p><span className="font-medium">Session:</span> {session.name}</p>
+                <p className="mt-1"><span className="font-medium">When:</span> {session.day} · {session.time}</p>
+                <p className="mt-1"><span className="font-medium">Name:</span> {currentUser.name}</p>
+              </div>
+              <p className="text-xs text-stone-400">We'll be in touch with everything you need to know before your first session.</p>
+              <button onClick={onClose}
+                className="w-full inline-flex items-center justify-center font-semibold text-sm py-3 rounded-full"
+                style={{ backgroundColor:TEAL, color:"#fff" }}>
+                Great, see you there!
+              </button>
+            </div>
+          )}
+
+          {step === 2 && !TASTER_MODE && (
             <div className="flex flex-col items-center text-center gap-3 py-4">
               <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor:"#E9F1EC" }}>
                 <ShieldCheck size={24} style={{ color:TEAL }}/>
@@ -837,7 +909,7 @@ export default function BookingApp() {
       <header className="sticky top-0 z-30 backdrop-blur bg-white/85 border-b border-stone-200">
         <div className="max-w-3xl mx-auto px-4 py-3.5 flex items-center justify-between gap-3">
           <div className="shrink-0 flex items-center gap-2">
-            <img src={LOGO} alt="SNB Hive" className="h-9" />
+            <img src={LOGO} alt="SNB Hive" className="h-11" style={{ mixBlendMode:"multiply" }} />
             <p className="ff-body text-xs text-stone-500 hidden sm:block">{BRAND.tagline}</p>
           </div>
           <div className="flex items-center gap-2">
