@@ -3,7 +3,7 @@ import {
   Calendar, MapPin, Clock, Check, X, ArrowRight, ChevronLeft,
   Loader2, Sparkles, Info, RotateCcw, Music2, Flame, Dumbbell, Flower2,
   ShieldCheck, Search, ArrowUpRight, Lock, Download, Eye, EyeOff, LogOut,
-  Banknote, Hourglass, Ban, Undo2, LayoutDashboard
+  Banknote, Hourglass, Ban, Undo2, LayoutDashboard, Mail, Send, Bell
 } from "lucide-react";
 import storage from "./storage.js";
 
@@ -15,7 +15,7 @@ import storage from "./storage.js";
 
 const BRAND = {
   name: "SNB Hive",
-  tagline: "Fitness classes & women's retreats",
+  tagline: "Women's Fitness and Wellness Classes & Retreats",
 };
 
 const DEFAULT_CLASSES = [
@@ -66,6 +66,22 @@ const LOGO  = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAZAAAAEXCAYAAACDChK
 
 function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+}
+
+// ── Supabase Edge Function caller ─────────────────────────────────────
+// Requires VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY env vars.
+// If not set (e.g. in the Claude preview), email features degrade gracefully.
+async function callEdgeFunction(name, data) {
+  let url = "", key = "";
+  try { url = import.meta.env.VITE_SUPABASE_URL || ""; key = import.meta.env.VITE_SUPABASE_ANON_KEY || ""; } catch {}
+  if (!url) throw new Error("EDGE_NOT_CONFIGURED");
+  const res = await fetch(`${url}/functions/v1/${name}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(`${name} returned ${res.status}`);
+  return res.json();
 }
 
 async function hashPassword(pw) {
@@ -142,23 +158,26 @@ function CapacityRing({ booked, capacity, color }) {
 /* ---- AUTH SCREEN ---- */
 
 function AuthScreen({ onAuth }) {
-  const [mode, setMode]       = useState("register");
-  const [form, setForm]       = useState({ name:"", email:"", phone:"", password:"", confirm:"" });
-  const [showPw, setShowPw]   = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState("");
+  const [mode, setMode]           = useState("register"); // register | login | forgot | verify | new_password
+  const [resetMode, setResetMode] = useState(false);      // true = verify is for password reset
+  const [verifyEmail, setVEmail]  = useState("");
+  const [code, setCode]           = useState("");
+  const [form, setForm]           = useState({ name:"", email:"", phone:"", password:"", confirm:"" });
+  const [showPw, setShowPw]       = useState(false);
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState("");
+  const [success, setSuccess]     = useState("");
 
-  function f(k, v) { setForm(p => ({...p, [k]:v})); setError(""); }
+  function f(k, v) { setForm(p => ({...p, [k]:v})); setError(""); setSuccess(""); }
+  function switchMode(m) { setMode(m); setError(""); setSuccess(""); setCode(""); }
 
-  async function getUsers() {
-    return (await storage.get("snb_users")) || [];
-  }
+  async function getUsers() { return (await storage.get("snb_users")) || []; }
 
   async function handleRegister() {
     if (!form.name.trim()) return setError("Please enter your full name.");
     if (!/\S+@\S+\.\S+/.test(form.email)) return setError("Please enter a valid email address.");
     if (form.phone.replace(/\D/g,"").length < 10) return setError("Please enter a valid mobile number.");
-    if (form.password.length < 8)  return setError("Password must be at least 8 characters.");
+    if (form.password.length < 8) return setError("Password must be at least 8 characters.");
     if (form.password !== form.confirm) return setError("Passwords do not match.");
     setLoading(true);
     try {
@@ -169,9 +188,20 @@ function AuthScreen({ onAuth }) {
       const user = { id:uid(), name:form.name.trim(), email:form.email.trim().toLowerCase(), phone:form.phone.trim(), passwordHash, createdAt:new Date().toISOString() };
       await storage.set("snb_users", [...users, user]);
       const session = { id:user.id, name:user.name, email:user.email, phone:user.phone };
-      await storage.set("snb_session", session);
-      onAuth(session);
-    } catch { setError("Something went wrong — please try again."); }
+      // Attempt email verification + admin notification (needs Supabase Edge Functions)
+      try {
+        await callEdgeFunction("send-verification", { email:user.email, name:user.name, type:"signup" });
+        await callEdgeFunction("admin-signup-notification", { name:user.name, email:user.email, phone:user.phone });
+        await storage.set("snb_session", session);
+        setVEmail(user.email);
+        setResetMode(false);
+        switchMode("verify");
+      } catch {
+        // Edge functions not configured — skip verification and log in directly
+        await storage.set("snb_session", session);
+        onAuth(session);
+      }
+    } catch(e) { if (!error) setError("Something went wrong — please try again."); }
     finally { setLoading(false); }
   }
 
@@ -192,93 +222,248 @@ function AuthScreen({ onAuth }) {
     finally { setLoading(false); }
   }
 
+  async function handleForgot() {
+    if (!/\S+@\S+\.\S+/.test(form.email)) return setError("Please enter a valid email address.");
+    setLoading(true);
+    try {
+      await callEdgeFunction("send-verification", { email:form.email.trim().toLowerCase(), type:"reset" });
+      setVEmail(form.email.trim().toLowerCase());
+      setResetMode(true);
+      switchMode("verify");
+    } catch(e) {
+      if (e.message === "EDGE_NOT_CONFIGURED") {
+        setError("Password reset requires email setup — please contact us directly at sunlightevents@hotmail.com");
+      } else {
+        // Don't reveal whether email exists
+        setSuccess("If an account exists for that email, we\'ve sent a reset code. Check your inbox.");
+      }
+    }
+    finally { setLoading(false); }
+  }
+
+  async function handleVerify() {
+    if (!code || code.length !== 6) return setError("Please enter the 6-digit code from your email.");
+    setLoading(true);
+    try {
+      await callEdgeFunction("verify-code", { email:verifyEmail, code, type:resetMode?"reset":"signup" });
+      if (resetMode) {
+        setResetMode(false);
+        switchMode("new_password");
+      } else {
+        const users = await getUsers();
+        const user = users.find(u => u.email === verifyEmail);
+        if (user) { const s = {id:user.id,name:user.name,email:user.email,phone:user.phone}; await storage.set("snb_session",s); onAuth(s); }
+      }
+    } catch { setError("Invalid or expired code. Please try again."); }
+    finally { setLoading(false); }
+  }
+
+  async function handleNewPassword() {
+    if (!form.password || form.password.length < 8) return setError("Password must be at least 8 characters.");
+    if (form.password !== form.confirm) return setError("Passwords don\'t match.");
+    setLoading(true);
+    try {
+      const users = await getUsers();
+      const hash = await hashPassword(form.password);
+      await storage.set("snb_users", users.map(u => u.email===verifyEmail ? {...u, passwordHash:hash} : u));
+      setSuccess("Password updated! Please sign in.");
+      setForm(p => ({...p, email:verifyEmail, password:"", confirm:""}));
+      switchMode("login");
+    } catch { setError("Something went wrong — please try again."); }
+    finally { setLoading(false); }
+  }
+
+  async function handleResendCode() {
+    setLoading(true); setError("");
+    try {
+      const users = await getUsers();
+      const user = users.find(u => u.email === verifyEmail);
+      await callEdgeFunction("send-verification", { email:verifyEmail, name:user?.name||"", type:resetMode?"reset":"signup" });
+      setSuccess("New code sent — check your email.");
+    } catch { setError("Could not resend code — please try again."); }
+    finally { setLoading(false); }
+  }
+
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center px-4 py-10" style={{ backgroundColor:BG }}>
-      <Fonts />
+      <Fonts/>
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <img src={LOGO} alt="SNB Hive" className="h-24 mx-auto mb-2" />
+          <img src={LOGO} alt="SNB Hive" className="h-24 mx-auto mb-2"/>
           <p className="ff-body text-sm text-stone-500">{BRAND.tagline}</p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-6">
-          {/* mode toggle */}
-          <div className="flex gap-1 bg-stone-100 rounded-full p-1 mb-6">
-            {[["register","Create account"],["login","Sign in"]].map(([k,label]) => (
-              <button key={k} onClick={() => { setMode(k); setError(""); setForm({name:"",email:"",phone:"",password:"",confirm:""}); }}
-                className="ff-body flex-1 text-sm font-medium py-1.5 rounded-full transition"
-                style={{ backgroundColor:mode===k?"#fff":"transparent", color:mode===k?INK:"#8A8478", boxShadow:mode===k?"0 1px 2px rgba(0,0,0,0.08)":"none" }}>
-                {label}
-              </button>
-            ))}
-          </div>
 
-          <div className="flex flex-col gap-4">
-            {mode === "register" && (
-              <div>
-                <label className="ff-body text-sm font-medium text-stone-700">Full name</label>
-                <input value={form.name} onChange={e => f("name",e.target.value)}
-                  className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
-                  placeholder="Your full name" autoComplete="name" />
-              </div>
-            )}
-
-            <div>
-              <label className="ff-body text-sm font-medium text-stone-700">
-                Email address{mode==="register" ? " — this is your username" : ""}
-              </label>
-              <input value={form.email} onChange={e => f("email",e.target.value)} type="email"
-                className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
-                placeholder="you@example.com" autoComplete="email" />
+          {/* register / login */}
+          {(mode==="register" || mode==="login") && (<>
+            <div className="flex gap-1 bg-stone-100 rounded-full p-1 mb-6">
+              {[["register","Create account"],["login","Sign in"]].map(([k,label]) => (
+                <button key={k} onClick={() => switchMode(k)}
+                  className="ff-body flex-1 text-sm font-medium py-1.5 rounded-full transition"
+                  style={{ backgroundColor:mode===k?"#fff":"transparent", color:mode===k?INK:"#8A8478", boxShadow:mode===k?"0 1px 2px rgba(0,0,0,0.08)":"none" }}>
+                  {label}
+                </button>
+              ))}
             </div>
-
-            {mode === "register" && (
+            <div className="flex flex-col gap-4">
+              {mode==="register" && (
+                <div>
+                  <label className="ff-body text-sm font-medium text-stone-700">Full name</label>
+                  <input value={form.name} onChange={e=>f("name",e.target.value)}
+                    className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
+                    placeholder="Your full name" autoComplete="name"/>
+                </div>
+              )}
               <div>
-                <label className="ff-body text-sm font-medium text-stone-700">Mobile number</label>
-                <input value={form.phone} onChange={e => f("phone",e.target.value)} type="tel"
+                <label className="ff-body text-sm font-medium text-stone-700">
+                  Email address{mode==="register" ? " — this is your username" : ""}
+                </label>
+                <input value={form.email} onChange={e=>f("email",e.target.value)} type="email"
                   className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
-                  placeholder="07…" autoComplete="tel" />
+                  placeholder="you@example.com" autoComplete="email"/>
               </div>
-            )}
+              {mode==="register" && (
+                <div>
+                  <label className="ff-body text-sm font-medium text-stone-700">Mobile number</label>
+                  <input value={form.phone} onChange={e=>f("phone",e.target.value)} type="tel"
+                    className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
+                    placeholder="07…" autoComplete="tel"/>
+                </div>
+              )}
+              <div>
+                <label className="ff-body text-sm font-medium text-stone-700">Password</label>
+                <div className="relative mt-1">
+                  <input value={form.password} onChange={e=>f("password",e.target.value)} type={showPw?"text":"password"}
+                    className="ff-body w-full rounded-xl border border-stone-200 px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2"
+                    placeholder={mode==="register"?"At least 8 characters":"Your password"}
+                    autoComplete={mode==="register"?"new-password":"current-password"}
+                    onKeyDown={e=>{if(e.key==="Enter"&&mode==="login")handleLogin();}}/>
+                  <button onClick={()=>setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400">
+                    {showPw?<EyeOff size={16}/>:<Eye size={16}/>}
+                  </button>
+                </div>
+              </div>
+              {mode==="register" && (
+                <div>
+                  <label className="ff-body text-sm font-medium text-stone-700">Confirm password</label>
+                  <input value={form.confirm} onChange={e=>f("confirm",e.target.value)} type={showPw?"text":"password"}
+                    className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
+                    placeholder="Repeat password" autoComplete="new-password"/>
+                </div>
+              )}
+              {error   && <div className="ff-body text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>}
+              {success && <div className="ff-body text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2">{success}</div>}
+              <button onClick={mode==="register"?handleRegister:handleLogin} disabled={loading}
+                className="ff-body inline-flex items-center justify-center gap-2 font-semibold text-sm py-3 rounded-full transition disabled:opacity-50"
+                style={{ backgroundColor:TEAL, color:"#fff" }}>
+                {loading?<Loader2 size={15} className="animate-spin"/>:mode==="register"?"Create my account":"Sign in"}
+                {!loading&&<ArrowRight size={15}/>}
+              </button>
+              {mode==="login" && (
+                <button onClick={()=>switchMode("forgot")} className="ff-body text-xs text-stone-400 hover:text-stone-600 text-center mt-1">
+                  Forgot your password?
+                </button>
+              )}
+            </div>
+          </>)}
 
-            <div>
-              <label className="ff-body text-sm font-medium text-stone-700">Password</label>
-              <div className="relative mt-1">
-                <input value={form.password} onChange={e => f("password",e.target.value)}
-                  type={showPw?"text":"password"}
-                  className="ff-body w-full rounded-xl border border-stone-200 px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2"
-                  placeholder={mode==="register"?"At least 8 characters":"Your password"}
-                  autoComplete={mode==="register"?"new-password":"current-password"}
-                  onKeyDown={e => { if(e.key==="Enter" && mode==="login") handleLogin(); }} />
-                <button onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400">
-                  {showPw ? <EyeOff size={16}/> : <Eye size={16}/>}
+          {/* forgot password */}
+          {mode==="forgot" && (
+            <div className="flex flex-col gap-4">
+              <div className="text-center mb-1">
+                <h3 className="ff-display font-semibold" style={{color:INK}}>Reset your password</h3>
+                <p className="ff-body text-xs text-stone-500 mt-1">Enter your email and we'll send a reset code</p>
+              </div>
+              <div>
+                <label className="ff-body text-sm font-medium text-stone-700">Email address</label>
+                <input value={form.email} onChange={e=>f("email",e.target.value)} type="email"
+                  className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
+                  placeholder="you@example.com" autoComplete="email"/>
+              </div>
+              {error   && <div className="ff-body text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>}
+              {success && <div className="ff-body text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2">{success}</div>}
+              <button onClick={handleForgot} disabled={loading}
+                className="ff-body inline-flex items-center justify-center gap-2 font-semibold text-sm py-3 rounded-full transition disabled:opacity-50"
+                style={{ backgroundColor:TEAL, color:"#fff" }}>
+                {loading?<Loader2 size={15} className="animate-spin"/>:<>Send reset code <ArrowRight size={15}/></>}
+              </button>
+              <button onClick={()=>switchMode("login")} className="ff-body text-xs text-stone-400 hover:text-stone-600 text-center">
+                Back to sign in
+              </button>
+            </div>
+          )}
+
+          {/* verify email — signup or reset */}
+          {mode==="verify" && (
+            <div className="flex flex-col gap-4">
+              <div className="text-center mb-1">
+                <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3" style={{backgroundColor:"#E9F1EC"}}>
+                  <Mail size={20} style={{color:TEAL}}/>
+                </div>
+                <h3 className="ff-display font-semibold" style={{color:INK}}>Check your email</h3>
+                <p className="ff-body text-xs text-stone-500 mt-1">
+                  We sent a 6-digit code to<br/><strong>{verifyEmail}</strong>
+                </p>
+              </div>
+              <div>
+                <label className="ff-body text-sm font-medium text-stone-700">Verification code</label>
+                <input value={code} onChange={e=>{setCode(e.target.value.replace(/\D/g,"").slice(0,6));setError("");}}
+                  type="text" inputMode="numeric" maxLength={6}
+                  className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-3 text-center tracking-[0.5em] text-lg font-semibold focus:outline-none focus:ring-2"
+                  placeholder="000000"/>
+              </div>
+              {error   && <div className="ff-body text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>}
+              {success && <div className="ff-body text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2">{success}</div>}
+              <button onClick={handleVerify} disabled={loading||code.length!==6}
+                className="ff-body inline-flex items-center justify-center gap-2 font-semibold text-sm py-3 rounded-full transition disabled:opacity-50"
+                style={{ backgroundColor:TEAL, color:"#fff" }}>
+                {loading?<Loader2 size={15} className="animate-spin"/>:<>Verify <Check size={15}/></>}
+              </button>
+              <div className="flex items-center justify-between">
+                <button onClick={handleResendCode} disabled={loading} className="ff-body text-xs text-stone-400 hover:text-stone-600">
+                  Resend code
+                </button>
+                <button onClick={()=>switchMode(resetMode?"forgot":"register")} className="ff-body text-xs text-stone-400 hover:text-stone-600">
+                  Go back
                 </button>
               </div>
             </div>
+          )}
 
-            {mode === "register" && (
-              <div>
-                <label className="ff-body text-sm font-medium text-stone-700">Confirm password</label>
-                <input value={form.confirm} onChange={e => f("confirm",e.target.value)}
-                  type={showPw?"text":"password"}
-                  className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
-                  placeholder="Repeat password" autoComplete="new-password" />
+          {/* new password after reset */}
+          {mode==="new_password" && (
+            <div className="flex flex-col gap-4">
+              <div className="text-center mb-1">
+                <h3 className="ff-display font-semibold" style={{color:INK}}>Set a new password</h3>
               </div>
-            )}
+              <div>
+                <label className="ff-body text-sm font-medium text-stone-700">New password</label>
+                <div className="relative mt-1">
+                  <input value={form.password} onChange={e=>f("password",e.target.value)} type={showPw?"text":"password"}
+                    className="ff-body w-full rounded-xl border border-stone-200 px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2"
+                    placeholder="At least 8 characters" autoComplete="new-password"/>
+                  <button onClick={()=>setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400">
+                    {showPw?<EyeOff size={16}/>:<Eye size={16}/>}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="ff-body text-sm font-medium text-stone-700">Confirm new password</label>
+                <input value={form.confirm} onChange={e=>f("confirm",e.target.value)} type={showPw?"text":"password"}
+                  className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
+                  placeholder="Repeat password" autoComplete="new-password"/>
+              </div>
+              {error && <div className="ff-body text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>}
+              <button onClick={handleNewPassword} disabled={loading}
+                className="ff-body inline-flex items-center justify-center gap-2 font-semibold text-sm py-3 rounded-full transition disabled:opacity-50"
+                style={{ backgroundColor:TEAL, color:"#fff" }}>
+                {loading?<Loader2 size={15} className="animate-spin"/>:<>Update password <Check size={15}/></>}
+              </button>
+            </div>
+          )}
 
-            {error && <div className="ff-body text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>}
-
-            <button
-              onClick={mode==="register" ? handleRegister : handleLogin}
-              disabled={loading}
-              className="ff-body inline-flex items-center justify-center gap-2 font-semibold text-sm py-3 rounded-full transition disabled:opacity-50"
-              style={{ backgroundColor:TEAL, color:"#fff" }}>
-              {loading ? <Loader2 size={15} className="animate-spin"/> : mode==="register" ? "Create my account" : "Sign in"}
-              {!loading && <ArrowRight size={15}/>}
-            </button>
-          </div>
         </div>
-
         <p className="ff-body text-xs text-stone-400 text-center mt-4">
           Your details are stored securely and used only for booking management.
         </p>
@@ -759,8 +944,24 @@ function AdminPasscodeGate({ onUnlock, onClose }) {
 /* ---- ADMIN DASHBOARD ---- */
 
 function AdminDashboard({ bookings, onMarkPaid, onMarkPending, onCancel, onRestore, onClose }) {
-  const [statusFilter, setFilter] = useState("all");
-  const [query, setQuery]         = useState("");
+  const [statusFilter, setFilter]   = useState("all");
+  const [query, setQuery]           = useState("");
+  const [notifSubject, setNSubject] = useState("");
+  const [notifMessage, setNMessage] = useState("");
+  const [notifStatus, setNStatus]   = useState("idle"); // idle | sending | sent | error
+
+  async function handleSendBlast() {
+    if (!notifSubject.trim() || !notifMessage.trim()) return;
+    setNStatus("sending");
+    try {
+      await callEdgeFunction("send-blast", { subject: notifSubject, message: notifMessage });
+      setNStatus("sent");
+      setTimeout(() => setNStatus("idle"), 4000);
+    } catch(e) {
+      setNStatus(e.message==="EDGE_NOT_CONFIGURED" ? "not_configured" : "error");
+      setTimeout(() => setNStatus("idle"), 4000);
+    }
+  }
 
   const filtered = bookings.filter(b => {
     if (statusFilter!=="all" && b.status!==statusFilter) return false;
@@ -861,6 +1062,28 @@ function AdminDashboard({ bookings, onMarkPaid, onMarkPending, onCancel, onResto
               </div>
           }
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---- COMING SOON ---- */
+
+function ComingSoon() {
+  return (
+    <div className="max-w-md mx-auto text-center py-16 flex flex-col items-center gap-5">
+      <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ backgroundColor:TEAL+"1A" }}>
+        <Sparkles size={28} style={{ color:TEAL }}/>
+      </div>
+      <div>
+        <h2 className="ff-display text-2xl font-semibold" style={{ color:INK }}>Retreats Coming Soon</h2>
+        <p className="ff-body text-sm text-stone-500 mt-2 leading-relaxed max-w-xs mx-auto">
+          We're putting together something special. Our women's wellness retreats will be announced here soon — sign up or log in to be the first to know.
+        </p>
+      </div>
+      <div className="w-full rounded-xl border border-dashed border-stone-300 px-6 py-5 bg-white text-left">
+        <p className="ff-body text-sm font-medium text-stone-600 flex items-center gap-2"><Bell size={14}/> Stay in the loop</p>
+        <p className="ff-body text-xs text-stone-400 mt-1">All registered members will receive an email notification when retreat bookings open. Make sure your account email is up to date.</p>
       </div>
     </div>
   );
@@ -983,13 +1206,7 @@ export default function BookingApp() {
                 ))}
               </div>
             : tab==="retreats"
-              ? <div className="flex flex-col gap-4">
-                  {DEFAULT_RETREATS.map(r => (
-                    <RetreatCard key={r.id} retreat={r} booked={bookedCount(r.id)}
-                      isSignedUp={!!getUserBookingType(r.id)}
-                      onBook={() => { setModalSession(r); setModalType("retreat"); }}/>
-                  ))}
-                </div>
+              ? <ComingSoon/>
               : <MyBookings bookings={bookings} currentUser={currentUser}/>
         }
       </main>
