@@ -329,11 +329,11 @@ function ClassCard({ cls, booked, onBook, bookingType }) {
         </a>
       )}
 
-      <div className="flex items-center justify-end pt-2 border-t border-stone-100">
+      <div className="flex items-center justify-end pt-2 border-t border-stone-100 mt-auto">
         <button onClick={() => onBook(cls)} disabled={disabled}
           className="ff-body inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full transition disabled:cursor-not-allowed"
-          style={{ backgroundColor:disabled?"#E3DFD3":TEAL, color:disabled?"#8A8478":"#FFF", opacity: disabled ? 0.7 : 1 }}>
-          {full ? "Full" : isMember ? "Booked" : TASTER_MODE ? "Book taster" : "Book"}{!disabled && <ArrowRight size={14}/>}
+          style={{ backgroundColor: disabled ? (isMember ? "#D4EBD9" : "#E3DFD3") : TEAL, color: disabled ? (isMember ? "#2D6B40" : "#8A8478") : "#FFF", opacity: disabled ? 0.85 : 1 }}>
+          {full ? "Full" : isMember ? "✓ Booked" : TASTER_MODE ? "Book taster" : "Book"}{!disabled && <ArrowRight size={14}/>}
         </button>
       </div>
     </div>
