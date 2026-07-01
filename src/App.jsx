@@ -189,8 +189,8 @@ function AuthScreen({ onAuth }) {
       <Fonts />
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="ff-display text-3xl font-semibold" style={{ color:INK }}>{BRAND.name}</h1>
-          <p className="ff-body text-sm text-stone-500 mt-1">{BRAND.tagline}</p>
+          <img src="/snb-hive-logo.png" alt="SNB Hive" className="h-20 mx-auto mb-2" />
+          <p className="ff-body text-sm text-stone-500">{BRAND.tagline}</p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-6">
@@ -284,11 +284,15 @@ function AuthScreen({ onAuth }) {
    - Capacity ring visible ONLY when spotsLeft ≤ 5 AND user is not already booked
    ---- */
 
-function ClassCard({ cls, booked, onBook, isSignedUp }) {
+function ClassCard({ cls, booked, onBook, bookingType }) {
   const Icon = ICONS[cls.icon] || Sparkles;
   const full = booked >= cls.capacity;
   const spotsLeft = Math.max(cls.capacity - booked, 0);
-  const showRing = !isSignedUp && spotsLeft <= 5;
+  const isMember  = bookingType === "membership";
+  const isPayg    = bookingType === "payg";
+  const isBooked  = !!bookingType;
+  const showRing  = !isBooked && spotsLeft <= 5;
+  const disabled  = full || isMember;
 
   return (
     <div className="bg-white rounded-2xl border border-stone-200 p-5 flex flex-col gap-4 shadow-sm">
@@ -308,14 +312,15 @@ function ClassCard({ cls, booked, onBook, isSignedUp }) {
       <div className="flex flex-wrap gap-2">
         <Pill icon={Calendar}>{cls.day}</Pill>
         <Pill icon={Clock}>{cls.time}</Pill>
-        {isSignedUp && <Pill icon={Check}><span style={{ color:TEAL }}>You're booked</span></Pill>}
+        {isMember && <Pill icon={Check}><span style={{ color:TEAL }}>Member</span></Pill>}
+        {isPayg   && <Pill icon={Check}><span style={{ color:TEAL }}>Attended</span></Pill>}
       </div>
 
       <div className="flex items-center justify-end pt-2 border-t border-stone-100">
-        <button onClick={() => onBook(cls)} disabled={full}
-          className="ff-body inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full transition disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{ backgroundColor:full?"#E3DFD3":TEAL, color:full?"#8A8478":"#FFF" }}>
-          {full ? "Full" : isSignedUp ? "Book again" : "Book"}{!full && <ArrowRight size={14}/>}
+        <button onClick={() => onBook(cls)} disabled={disabled}
+          className="ff-body inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full transition disabled:cursor-not-allowed"
+          style={{ backgroundColor:disabled?"#E3DFD3":TEAL, color:disabled?"#8A8478":"#FFF", opacity: disabled ? 0.7 : 1 }}>
+          {full ? "Full" : isMember ? "Booked" : "Book"}{!disabled && <ArrowRight size={14}/>}
         </button>
       </div>
     </div>
@@ -376,33 +381,75 @@ function RetreatCard({ retreat, booked, onBook, isSignedUp }) {
    ---- */
 
 function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
-  const [step, setStep] = useState(1);
-  const [plan, setPlan]      = useState(type==="class" ? "payg" : "deposit");
-  const [activities, setAct] = useState(1);
-  const [saving, setSaving]  = useState(false);
-  const [paymentUrl, setPUrl]= useState("");
-  const [error, setError]    = useState("");
+  const [step, setStep]           = useState(1);
+  const [plan, setPlan]           = useState(type==="class" ? "payg" : "deposit");
+  const [activities, setAct]      = useState(1);
+  const [selectedClasses, setSel] = useState([session.id]);
+  const [saving, setSaving]       = useState(false);
+  const [paymentUrl, setPUrl]     = useState("");
+  const [error, setError]         = useState("");
+
+  function toggleClass(id) {
+    if (id === session.id) return; // primary class always stays selected
+    setSel(prev => prev.includes(id)
+      ? prev.filter(x => x !== id)
+      : prev.length < activities ? [...prev, id] : prev
+    );
+  }
+
+  // Reset selected classes when activity count changes
+  function changeActivities(n) {
+    setAct(n);
+    setSel([session.id]); // keep primary, clear extras
+  }
+
+  const needsClassPicker = plan === "membership" && activities === 2;
+  const pickerReady      = !needsClassPicker || selectedClasses.length === 2;
 
   const amount = type==="class"
     ? (plan==="payg" ? PAYG_PRICE : MEMBERSHIP_TIERS.find(t=>t.activities===activities)?.price)
     : (plan==="deposit" ? session.deposit : session.price);
 
   async function handleConfirm() {
+    if (needsClassPicker && selectedClasses.length < 2) {
+      return setError("Please choose your second class before continuing.");
+    }
     setSaving(true); setError("");
     try {
       const url = type==="class"
         ? (plan==="payg" ? STRIPE_LINKS.payg : STRIPE_LINKS.membership[activities])
         : (plan==="deposit" ? STRIPE_LINKS.retreatDeposit[session.id] : STRIPE_LINKS.retreatFull[session.id]);
 
-      await onConfirm({
-        id: uid(), sessionId: session.id, sessionName: session.name, type,
-        userId: currentUser.id, name: currentUser.name,
+      const planLabel = type==="class"
+        ? (plan==="payg" ? "Pay as you go" : `Membership — ${activities} class${activities>1?"es":""}`)
+        : (plan==="deposit" ? "Deposit" : "Paid in full");
+
+      const base = {
+        type, userId: currentUser.id, name: currentUser.name,
         email: currentUser.email, phone: currentUser.phone,
-        plan: type==="class"
-          ? (plan==="payg" ? "Pay as you go" : `Membership — ${activities} class${activities>1?"es":""}`)
-          : (plan==="deposit" ? "Deposit" : "Paid in full"),
-        amount, status: "pending_payment", createdAt: new Date().toISOString(),
-      });
+        plan: planLabel, status: "pending_payment", createdAt: new Date().toISOString(),
+      };
+
+      if (plan === "membership" && activities === 2) {
+        // Create one record per selected class
+        const classes = DEFAULT_CLASSES.filter(c => selectedClasses.includes(c.id));
+        for (let i = 0; i < classes.length; i++) {
+          const cls = classes[i];
+          await onConfirm({
+            ...base, id: uid(),
+            sessionId: cls.id, sessionName: cls.name,
+            // Full amount on the primary class; £0 on additional (covered by same membership)
+            amount: cls.id === session.id ? amount : 0,
+          });
+        }
+      } else {
+        await onConfirm({
+          ...base, id: uid(),
+          sessionId: session.id, sessionName: session.name,
+          amount,
+        });
+      }
+
       setPUrl(url); setStep(2);
     } catch { setError("Couldn't save your booking — please try again."); }
     finally { setSaving(false); }
@@ -444,10 +491,10 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
                   </div>
                   <p className="text-xs text-stone-500 mt-0.5">£26/month for 1 class · £45/month for 2 classes</p>
                 </button>
-                {plan==="membership" && (
+                {plan==="membership" && (<>
                   <div className="grid grid-cols-2 gap-2 pl-1">
                     {MEMBERSHIP_TIERS.map(t => (
-                      <button key={t.activities} onClick={() => setAct(t.activities)}
+                      <button key={t.activities} onClick={() => changeActivities(t.activities)}
                         className="rounded-lg border px-3 py-2 text-xs font-medium text-left transition"
                         style={{ borderColor:activities===t.activities?GOLD:"#E7E2D5", backgroundColor:activities===t.activities?"#FBF3E3":"#fff" }}>
                         {t.activities} class{t.activities>1?"es":""}<br/>
@@ -455,7 +502,43 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
                       </button>
                     ))}
                   </div>
-                )}
+
+                  {activities === 2 && (
+                    <div className="rounded-xl border border-stone-200 p-3.5">
+                      <p className="text-xs font-semibold text-stone-700 mb-2.5">
+                        Choose your 2 classes — pick one more to go with <strong>{session.name}</strong>
+                      </p>
+                      <div className="flex flex-col gap-2">
+                        {DEFAULT_CLASSES.map(cls => {
+                          const isPrimary  = cls.id === session.id;
+                          const isSelected = selectedClasses.includes(cls.id);
+                          return (
+                            <button key={cls.id} onClick={() => toggleClass(cls.id)}
+                              disabled={isPrimary}
+                              className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-left transition disabled:cursor-default"
+                              style={{
+                                backgroundColor: isSelected ? "#E9F1EC" : "#F8F7F4",
+                                border: `1.5px solid ${isSelected ? TEAL : "#E3DFD3"}`,
+                              }}>
+                              <div className="w-5 h-5 rounded flex items-center justify-center shrink-0"
+                                style={{ backgroundColor: isSelected ? TEAL : "#E3DFD3" }}>
+                                {isSelected && <Check size={12} color="white"/>}
+                              </div>
+                              <div className="flex-1">
+                                <span className="font-medium" style={{ color: INK }}>{cls.name}</span>
+                                <span className="text-stone-400 text-xs"> · {cls.day}</span>
+                              </div>
+                              {isPrimary && <span className="text-xs text-stone-400">Current</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {selectedClasses.length < 2 && (
+                        <p className="text-xs text-amber-600 mt-2">Select 1 more class to continue</p>
+                      )}
+                    </div>
+                  )}
+                </>)}
               </>) : (<>
                 <label className="text-sm font-medium text-stone-700">How would you like to pay?</label>
                 <button onClick={() => setPlan("deposit")} className="text-left rounded-xl border-2 p-3.5 transition"
@@ -719,10 +802,12 @@ export default function BookingApp() {
   function bookedCount(id) {
     return bookings.filter(b => b.sessionId===id && b.status!=="cancelled").length;
   }
-  function isUserBooked(id) {
-    if (!currentUser) return false;
-    return bookings.some(b => b.sessionId===id && b.status!=="cancelled"
+  function getUserBookingType(id) {
+    if (!currentUser) return null;
+    const b = bookings.find(b => b.sessionId===id && b.status!=="cancelled"
       && (b.userId===currentUser.id || b.email===currentUser.email));
+    if (!b) return null;
+    return (b.plan || "").toLowerCase().includes("membership") ? "membership" : "payg";
   }
 
   async function persist(next) { setBookings(next); await storage.set("bookings", next); }
@@ -750,9 +835,9 @@ export default function BookingApp() {
 
       <header className="sticky top-0 z-30 backdrop-blur bg-white/85 border-b border-stone-200">
         <div className="max-w-3xl mx-auto px-4 py-3.5 flex items-center justify-between gap-3">
-          <div className="shrink-0">
-            <h1 className="ff-display text-lg font-semibold" style={{ color:INK }}>{BRAND.name}</h1>
-            <p className="ff-body text-xs text-stone-500">{BRAND.tagline}</p>
+          <div className="shrink-0 flex items-center gap-2">
+            <img src="/snb-hive-logo.png" alt="SNB Hive" className="h-9" />
+            <p className="ff-body text-xs text-stone-500 hidden sm:block">{BRAND.tagline}</p>
           </div>
           <div className="flex items-center gap-2">
             <nav className="flex gap-1 bg-stone-100 rounded-full p-1">
@@ -791,7 +876,7 @@ export default function BookingApp() {
             ? <div className="grid sm:grid-cols-2 gap-4">
                 {DEFAULT_CLASSES.map(cls => (
                   <ClassCard key={cls.id} cls={cls} booked={bookedCount(cls.id)}
-                    isSignedUp={isUserBooked(cls.id)}
+                    bookingType={getUserBookingType(cls.id)}
                     onBook={() => { setModalSession(cls); setModalType("class"); }}/>
                 ))}
               </div>
@@ -799,7 +884,7 @@ export default function BookingApp() {
               ? <div className="flex flex-col gap-4">
                   {DEFAULT_RETREATS.map(r => (
                     <RetreatCard key={r.id} retreat={r} booked={bookedCount(r.id)}
-                      isSignedUp={isUserBooked(r.id)}
+                      isSignedUp={!!getUserBookingType(r.id)}
                       onBook={() => { setModalSession(r); setModalType("retreat"); }}/>
                   ))}
                 </div>
