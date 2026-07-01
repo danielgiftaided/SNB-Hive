@@ -1,41 +1,16 @@
 /**
- * Storage adapter — localStorage version
+ * src/storage.js — Supabase adapter
  *
- * Works immediately with zero setup. Data is per-browser/device, which is
- * fine for testing and solo use. For a real booking system where bookings
- * and capacity need to sync across all customers and your admin dashboard,
- * follow the Supabase upgrade instructions in README.md.
+ * Replaces the localStorage version. Bookings and user accounts now live
+ * in your shared Supabase database so all devices see the same data.
  *
- * The API is async so swapping to Supabase only requires editing this file
- * — App.jsx does not need to change.
+ * Sessions (who is currently logged in) stay in localStorage — each
+ * device manages its own login state, which is correct behaviour.
+ *
+ * Requires:
+ *   VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY set in Vercel
+ *   environment variables (Settings → Environment Variables).
  */
-const storage = {
-  async get(key) {
-    try {
-      const val = localStorage.getItem(key);
-      return val !== null ? JSON.parse(val) : null;
-    } catch { return null; }
-  },
-
-  async set(key, value) {
-    try {
-      localStorage.setItem(key, JSON.stringify(value));
-    } catch (e) {
-      console.error("[storage] set failed:", e);
-    }
-  },
-
-  async remove(key) {
-    localStorage.removeItem(key);
-  },
-};
-
-export default storage;
-
-/* ─────────────────────────────────────────────────────────────────────
-   SUPABASE ADAPTER (uncomment and replace the above once you've done
-   the Supabase setup in README.md)
-   ─────────────────────────────────────────────────────────────────────
 
 import { createClient } from "@supabase/supabase-js";
 
@@ -44,33 +19,116 @@ const supabase = createClient(
   import.meta.env.VITE_SUPABASE_ANON_KEY,
 );
 
+/* ── column name mapping ──────────────────────────────────────────────
+   JS objects use camelCase. The database columns use snake_case.
+   These maps translate between the two automatically.
+   ──────────────────────────────────────────────────────────────────── */
+const TO_SNAKE = {
+  passwordHash: "password_hash",
+  createdAt:    "created_at",
+  sessionId:    "session_id",
+  sessionName:  "session_name",
+  userId:       "user_id",
+};
+const TO_CAMEL = Object.fromEntries(
+  Object.entries(TO_SNAKE).map(([k, v]) => [v, k])
+);
+
+function toSnake(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) out[TO_SNAKE[k] || k] = v;
+  return out;
+}
+function toCamel(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) out[TO_CAMEL[k] || k] = v;
+  return out;
+}
+
+/* ── localStorage helpers (session only) ─────────────────────────── */
+function localGet(key) {
+  try {
+    const v = localStorage.getItem(key);
+    return v ? JSON.parse(v) : null;
+  } catch { return null; }
+}
+function localSet(key, value) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+function localRemove(key) {
+  localStorage.removeItem(key);
+}
+
+/* ── main storage adapter ─────────────────────────────────────────── */
 const storage = {
-  // users
-  async getUsers() {
-    const { data } = await supabase.from("users").select("*");
-    return data || [];
-  },
-  async upsertUser(user) {
-    await supabase.from("users").upsert(user);
+
+  async get(key) {
+
+    // Login session — per device, stays in localStorage
+    if (key === "snb_session") return localGet(key);
+
+    // User accounts — from Supabase
+    if (key === "snb_users") {
+      const { data, error } = await supabase
+        .from("users")
+        .select("*");
+      if (error) {
+        console.error("[storage] get users:", error.message);
+        return [];
+      }
+      return (data || []).map(toCamel);
+    }
+
+    // Bookings — from Supabase
+    if (key === "bookings") {
+      const { data, error } = await supabase
+        .from("bookings")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) {
+        console.error("[storage] get bookings:", error.message);
+        return [];
+      }
+      return (data || []).map(toCamel);
+    }
+
+    return null;
   },
 
-  // sessions (still localStorage — sessions are per-device by design)
-  async get(key)         { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : null; } catch { return null; } },
-  async set(key, value)  { localStorage.setItem(key, JSON.stringify(value)); },
-  async remove(key)      { localStorage.removeItem(key); },
+  async set(key, value) {
 
-  // bookings
-  async getBookings() {
-    const { data } = await supabase.from("bookings").select("*").order("created_at", { ascending: false });
-    return data || [];
+    // Login session — stays in localStorage
+    if (key === "snb_session") {
+      localSet(key, value);
+      return;
+    }
+
+    // User accounts — upsert into Supabase
+    // (only ever called when registering a new user, so this is safe)
+    if (key === "snb_users") {
+      const rows = (Array.isArray(value) ? value : [value]).map(toSnake);
+      const { error } = await supabase.from("users").upsert(rows);
+      if (error) console.error("[storage] set users:", error.message);
+      return;
+    }
+
+    // Bookings — upsert the full array into Supabase
+    // (upsert uses the id column to decide insert vs update,
+    //  so adding a booking and updating a status both work correctly)
+    if (key === "bookings") {
+      if (!value || value.length === 0) return;
+      const rows = value.map(toSnake);
+      const { error } = await supabase.from("bookings").upsert(rows);
+      if (error) console.error("[storage] set bookings:", error.message);
+      return;
+    }
   },
-  async upsertBooking(booking) {
-    await supabase.from("bookings").upsert(booking);
+
+  async remove(key) {
+    // Only session sign-out needs removing
+    if (key === "snb_session") localRemove(key);
   },
-  async updateBookingStatus(id, status) {
-    await supabase.from("bookings").update({ status }).eq("id", id);
-  },
+
 };
 
 export default storage;
-*/
