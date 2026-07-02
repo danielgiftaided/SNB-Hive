@@ -495,9 +495,9 @@ function ClassCard({ cls, booked, onBook, bookingType }) {
   const spotsLeft = Math.max(cls.capacity - booked, 0);
   const isMember  = bookingType === "membership";
   const isPayg    = bookingType === "payg";
-  const isBooked  = !!bookingType;
   const showRing  = !isBooked && spotsLeft <= 5;
-  const disabled  = full || isMember;
+  const isBooked  = !!bookingType;
+  const disabled  = full || isMember || (TASTER_MODE && isBooked);
 
   return (
     <div className="bg-white rounded-2xl border border-stone-200 p-5 flex flex-col gap-4 shadow-sm">
@@ -517,7 +517,8 @@ function ClassCard({ cls, booked, onBook, bookingType }) {
       <div className="flex flex-wrap gap-2">
         <Pill icon={Calendar}>{cls.day}</Pill>
         <Pill icon={Clock}>{cls.time}</Pill>
-        {isMember && <Pill icon={Check}><span style={{ color:TEAL }}>Member</span></Pill>}
+        {isBooked && TASTER_MODE && <Pill icon={Check}><span style={{ color:TEAL }}>Taster booked</span></Pill>}
+        {isMember && !TASTER_MODE && <Pill icon={Check}><span style={{ color:TEAL }}>Member</span></Pill>}
       </div>
 
       {cls.venue && (
@@ -530,8 +531,8 @@ function ClassCard({ cls, booked, onBook, bookingType }) {
       <div className="flex items-center justify-end pt-2 border-t border-stone-100 mt-auto">
         <button onClick={() => onBook(cls)} disabled={disabled}
           className="ff-body inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full transition disabled:cursor-not-allowed"
-          style={{ backgroundColor: disabled ? (isMember ? "#D4EBD9" : "#E3DFD3") : TEAL, color: disabled ? (isMember ? "#2D6B40" : "#8A8478") : "#FFF", opacity: disabled ? 0.85 : 1 }}>
-          {full ? "Full" : isMember ? "✓ Booked" : TASTER_MODE ? "Book taster" : "Book"}{!disabled && <ArrowRight size={14}/>}
+          style={{ backgroundColor: disabled && !full ? "#D4EBD9" : full ? "#E3DFD3" : TEAL, color: disabled && !full ? "#2D6B40" : full ? "#8A8478" : "#FFF", opacity: disabled ? 0.85 : 1 }}>
+          {full ? "Full" : disabled && !full ? "✓ Booked" : TASTER_MODE ? "Book taster" : "Book"}{!disabled && <ArrowRight size={14}/>}
         </button>
       </div>
     </div>
@@ -1405,7 +1406,9 @@ function BookingApp() {
     const b = bookings.find(b => b.sessionId===id && b.status!=="cancelled"
       && (b.userId===currentUser.id || b.email===currentUser.email));
     if (!b) return null;
-    return (b.plan || "").toLowerCase().includes("membership") ? "membership" : "payg";
+    const plan = (b.plan || "").toLowerCase();
+    if (plan.includes("membership") || plan.includes("taster")) return "membership";
+    return "payg";
   }
 
   async function persist(next) { setBookings(next); await storage.set("bookings", next); }
