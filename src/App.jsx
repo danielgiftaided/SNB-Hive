@@ -19,10 +19,10 @@ const BRAND = {
 };
 
 const DEFAULT_CLASSES = [
-  { id: "zumba",    name: "Zumba",                  tagline: "High-energy dance cardio",  day: "Monday",    time: "6:30–7:30pm", capacity: 20, icon: "music",   color: "#C99A4B", venue: "6 Dispensary Lane, London E8 1FT",                          venueMap: "https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT" },
-  { id: "boxing",   name: "Boxing",                  tagline: "Pad work & conditioning",   day: "Tuesday",   time: "7:00–8:00pm", capacity: 20, icon: "flame",   color: "#9B5B45", venue: "SCK Fitness, 439 High Road, Leyton, London E10 5EL",         venueMap: "https://www.google.com/maps/search/?api=1&query=SCK+Fitness+439+High+Road+Leyton+London+E10+5EL" },
-  { id: "somatic",  name: "Somatic",                 tagline: "Move, breathe, reconnect",  day: "Wednesday", time: "6:00–7:00pm", capacity: 20, icon: "flower",  color: "#7C9885", venue: "6 Dispensary Lane, London E8 1FT",                          venueMap: "https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT" },
-  { id: "strength", name: "Strength & Conditioning", tagline: "Build strength, build power",day: "Thursday",  time: "7:00–8:00pm", capacity: 20, icon: "dumbbell",color: "#1F4A42", venue: "SCK Fitness, 439 High Road, Leyton, London E10 5EL",         venueMap: "https://www.google.com/maps/search/?api=1&query=SCK+Fitness+439+High+Road+Leyton+London+E10+5EL" },
+  { id: "zumba",    name: "Zumba",                  tagline: "High-energy dance cardio",  day: "Date TBC",           time: "",              capacity: 20, icon: "music",   color: "#C99A4B", venue: "6 Dispensary Lane, London E8 1FT",                          venueMap: "https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT" },
+  { id: "boxing",   name: "Boxing",                  tagline: "Pad work & conditioning",   day: "Mon 6 Jul",          time: "1:30–2:30pm",    capacity: 20, icon: "flame",   color: "#9B5B45", venue: "SCK Fitness, 439 High Road, Leyton, London E10 5EL",         venueMap: "https://www.google.com/maps/search/?api=1&query=SCK+Fitness+439+High+Road+Leyton+London+E10+5EL" },
+  { id: "somatic",  name: "Somatic",                 tagline: "Move, breathe, reconnect",  day: "Thu 9 Jul",          time: "1:30–2:30pm",    capacity: 20, icon: "flower",  color: "#7C9885", venue: "6 Dispensary Lane, London E8 1FT",                          venueMap: "https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT" },
+  { id: "strength", name: "Strength & Conditioning", tagline: "Build strength, build power",day: "Wed 8 Jul",          time: "1:30–2:30pm",    capacity: 20, icon: "dumbbell",color: "#1F4A42", venue: "SCK Fitness, 439 High Road, Leyton, London E10 5EL",         venueMap: "https://www.google.com/maps/search/?api=1&query=SCK+Fitness+439+High+Road+Leyton+London+E10+5EL" },
 ];
 
 // 2 membership tiers only
@@ -68,33 +68,11 @@ function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
-// ── EmailJS helper — no custom domain needed, works with Hotmail/Gmail ──
-// Free plan: 200 emails/month. emailjs.com → create account → connect email.
-// Add these 6 vars to Vercel Environment Variables (Settings → Env Vars):
-//   VITE_EMAILJS_SERVICE_ID   VITE_EMAILJS_PUBLIC_KEY
-//   VITE_EMAILJS_TEMPLATE_ADMIN   VITE_EMAILJS_TEMPLATE_VERIFY
-//   VITE_EMAILJS_TEMPLATE_RESET   VITE_EMAILJS_TEMPLATE_BLAST
-let EJS = { svc:"", pub:"", admin:"", verify:"", reset:"", blast:"" };
-try {
-  EJS = {
-    svc:    import.meta.env.VITE_EMAILJS_SERVICE_ID         || "",
-    pub:    import.meta.env.VITE_EMAILJS_PUBLIC_KEY          || "",
-    admin:  import.meta.env.VITE_EMAILJS_TEMPLATE_ADMIN     || "",
-    verify: import.meta.env.VITE_EMAILJS_TEMPLATE_VERIFY    || "",
-    reset:  import.meta.env.VITE_EMAILJS_TEMPLATE_RESET     || "",
-    blast:  import.meta.env.VITE_EMAILJS_TEMPLATE_BLAST     || "",
-  };
-} catch {}
-
-async function sendEmail(templateId, params) {
-  if (!EJS.svc || !EJS.pub || !templateId) throw new Error("EMAILJS_NOT_CONFIGURED");
-  const res = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ service_id:EJS.svc, template_id:templateId, user_id:EJS.pub, template_params:params }),
-  });
-  if (!res.ok) throw new Error(`EmailJS ${res.status}`);
-}
+// ── All emails go through the Supabase Edge Function "send-email" ─────────────
+// which calls Brevo server-side with "Sunlight Events" as the FROM name.
+// No email API keys are needed in the frontend — everything is in Supabase secrets.
+// callEdgeFunction() below uses VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY
+// which are already in your Vercel environment variables.
 
 function genCode() { return Math.floor(100000 + Math.random() * 900000).toString(); }
 
@@ -206,11 +184,8 @@ function AuthScreen({ onAuth }) {
       try {
         const code = genCode();
         await storage.set("vc_" + user.email, { code, exp: Date.now() + 900000 }); // 15 min
-        await sendEmail(EJS.verify, { to_name:user.name, to_email:user.email, code });
-        await sendEmail(EJS.admin,  {
-          user_name: user.name, user_email: user.email, user_phone: user.phone,
-          signup_time: new Date().toLocaleString("en-GB"),
-        });
+        await callEdgeFunction("send-email", { type:"verify", to_email:user.email, to_name:user.name, code });
+        await callEdgeFunction("send-email", { type:"admin", user_name:user.name, user_email:user.email, user_phone:user.phone, signup_time:new Date().toLocaleString("en-GB") });
         await storage.set("snb_session", session);
         setVEmail(user.email);
         setResetMode(false);
@@ -250,13 +225,13 @@ function AuthScreen({ onAuth }) {
       await storage.set("vc_" + email, { code, exp: Date.now() + 900000 });
       const users = await getUsers();
       const user = users.find(u => u.email === email);
-      if (user) await sendEmail(EJS.reset, { to_email: email, code });
+      if (user) await callEdgeFunction("send-email", { type:"reset", to_email:email, code });
       // Always show same message — don't reveal if account exists
       setVEmail(email);
       setResetMode(true);
       switchMode("verify");
     } catch(e) {
-      if (e.message === "EMAILJS_NOT_CONFIGURED") {
+      if (e.message === "EDGE_NOT_CONFIGURED") {
         setError("Email not configured yet — contact sunlightevents@hotmail.com to reset your password.");
       } else {
         // Even if email send fails, still move to verify screen
@@ -311,8 +286,11 @@ function AuthScreen({ onAuth }) {
       await storage.set("vc_" + verifyEmail, { code: newCode, exp: Date.now() + 900000 });
       const users = await getUsers();
       const user  = users.find(u => u.email === verifyEmail);
-      const tmpl  = resetMode ? EJS.reset : EJS.verify;
-      await sendEmail(tmpl, { to_name: user?.name || "", to_email: verifyEmail, code: newCode });
+      if (resetMode) {
+        await callEdgeFunction("send-email", { type:"reset", to_email:verifyEmail, code:newCode });
+      } else {
+        await callEdgeFunction("send-email", { type:"verify", to_email:verifyEmail, to_name:user?.name||"", code:newCode });
+      }
       setSuccess("New code sent — check your email.");
     } catch { setError("Could not resend. Make sure EmailJS is configured."); }
     finally { setLoading(false); }
@@ -991,7 +969,7 @@ function AdminDashboard({ bookings, onMarkPaid, onMarkPending, onCancel, onResto
       const users = (await storage.get("snb_users")) || [];
       let sent = 0;
       for (const u of users) {
-        await sendEmail(EJS.blast, { to_name:u.name, to_email:u.email, subject:notifSubject, message:notifMessage });
+        await callEdgeFunction("send-email", { type:"blast", to_email:u.email, to_name:u.name, subject:notifSubject, message:notifMessage });
         sent++;
         setNStatus(`sending_${sent}_${users.length}`);
         await new Promise(r => setTimeout(r, 200)); // small delay between sends
@@ -999,7 +977,7 @@ function AdminDashboard({ bookings, onMarkPaid, onMarkPending, onCancel, onResto
       setNStatus("sent");
       setTimeout(() => setNStatus("idle"), 5000);
     } catch(e) {
-      setNStatus(e.message==="EMAILJS_NOT_CONFIGURED" ? "not_configured" : "error");
+      setNStatus(e.message==="EDGE_NOT_CONFIGURED" ? "not_configured" : "error");
       setTimeout(() => setNStatus("idle"), 5000);
     }
   }
