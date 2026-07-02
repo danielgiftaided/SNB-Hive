@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Calendar, MapPin, Clock, Check, X, ArrowRight, ChevronLeft,
-  Loader2, Sparkles, Info, RotateCcw, Music2, Flame, Dumbbell, Flower2,
+  Loader2, Sparkles, RotateCcw, Music2, Flame, Dumbbell, Flower2,
   ShieldCheck, Search, ArrowUpRight, Lock, Download, Eye, EyeOff, LogOut,
   Banknote, Hourglass, Ban, Undo2, LayoutDashboard, Mail, Send, Bell
 } from "lucide-react";
@@ -1005,11 +1005,6 @@ function AdminDashboard({ bookings, onMarkPaid, onMarkPending, onCancel, onResto
         </div>
 
         <div className="p-5 flex flex-col gap-5">
-          <div className="ff-body flex items-start gap-2 text-xs rounded-xl px-3.5 py-2.5" style={{ backgroundColor:"#FBF3E3", color:"#7A5C20" }}>
-            <Info size={13} className="mt-0.5 shrink-0"/>
-            <p>Mark bookings as "Paid" once payment appears in your Stripe dashboard. Stripe webhooks will automate this in the live version.</p>
-          </div>
-
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
               { label:"Confirmed revenue",  val:`£${totalPaid.toFixed(2)}`,    fg:TEAL },
@@ -1108,9 +1103,272 @@ function ComingSoon() {
   );
 }
 
+/* ---- ADMIN PAGE (accessed at /admin — never linked from the user site) ---- */
+
+function AdminPage() {
+  const [unlocked, setUnlocked] = useState(() =>
+    sessionStorage.getItem("snb_admin_auth") === ADMIN_PASSCODE
+  );
+  const [input, setInput]       = useState("");
+  const [err, setErr]           = useState(false);
+  const [bookings, setBookings] = useState([]);
+  const [loading, setLoading]   = useState(false);
+  const [statusFilter, setFilter] = useState("all");
+  const [query, setQuery]         = useState("");
+  const [notifSubject, setNSubject] = useState("");
+  const [notifMessage, setNMessage] = useState("");
+  const [notifStatus, setNStatus]   = useState("idle");
+
+  // Load bookings once unlocked
+  useEffect(() => {
+    if (!unlocked) return;
+    setLoading(true);
+    storage.get("bookings")
+      .then(b => setBookings(b || []))
+      .finally(() => setLoading(false));
+  }, [unlocked]);
+
+  function handleUnlock() {
+    if (input === ADMIN_PASSCODE) {
+      sessionStorage.setItem("snb_admin_auth", ADMIN_PASSCODE);
+      setUnlocked(true);
+    } else {
+      setErr(true);
+    }
+  }
+
+  async function updateStatus(id, status) {
+    const next = bookings.map(b => b.id === id ? { ...b, status } : b);
+    setBookings(next);
+    await storage.set("bookings", next);
+  }
+
+  async function handleSendBlast() {
+    if (!notifSubject.trim() || !notifMessage.trim()) return;
+    setNStatus("sending");
+    try {
+      const users = (await storage.get("snb_users")) || [];
+      let sent = 0;
+      for (const u of users) {
+        await callEdgeFunction("send-email", { type:"blast", to_email:u.email, to_name:u.name, subject:notifSubject, message:notifMessage });
+        sent++;
+        setNStatus(`sending_${sent}_${users.length}`);
+        await new Promise(r => setTimeout(r, 200));
+      }
+      setNStatus("sent");
+      setTimeout(() => setNStatus("idle"), 5000);
+    } catch(e) {
+      setNStatus(e.message === "EDGE_NOT_CONFIGURED" ? "not_configured" : "error");
+      setTimeout(() => setNStatus("idle"), 5000);
+    }
+  }
+
+  // ── Passcode screen ───────────────────────────────────────────────────
+  if (!unlocked) return (
+    <div className="min-h-screen flex flex-col items-center justify-center px-4"
+         style={{ backgroundColor: BG }}>
+      <Fonts/>
+      <div className="w-full max-w-xs">
+        <div className="text-center mb-8">
+          <img src={LOGO} alt="SNB Hive" className="h-24 mx-auto mb-2"/>
+          <p className="ff-body text-sm font-semibold" style={{ color: INK }}>Admin Dashboard</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-stone-200 p-6 flex flex-col gap-4 shadow-sm">
+          <div>
+            <label className="ff-body text-sm font-medium text-stone-700">Passcode</label>
+            <input type="password" value={input} autoFocus
+              onChange={e => { setInput(e.target.value); setErr(false); }}
+              onKeyDown={e => e.key === "Enter" && handleUnlock()}
+              className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm text-center tracking-widest focus:outline-none focus:ring-2"
+              placeholder="••••••••"/>
+          </div>
+          {err && <p className="ff-body text-xs text-red-600 text-center">Incorrect passcode.</p>}
+          <button onClick={handleUnlock}
+            className="ff-body font-semibold text-sm py-3 rounded-full"
+            style={{ backgroundColor: TEAL, color: "#fff" }}>
+            Sign in
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── Dashboard ─────────────────────────────────────────────────────────
+  const filtered = bookings.filter(b => {
+    if (statusFilter !== "all" && b.status !== statusFilter) return false;
+    if (query && !(`${b.name} ${b.email} ${b.sessionName}`.toLowerCase().includes(query.toLowerCase()))) return false;
+    return true;
+  }).slice().reverse();
+
+  const active       = bookings.filter(b => b.status !== "cancelled");
+  const totalPaid    = active.filter(b => b.status === "paid").reduce((s,b) => s + Number(b.amount||0), 0);
+  const totalPending = active.filter(b => b.status === "pending_payment").reduce((s,b) => s + Number(b.amount||0), 0);
+  const classCount   = active.filter(b => b.type === "class").length;
+  const retreatCount = active.filter(b => b.type === "retreat").length;
+
+  return (
+    <div className="min-h-screen" style={{ backgroundColor: BG }}>
+      <Fonts/>
+
+      {/* Header */}
+      <div style={{ backgroundColor: TEAL }}>
+        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img src={LOGO} alt="SNB Hive" className="h-10"/>
+            <div>
+              <p className="ff-display text-base font-semibold" style={{ color: GOLD }}>SNB Hive</p>
+              <p className="ff-body text-xs" style={{ color: "rgba(255,255,255,0.6)" }}>Admin Dashboard</p>
+            </div>
+          </div>
+          <button onClick={() => { sessionStorage.removeItem("snb_admin_auth"); setUnlocked(false); }}
+            className="ff-body text-xs px-3 py-1.5 rounded-full"
+            style={{ backgroundColor: "rgba(255,255,255,0.15)", color: "#fff" }}>
+            Sign out
+          </button>
+        </div>
+      </div>
+
+      <div className="max-w-5xl mx-auto px-4 py-6 flex flex-col gap-6">
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: "Confirmed revenue",  value: `£${totalPaid.toFixed(2)}`,    color: TEAL },
+            { label: "Awaiting payment",   value: `£${totalPending.toFixed(2)}`, color: "#9A7426" },
+            { label: "Class bookings",     value: classCount,                     color: INK },
+            { label: "Retreat bookings",   value: retreatCount,                   color: INK },
+          ].map(s => (
+            <div key={s.label} className="bg-white rounded-xl border border-stone-200 p-4 shadow-sm">
+              <p className="ff-body text-xs text-stone-500">{s.label}</p>
+              <p className="ff-display text-2xl font-semibold mt-1" style={{ color: s.color }}>{s.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Filters + search */}
+        <div className="flex flex-wrap items-center gap-2 justify-between">
+          <div className="flex gap-1.5 flex-wrap">
+            {["all","paid","pending_payment","cancelled"].map(s => (
+              <button key={s} onClick={() => setFilter(s)}
+                className="ff-body text-xs font-medium px-3 py-1.5 rounded-full transition"
+                style={{ backgroundColor: statusFilter===s ? TEAL : "#F3F1EA", color: statusFilter===s ? "#fff" : "#6B6457" }}>
+                {s === "all" ? "All" : STATUS_META[s]?.label || s}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <div className="relative">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400"/>
+              <input value={query} onChange={e => setQuery(e.target.value)}
+                placeholder="Search name, email, class…"
+                className="ff-body rounded-full border border-stone-200 pl-8 pr-3 py-1.5 text-xs w-48 focus:outline-none"/>
+            </div>
+            <button onClick={() => {
+              const headers = ["Name","Email","Phone","Session","Plan","Amount","Status","Booked at"];
+              const rows = bookings.map(b => [b.name,b.email,b.phone,b.sessionName,b.plan,b.amount,b.status,b.createdAt]);
+              const csv = [headers,...rows].map(r => r.map(v => `"${String(v||"").replace(/"/g,'""')}"`).join(",")).join("\n");
+              const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([csv],{type:"text/csv"})), download: `snb-bookings-${new Date().toISOString().slice(0,10)}.csv` });
+              document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            }} className="ff-body inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border border-stone-200 bg-white text-stone-600 hover:bg-stone-50">
+              <Download size={13}/> Export CSV
+            </button>
+          </div>
+        </div>
+
+        {/* Bookings table */}
+        <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+          {loading ? (
+            <div className="flex justify-center py-16"><Loader2 className="animate-spin text-stone-300"/></div>
+          ) : filtered.length === 0 ? (
+            <p className="ff-body text-sm text-stone-400 text-center py-16">No bookings match this filter.</p>
+          ) : (
+            <div className="divide-y divide-stone-100">
+              {filtered.map(b => (
+                <div key={b.id} className="flex flex-wrap items-center gap-3 px-4 py-3 hover:bg-stone-50 transition">
+                  <div className="min-w-[160px] flex-1">
+                    <p className="ff-body font-medium text-sm" style={{ color: INK }}>{b.name}</p>
+                    <p className="ff-body text-xs text-stone-400">{b.email}{b.phone ? ` · ${b.phone}` : ""}</p>
+                  </div>
+                  <div className="min-w-[140px] flex-1">
+                    <p className="ff-body text-sm font-medium">{b.sessionName}</p>
+                    <p className="ff-body text-xs text-stone-400">{b.plan}</p>
+                  </div>
+                  <div className="ff-body text-sm font-semibold w-16 text-right">
+                    £{typeof b.amount === "number" ? b.amount.toFixed(2) : b.amount}
+                  </div>
+                  <StatusBadge status={b.status}/>
+                  <div className="flex gap-1 ml-auto">
+                    {b.status === "pending_payment" && (
+                      <button onClick={() => updateStatus(b.id,"paid")} title="Mark paid"
+                        className="p-1.5 rounded-lg hover:bg-stone-100" style={{ color: TEAL }}>
+                        <Check size={15}/>
+                      </button>
+                    )}
+                    {b.status === "paid" && (
+                      <button onClick={() => updateStatus(b.id,"pending_payment")} title="Undo"
+                        className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400">
+                        <Undo2 size={15}/>
+                      </button>
+                    )}
+                    {b.status !== "cancelled"
+                      ? <button onClick={() => updateStatus(b.id,"cancelled")} title="Cancel"
+                          className="p-1.5 rounded-lg hover:bg-stone-100 text-red-400"><Ban size={15}/></button>
+                      : <button onClick={() => updateStatus(b.id,"pending_payment")} title="Restore"
+                          className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400"><RotateCcw size={15}/></button>
+                    }
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Send notification */}
+        <div className="bg-white rounded-xl border border-stone-200 p-5 shadow-sm flex flex-col gap-3">
+          <p className="ff-body text-sm font-semibold flex items-center gap-2" style={{ color: INK }}>
+            <Bell size={15}/> Send notification to all members
+          </p>
+          <input value={notifSubject} onChange={e => setNSubject(e.target.value)}
+            placeholder="Subject — e.g. New class added!"
+            className="ff-body w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"/>
+          <textarea value={notifMessage} onChange={e => setNMessage(e.target.value)}
+            placeholder="Your message to all members…" rows={4}
+            className="ff-body w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 resize-none"/>
+          {notifStatus === "not_configured" && (
+            <p className="ff-body text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
+              Email not configured — deploy the Supabase Edge Function and add secrets.
+            </p>
+          )}
+          {notifStatus.startsWith("sending_") && (() => {
+            const [,sent,total] = notifStatus.split("_");
+            return <p className="ff-body text-xs text-stone-500">Sending… {sent} of {total}</p>;
+          })()}
+          {notifStatus === "sent"  && <p className="ff-body text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2">✓ Notification sent to all members!</p>}
+          {notifStatus === "error" && <p className="ff-body text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">Failed — please try again.</p>}
+          <button onClick={handleSendBlast}
+            disabled={notifStatus==="sending"||!notifSubject.trim()||!notifMessage.trim()}
+            className="ff-body inline-flex items-center justify-center gap-2 font-semibold text-sm py-2.5 rounded-full disabled:opacity-50"
+            style={{ backgroundColor: TEAL, color: "#fff" }}>
+            {notifStatus.startsWith("sending") ? <Loader2 size={14} className="animate-spin"/> : <><Send size={14}/> Send to all members</>}
+          </button>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
 /* ---- MAIN APP ---- */
 
-export default function BookingApp() {
+// ── Top-level router ─────────────────────────────────────────────────────────
+// /admin  → AdminPage  (private, passcode protected)
+// /       → BookingApp (public-facing booking site)
+export default function App() {
+  if (window.location.pathname.startsWith("/admin")) return <AdminPage/>;
+  return <BookingApp/>;
+}
+
+function BookingApp() {
   const [currentUser, setCurrentUser]       = useState(null);
   const [authLoading, setAuthLoading]       = useState(true);
   const [tab, setTab]                       = useState("classes");
@@ -1118,10 +1376,6 @@ export default function BookingApp() {
   const [loading, setLoading]               = useState(true);
   const [modalSession, setModalSession]     = useState(null);
   const [modalType, setModalType]           = useState(null);
-  const [showAdminGate, setShowAdminGate]   = useState(false);
-  const [adminUnlocked, setAdminUnlocked]   = useState(false);
-  const [adminOpen, setAdminOpen]           = useState(false);
-  const [showBanner, setShowBanner]         = useState(true);
 
   // Restore session on load
   useEffect(() => {
@@ -1161,7 +1415,6 @@ export default function BookingApp() {
     await storage.remove("snb_session");
     setCurrentUser(null); setBookings([]);
   }
-  async function resetDemo()             { await persist([]); }
 
   // Loading spinner while checking session
   if (authLoading) return (
@@ -1201,17 +1454,7 @@ export default function BookingApp() {
         </div>
       </header>
 
-      {showBanner && (
-        <div className="max-w-3xl mx-auto px-4 pt-4">
-          <div className="ff-body flex items-start gap-2.5 text-xs rounded-xl px-4 py-3" style={{ backgroundColor:"#FBF3E3", color:"#7A5C20" }}>
-            <Info size={15} className="mt-0.5 shrink-0"/>
-            <p className="flex-1">
-              Hi {currentUser.name.split(" ")[0]}! This is a working prototype — bookings save for real and count against capacity. Wire up your Stripe Payment Links before going live.
-            </p>
-            <button onClick={() => setShowBanner(false)}><X size={14}/></button>
-          </div>
-        </div>
-      )}
+
 
       <main className="max-w-3xl mx-auto px-4 py-6">
         {loading
@@ -1230,33 +1473,13 @@ export default function BookingApp() {
         }
       </main>
 
-      <footer className="max-w-3xl mx-auto px-4 py-8 flex items-center justify-between text-xs text-stone-400">
-        <button onClick={() => adminUnlocked ? setAdminOpen(true) : setShowAdminGate(true)}
-          className="inline-flex items-center gap-1 underline hover:text-stone-600">
-          <Lock size={12}/> Admin dashboard
-        </button>
-        <button onClick={resetDemo} className="inline-flex items-center gap-1 hover:text-stone-600">
-          <RotateCcw size={12}/> Reset demo bookings
-        </button>
-      </footer>
+
 
       {modalSession && (
         <BookingModal session={modalSession} type={modalType} currentUser={currentUser}
           onClose={() => setModalSession(null)} onConfirm={handleConfirmBooking}/>
       )}
-      {showAdminGate && (
-        <AdminPasscodeGate
-          onUnlock={() => { setAdminUnlocked(true); setShowAdminGate(false); setAdminOpen(true); }}
-          onClose={() => setShowAdminGate(false)}/>
-      )}
-      {adminOpen && (
-        <AdminDashboard bookings={bookings}
-          onMarkPaid={id => updateStatus(id,"paid")}
-          onMarkPending={id => updateStatus(id,"pending_payment")}
-          onCancel={id => updateStatus(id,"cancelled")}
-          onRestore={id => updateStatus(id,"pending_payment")}
-          onClose={() => setAdminOpen(false)}/>
-      )}
+
     </div>
   );
 }
