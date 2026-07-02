@@ -231,10 +231,9 @@ function AuthScreen({ onAuth }) {
       setResetMode(true);
       switchMode("verify");
     } catch(e) {
-      if (e.message === "EDGE_NOT_CONFIGURED") {
-        setError("Email not configured yet — contact sunlightevents@hotmail.com to reset your password.");
+      if (e.message === "EDGE_NOT_CONFIGURED" || e.message.includes("404") || e.message.includes("returned")) {
+        setError("Password reset emails are not yet active. Please contact shams@snbhive.com to reset your password.");
       } else {
-        // Even if email send fails, still move to verify screen
         setVEmail(form.email.trim().toLowerCase());
         setResetMode(true);
         switchMode("verify");
@@ -495,8 +494,8 @@ function ClassCard({ cls, booked, onBook, bookingType }) {
   const spotsLeft = Math.max(cls.capacity - booked, 0);
   const isMember  = bookingType === "membership";
   const isPayg    = bookingType === "payg";
-  const showRing  = !isBooked && spotsLeft <= 5;
   const isBooked  = !!bookingType;
+  const showRing  = !isBooked && spotsLeft <= 5;
   const disabled  = full || isMember || (TASTER_MODE && isBooked);
 
   return (
