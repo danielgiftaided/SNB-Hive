@@ -341,15 +341,15 @@ function AuthScreen({ onAuth }) {
             <div className="flex flex-col gap-4">
               {mode==="register" && (
                 <div>
-                  <label className="ff-body text-sm font-medium text-stone-700">Full name</label>
-                  <input value={form.name} onChange={e=>f("name",e.target.value)}
+                  <label className="ff-body text-sm font-medium text-stone-700">Full name <span style={{color:"#B3261E",marginLeft:"2px"}}>*</span></label>
+                  <input value={form.name} onChange={e=>f("name",e.target.value)} required
                     className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
                     placeholder="Your full name" autoComplete="name"/>
                 </div>
               )}
               <div>
                 <label className="ff-body text-sm font-medium text-stone-700">
-                  Email address{mode==="register" ? " — this is your username" : ""}
+                  Email address{mode==="register" ? " — this is your username" : ""}<span style={{color:"#B3261E",marginLeft:"2px"}}>*</span> <span style={{color:"#B3261E",marginLeft:"2px"}}>*</span>
                 </label>
                 <input value={form.email} onChange={e=>f("email",e.target.value)} type="email"
                   className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
@@ -357,14 +357,14 @@ function AuthScreen({ onAuth }) {
               </div>
               {mode==="register" && (
                 <div>
-                  <label className="ff-body text-sm font-medium text-stone-700">Mobile number</label>
-                  <input value={form.phone} onChange={e=>f("phone",e.target.value)} type="tel"
+                  <label className="ff-body text-sm font-medium text-stone-700">Mobile number <span style={{color:"#B3261E",marginLeft:"2px"}}>*</span></label>
+                  <input value={form.phone} onChange={e=>f("phone",e.target.value)} type="tel" required
                     className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
                     placeholder="07…" autoComplete="tel"/>
                 </div>
               )}
               <div>
-                <label className="ff-body text-sm font-medium text-stone-700">Password</label>
+                <label className="ff-body text-sm font-medium text-stone-700">Password <span style={{color:"#B3261E",marginLeft:"2px"}}>*</span></label>
                 <div className="relative mt-1">
                   <input value={form.password} onChange={e=>f("password",e.target.value)} type={showPw?"text":"password"}
                     className="ff-body w-full rounded-xl border border-stone-200 px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2"
@@ -378,8 +378,8 @@ function AuthScreen({ onAuth }) {
               </div>
               {mode==="register" && (
                 <div>
-                  <label className="ff-body text-sm font-medium text-stone-700">Confirm password</label>
-                  <input value={form.confirm} onChange={e=>f("confirm",e.target.value)} type={showPw?"text":"password"}
+                  <label className="ff-body text-sm font-medium text-stone-700">Confirm password <span style={{color:"#B3261E",marginLeft:"2px"}}>*</span></label>
+                  <input value={form.confirm} onChange={e=>f("confirm",e.target.value)} type={showPw?"text":"password"} required
                     className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
                     placeholder="Repeat password" autoComplete="new-password"/>
                 </div>
@@ -1132,21 +1132,28 @@ function AdminPage() {
   );
   const [input, setInput]       = useState("");
   const [err, setErr]           = useState(false);
-  const [bookings, setBookings] = useState([]);
-  const [loading, setLoading]   = useState(false);
+  const [bookings, setBookings]   = useState([]);
+  const [members, setMembers]     = useState([]);
+  const [loading, setLoading]     = useState(false);
+  const [adminTab, setAdminTab]   = useState("bookings");
   const [statusFilter, setFilter] = useState("all");
   const [query, setQuery]         = useState("");
+  const [memberQuery, setMQuery]  = useState("");
   const [notifSubject, setNSubject] = useState("");
   const [notifMessage, setNMessage] = useState("");
   const [notifStatus, setNStatus]   = useState("idle");
 
-  // Load bookings once unlocked
+  // Load bookings + members once unlocked
   useEffect(() => {
     if (!unlocked) return;
     setLoading(true);
-    storage.get("bookings")
-      .then(b => setBookings(b || []))
-      .finally(() => setLoading(false));
+    Promise.all([
+      storage.get("bookings"),
+      storage.get("snb_users"),
+    ]).then(([b, u]) => {
+      setBookings(b || []);
+      setMembers(u || []);
+    }).finally(() => setLoading(false));
   }, [unlocked]);
 
   function handleUnlock() {
@@ -1257,8 +1264,9 @@ function AdminPage() {
       <div className="max-w-5xl mx-auto px-4 py-6 flex flex-col gap-6">
 
         {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           {[
+            { label: "Total members",      value: members.length,                 color: TEAL },
             { label: "Confirmed revenue",  value: `£${totalPaid.toFixed(2)}`,    color: TEAL },
             { label: "Awaiting payment",   value: `£${totalPending.toFixed(2)}`, color: "#9A7426" },
             { label: "Class bookings",     value: classCount,                     color: INK },
@@ -1270,6 +1278,24 @@ function AdminPage() {
             </div>
           ))}
         </div>
+
+        {/* Tab navigation */}
+        <div className="flex gap-1 bg-stone-100 rounded-full p-1 w-fit">
+          {[["bookings","Bookings"], ["members","Members"]].map(([key, label]) => (
+            <button key={key} onClick={() => setAdminTab(key)}
+              className="ff-body text-sm font-medium px-5 py-1.5 rounded-full transition"
+              style={{
+                backgroundColor: adminTab === key ? "#fff" : "transparent",
+                color: adminTab === key ? INK : "#8A8478",
+                boxShadow: adminTab === key ? "0 1px 2px rgba(0,0,0,0.08)" : "none"
+              }}>
+              {label} {key === "members" ? `(${members.length})` : `(${bookings.filter(b=>b.status!=="cancelled").length})`}
+            </button>
+          ))}
+        </div>
+
+        {/* ── BOOKINGS TAB ── */}
+        {adminTab === "bookings" && <>
 
         {/* Filters + search */}
         <div className="flex flex-wrap items-center gap-2 justify-between">
@@ -1378,6 +1404,55 @@ function AdminPage() {
             {notifStatus.startsWith("sending") ? <Loader2 size={14} className="animate-spin"/> : <><Send size={14}/> Send to all members</>}
           </button>
         </div>
+
+        </> /* end bookings tab */}
+
+        {/* ── MEMBERS TAB ── */}
+        {adminTab === "members" && (
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1 max-w-xs">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400"/>
+                <input value={memberQuery} onChange={e => setMQuery(e.target.value)}
+                  placeholder="Search name, email or phone…"
+                  className="ff-body w-full rounded-full border border-stone-200 pl-8 pr-3 py-1.5 text-xs focus:outline-none"/>
+              </div>
+              <button onClick={() => {
+                const headers = ["Name","Email","Phone","Signed Up"];
+                const rows = members.map(m => [m.name, m.email, m.phone||"", m.createdAt ? new Date(m.createdAt).toLocaleDateString("en-GB") : ""]);
+                const csv = [headers,...rows].map(r => r.map(v => `"${String(v||"").replace(/"/g,"")}`).join(",")).join("\n");
+                const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([csv],{type:"text/csv"})), download: "snb-members.csv" });
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+              }} className="ff-body inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border border-stone-200 bg-white text-stone-600 hover:bg-stone-50">
+                <Download size={13}/> Export CSV
+              </button>
+            </div>
+
+            <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+              <div className="grid grid-cols-4 gap-4 px-4 py-2.5 bg-stone-50 border-b border-stone-100">
+                {["Full Name","Email","Mobile","Signed Up"].map(h => (
+                  <p key={h} className="ff-body text-xs font-semibold text-stone-500 uppercase tracking-wide">{h}</p>
+                ))}
+              </div>
+              {members.length === 0 ? (
+                <p className="ff-body text-sm text-stone-400 text-center py-12">No members yet.</p>
+              ) : members
+                .filter(m => !memberQuery || (m.name+" "+m.email+" "+(m.phone||"")).toLowerCase().includes(memberQuery.toLowerCase()))
+                .slice().sort((a,b) => new Date(b.createdAt||0) - new Date(a.createdAt||0))
+                .map(m => (
+                  <div key={m.id} className="grid grid-cols-4 gap-4 px-4 py-3 border-b border-stone-50 hover:bg-stone-50 transition last:border-0">
+                    <p className="ff-body text-sm font-medium" style={{ color: INK }}>{m.name}</p>
+                    <p className="ff-body text-sm text-stone-500 truncate">{m.email}</p>
+                    <p className="ff-body text-sm text-stone-500">{m.phone || "—"}</p>
+                    <p className="ff-body text-sm text-stone-500">
+                      {m.createdAt ? new Date(m.createdAt).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}) : "—"}
+                    </p>
+                  </div>
+                ))
+              }
+            </div>
+          </div>
+        )}
 
       </div>
     </div>
