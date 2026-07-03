@@ -393,7 +393,7 @@ function AuthScreen({ onAuth }) {
               )}
               <div>
                 <label className="ff-body text-sm font-medium text-stone-700">
-                  Email address{mode==="register" ? " — this is your username" : ""}<span style={{color:"#B3261E",marginLeft:"2px"}}>*</span> <span style={{color:"#B3261E",marginLeft:"2px"}}>*</span>
+                  Email address{mode==="register" ? " — this is your username" : ""}<span style={{color:"#B3261E",marginLeft:"2px"}}>*</span>
                 </label>
                 <input value={form.email} onChange={e=>f("email",e.target.value)} type="email"
                   className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
