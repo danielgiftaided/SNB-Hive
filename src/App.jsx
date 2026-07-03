@@ -19,10 +19,18 @@ const BRAND = {
 };
 
 const DEFAULT_CLASSES = [
-  { id: "zumba",    name: "Zumba",                  tagline: "High-energy dance cardio",  day: "Date TBC",           time: "",              capacity: 20, icon: "music",   color: "#C99A4B", venue: "6 Dispensary Lane, London E8 1FT",                          venueMap: "https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT" },
-  { id: "boxing",   name: "Boxing",                  tagline: "Pad work & conditioning",   day: "Mon 6 Jul",          time: "1:30–2:30pm",    capacity: 20, icon: "flame",   color: "#9B5B45", venue: "SCK Fitness, 439 High Road, Leyton, London E10 5EL",         venueMap: "https://www.google.com/maps/search/?api=1&query=SCK+Fitness+439+High+Road+Leyton+London+E10+5EL" },
-  { id: "somatic",  name: "Somatic",                 tagline: "Move, breathe, reconnect",  day: "Thu 9 Jul",          time: "1:30–2:30pm",    capacity: 20, icon: "flower",  color: "#7C9885", venue: "6 Dispensary Lane, London E8 1FT",                          venueMap: "https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT" },
-  { id: "strength", name: "Strength & Conditioning", tagline: "Build strength, build power",day: "Wed 8 Jul",          time: "1:30–2:30pm",    capacity: 20, icon: "dumbbell",color: "#1F4A42", venue: "SCK Fitness, 439 High Road, Leyton, London E10 5EL",         venueMap: "https://www.google.com/maps/search/?api=1&query=SCK+Fitness+439+High+Road+Leyton+London+E10+5EL" },
+  { id:"zumba",    name:"Zumba",                  tagline:"High-energy dance cardio",  day:"Date TBC",   time:"",            capacity:20, icon:"music",   color:"#C99A4B",
+    venue:"6 Dispensary Lane, London E8 1FT",              venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
+    whatToBring:"Wear comfortable clothes and trainers. Bring a water bottle.", icsStart:null, icsEnd:null },
+  { id:"boxing",   name:"Boxing",                  tagline:"Pad work & conditioning",   day:"Mon 6 Jul",  time:"1:30–2:30pm", capacity:20, icon:"flame",   color:"#9B5B45",
+    venue:"SCK Fitness, 439 High Road, Leyton, London E10 5EL", venueMap:"https://www.google.com/maps/search/?api=1&query=SCK+Fitness+439+High+Road+Leyton+London+E10+5EL",
+    whatToBring:"Comfortable workout clothes. Boxing gloves provided.", icsStart:"20260706T123000Z", icsEnd:"20260706T133000Z" },
+  { id:"somatic",  name:"Somatic",                 tagline:"Move, breathe, reconnect",  day:"Thu 9 Jul",  time:"1:30–2:30pm", capacity:20, icon:"flower",  color:"#7C9885",
+    venue:"6 Dispensary Lane, London E8 1FT",              venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
+    whatToBring:"Loose, comfortable clothing. Mat provided.", icsStart:"20260709T123000Z", icsEnd:"20260709T133000Z" },
+  { id:"strength", name:"Strength & Conditioning", tagline:"Build strength, build power", day:"Wed 8 Jul",  time:"1:30–2:30pm", capacity:20, icon:"dumbbell",color:"#1F4A42",
+    venue:"SCK Fitness, 439 High Road, Leyton, London E10 5EL", venueMap:"https://www.google.com/maps/search/?api=1&query=SCK+Fitness+439+High+Road+Leyton+London+E10+5EL",
+    whatToBring:"Gym clothes and trainers. All equipment provided.", icsStart:"20260708T123000Z", icsEnd:"20260708T133000Z" },
 ];
 
 // 2 membership tiers only
@@ -44,9 +52,9 @@ const STRIPE_LINKS = {
   retreatFull:    { "retreat-1": "https://buy.stripe.com/REPLACE_RETREAT_FULL" },
 };
 
-// Change before sharing — note: NOT real security (anyone who views source can read it).
-// A real backend login is required before this goes live publicly.
-const ADMIN_PASSCODE = "admin123";
+// Admin passcode lives in Vercel env var VITE_ADMIN_PASSCODE — never in source code.
+let ADMIN_PASSCODE = "CHANGE_ME_IN_VERCEL";
+try { ADMIN_PASSCODE = import.meta.env.VITE_ADMIN_PASSCODE || "CHANGE_ME_IN_VERCEL"; } catch {}
 
 // ── TASTER MODE ───────────────────────────────────────────────────────
 // true  = simple "Book taster" flow, no pricing or payments shown
@@ -95,11 +103,34 @@ async function callEdgeFunction(name, data) {
 
 function genCode() { return Math.floor(100000 + Math.random() * 900000).toString(); }
 
-async function hashPassword(pw) {
+// ── Salted password hashing ───────────────────────────────────────────────
+function generateSalt() {
+  const a = new Uint8Array(16); crypto.getRandomValues(a);
+  return Array.from(a).map(b => b.toString(16).padStart(2,"0")).join("");
+}
+async function hashPassword(pw, salt = "") {
   try {
-    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pw));
-    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
-  } catch { return btoa(pw); }
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(salt + pw));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,"0")).join("");
+  } catch { return btoa(salt + pw); }
+}
+
+// ── Login lockout (5 failures = 10 min lock, stored in localStorage) ─────
+function getAttempts(email) {
+  try { return JSON.parse(localStorage.getItem("la_"+email) || '{"n":0,"until":0}'); }
+  catch { return {n:0,until:0}; }
+}
+function recordFailure(email) {
+  const a = getAttempts(email); a.n++;
+  if (a.n >= 5) { a.until = Date.now() + 600000; a.n = 0; }
+  localStorage.setItem("la_"+email, JSON.stringify(a));
+}
+function clearAttempts(email) { localStorage.removeItem("la_"+email); }
+function lockMsg(email) {
+  const a = getAttempts(email);
+  if (a.until <= Date.now()) return null;
+  const m = Math.ceil((a.until - Date.now())/60000);
+  return `Too many failed attempts. Try again in ${m} minute${m!==1?"s":""}.`;
 }
 
 function exportCSV(bookings) {
@@ -115,6 +146,7 @@ function exportCSV(bookings) {
 const STATUS_META = {
   paid:            { label: "Paid",             bg: "#E9F1EC", fg: TEAL,      icon: Banknote },
   confirmed:       { label: "Booked",           bg: "#E9F1EC", fg: TEAL,      icon: Check },
+  waitlisted:      { label: "Waitlisted",       bg: "#FBF3E3", fg: "#9A7426", icon: Hourglass },
   pending_payment: { label: "Awaiting payment", bg: "#FBF3E3", fg: "#9A7426", icon: Hourglass },
   cancelled:       { label: "Cancelled",        bg: "#F3E7E5", fg: "#9B3A2E", icon: Ban },
 };
@@ -178,9 +210,10 @@ function AuthScreen({ onAuth }) {
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState("");
   const [success, setSuccess]     = useState("");
+  const [agreed, setAgreed]       = useState(false);
 
   function f(k, v) { setForm(p => ({...p, [k]:v})); setError(""); setSuccess(""); }
-  function switchMode(m) { setMode(m); setError(""); setSuccess(""); setCode(""); }
+  function switchMode(m) { setMode(m); setError(""); setSuccess(""); setCode(""); setAgreed(false); }
 
   async function getUsers() { return (await storage.get("snb_users")) || []; }
 
@@ -190,13 +223,15 @@ function AuthScreen({ onAuth }) {
     if (form.phone.replace(/\D/g,"").length < 10) return setError("Please enter a valid mobile number.");
     if (form.password.length < 8) return setError("Password must be at least 8 characters.");
     if (form.password !== form.confirm) return setError("Passwords do not match.");
+    if (!agreed) return setError("Please agree to the Privacy Policy and Terms & Conditions to continue.");
     setLoading(true);
     try {
       const users = await getUsers();
       if (users.find(u => u.email.toLowerCase() === form.email.trim().toLowerCase()))
         return setError("An account with that email already exists — please sign in.");
-      const passwordHash = await hashPassword(form.password);
-      const user = { id:uid(), name:form.name.trim(), email:form.email.trim().toLowerCase(), phone:form.phone.trim(), passwordHash, createdAt:new Date().toISOString() };
+      const salt = generateSalt();
+      const passwordHash = await hashPassword(form.password, salt);
+      const user = { id:uid(), name:form.name.trim(), email:form.email.trim().toLowerCase(), phone:form.phone.trim(), passwordHash, salt, createdAt:new Date().toISOString() };
       await storage.set("snb_users", [...users, user]);
       const session = { id:user.id, name:user.name, email:user.email, phone:user.phone };
       // Send verification code — required before login is granted
@@ -226,14 +261,23 @@ function AuthScreen({ onAuth }) {
   async function handleLogin() {
     if (!/\S+@\S+\.\S+/.test(form.email)) return setError("Please enter a valid email address.");
     if (!form.password) return setError("Please enter your password.");
+    const email = form.email.trim().toLowerCase();
+    const lock = lockMsg(email);
+    if (lock) return setError(lock);
     setLoading(true);
     try {
       const users = await getUsers();
-      const user = users.find(u => u.email.toLowerCase() === form.email.trim().toLowerCase());
-      if (!user) return setError("No account found with that email address.");
-      const hash = await hashPassword(form.password);
-      if (user.passwordHash !== hash) return setError("Incorrect password — please try again.");
-      const session = { id:user.id, name:user.name, email:user.email, phone:user.phone };
+      const user = users.find(u => u.email.toLowerCase() === email);
+      if (!user) { recordFailure(email); return setError("No account found with that email address."); }
+      const hash = await hashPassword(form.password, user.salt || "");
+      if (user.passwordHash !== hash) { recordFailure(email); return setError("Incorrect password — please try again."); }
+      clearAttempts(email);
+      // Silently upgrade to salted hash on first login if old account
+      if (!user.salt) {
+        const ns = generateSalt(); const nh = await hashPassword(form.password, ns);
+        await storage.set("snb_users", users.map(u => u.email===email ? {...u, salt:ns, passwordHash:nh} : u)).catch(()=>{});
+      }
+      const session = { id:user.id, name:user.name, email:user.email, phone:user.phone, expiresAt: Date.now()+30*24*60*60*1000 };
       await storage.set("snb_session", session);
       onAuth(session);
     } catch { setError("Something went wrong — please try again."); }
@@ -384,6 +428,19 @@ function AuthScreen({ onAuth }) {
                     placeholder="Repeat password" autoComplete="new-password"/>
                 </div>
               )}
+              {mode==="register" && (
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)}
+                    className="mt-0.5 rounded shrink-0"/>
+                  <span className="ff-body text-xs text-stone-600 leading-relaxed">
+                    I agree to the{" "}
+                    <a href="/terms" target="_blank" className="underline hover:text-stone-800">Terms & Conditions</a>
+                    {" "}and{" "}
+                    <a href="/privacy" target="_blank" className="underline hover:text-stone-800">Privacy Policy</a>.
+                    {" "}<span style={{color:"#B3261E"}}>*</span>
+                  </span>
+                </label>
+              )}
               {error   && <div className="ff-body text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>}
               {success && <div className="ff-body text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2">{success}</div>}
               <button onClick={mode==="register"?handleRegister:handleLogin} disabled={loading}
@@ -509,7 +566,7 @@ function AuthScreen({ onAuth }) {
    - Capacity ring visible ONLY when spotsLeft ≤ 5 AND user is not already booked
    ---- */
 
-function ClassCard({ cls, booked, onBook, bookingType }) {
+function ClassCard({ cls, booked, onBook, bookingType, onWaitlist }) {
   const Icon = ICONS[cls.icon] || Sparkles;
   const full = booked >= cls.capacity;
   const spotsLeft = Math.max(cls.capacity - booked, 0);
@@ -654,6 +711,14 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
           plan: "Taster", amount: 0,
           status: "confirmed", createdAt: new Date().toISOString(),
         });
+        // Send confirmation email with calendar invite (non-blocking)
+        callEdgeFunction("send-email", {
+          type: "confirm_taster",
+          to_email: currentUser.email, to_name: currentUser.name,
+          session_name: session.name, day: session.day, time: session.time,
+          venue: session.venue || "", what_to_bring: session.whatToBring || "",
+          ics_start: session.icsStart, ics_end: session.icsEnd,
+        }).catch(() => {});
         setStep(2);
       } catch { setError("Couldn't save your booking — please try again."); }
       finally { setSaving(false); }
@@ -898,7 +963,8 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
 
 /* ---- MY BOOKINGS ---- */
 
-function MyBookings({ bookings, currentUser }) {
+function MyBookings({ bookings, currentUser, onCancel }) {
+  const [confirmCancel, setConfirmCancel] = useState(null);
   const mine = bookings
     .filter(b => b.userId===currentUser.id || b.email===currentUser.email)
     .filter(b => b.status !== "cancelled");
@@ -925,14 +991,26 @@ function MyBookings({ bookings, currentUser }) {
                   <span className="font-semibold text-sm" style={{ color: INK }}>{b.sessionName}</span>
                   <StatusBadge status={b.status}/>
                 </div>
-                {cls && (
-                  <p className="text-xs text-stone-500 mt-1">{cls.day} · {cls.time}</p>
-                )}
+                {cls && <p className="text-xs text-stone-500 mt-1">{cls.day} · {cls.time}</p>}
                 {cls?.venue && (
                   <a href={cls.venueMap} target="_blank" rel="noopener noreferrer"
                     className="ff-body inline-flex items-center gap-1 text-xs text-stone-400 hover:text-stone-600 hover:underline mt-1 transition">
                     <MapPin size={10}/> {cls.venue}
                   </a>
+                )}
+                {confirmCancel === b.id ? (
+                  <div className="mt-2 flex items-center gap-2">
+                    <p className="text-xs text-stone-500">Cancel this taster?</p>
+                    <button onClick={() => { onCancel(b.id); setConfirmCancel(null); }}
+                      className="ff-body text-xs font-semibold text-red-600 hover:underline">Yes</button>
+                    <button onClick={() => setConfirmCancel(null)}
+                      className="ff-body text-xs text-stone-400 hover:underline">No</button>
+                  </div>
+                ) : (
+                  <button onClick={() => setConfirmCancel(b.id)}
+                    className="ff-body mt-2 text-xs text-stone-400 hover:text-red-500 hover:underline transition">
+                    Cancel booking
+                  </button>
                 )}
               </div>
             </div>
@@ -1102,7 +1180,177 @@ function AdminDashboard({ bookings, onMarkPaid, onMarkPending, onCancel, onResto
   );
 }
 
-/* ---- COMING SOON ---- */
+/* ---- WELCOME HERO ---- */
+
+function WelcomeHero({ currentUser }) {
+  const firstName = (currentUser?.name || "").split(" ")[0] || "there";
+  return (
+    <div className="rounded-2xl overflow-hidden mb-6 relative" style={{ backgroundColor: TEAL }}>
+      <svg className="absolute inset-0 opacity-[0.07] w-full h-full" preserveAspectRatio="none">
+        <defs><pattern id="wh" width="34" height="34" patternUnits="userSpaceOnUse">
+          <path d="M17 0 L34 17 L17 34 L0 17 Z" fill="none" stroke="white" strokeWidth="1"/>
+        </pattern></defs>
+        <rect width="100%" height="100%" fill="url(#wh)"/>
+      </svg>
+      <div className="relative p-6 sm:p-8">
+        <p className="ff-body text-sm font-medium mb-1" style={{ color: GOLD }}>Welcome back, {firstName} 👋</p>
+        <h2 className="ff-display text-xl sm:text-2xl font-semibold text-white leading-snug">
+          Women&apos;s Fitness &amp; Wellness Classes
+        </h2>
+        <p className="ff-body text-sm mt-2 leading-relaxed max-w-sm" style={{ color: "rgba(255,255,255,0.7)" }}>
+          Join our welcoming community. Browse our taster sessions below — they&apos;re free and a great
+          way to try a new class before committing.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ---- ACCOUNT PAGE ---- */
+
+function AccountPage({ currentUser, onUpdate }) {
+  const [form, setForm]     = useState({ name: currentUser.name, phone: currentUser.phone || "" });
+  const [pw, setPw]         = useState({ current:"", next:"", confirm:"" });
+  const [showPw, setShowPw] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [pwSaving, setPwS]  = useState(false);
+  const [msg, setMsg]       = useState("");
+  const [pwMsg, setPwMsg]   = useState("");
+
+  async function saveDetails() {
+    if (!form.name.trim()) return setMsg("Name is required.");
+    setSaving(true);
+    try {
+      const users = (await storage.get("snb_users")) || [];
+      const updated = users.map(u => u.id===currentUser.id ? {...u, name:form.name.trim(), phone:form.phone.trim()} : u);
+      await storage.set("snb_users", updated);
+      const session = {...currentUser, name:form.name.trim(), phone:form.phone.trim(), expiresAt:Date.now()+30*24*60*60*1000};
+      await storage.set("snb_session", session);
+      onUpdate(session);
+      setMsg("✓ Details saved.");
+    } catch { setMsg("Something went wrong — please try again."); }
+    finally { setSaving(false); setTimeout(() => setMsg(""), 4000); }
+  }
+
+  async function changePassword() {
+    if (!pw.current) return setPwMsg("Enter your current password.");
+    if (pw.next.length < 8) return setPwMsg("New password must be at least 8 characters.");
+    if (pw.next !== pw.confirm) return setPwMsg("Passwords don\'t match.");
+    setPwS(true);
+    try {
+      const users = (await storage.get("snb_users")) || [];
+      const user = users.find(u => u.id === currentUser.id);
+      if (!user) return setPwMsg("User not found.");
+      const cHash = await hashPassword(pw.current, user.salt || "");
+      if (cHash !== user.passwordHash) return setPwMsg("Current password is incorrect.");
+      const ns = generateSalt(); const nh = await hashPassword(pw.next, ns);
+      await storage.set("snb_users", users.map(u => u.id===currentUser.id ? {...u, passwordHash:nh, salt:ns} : u));
+      setPw({current:"", next:"", confirm:""});
+      setPwMsg("✓ Password changed.");
+    } catch { setPwMsg("Something went wrong — please try again."); }
+    finally { setPwS(false); setTimeout(() => setPwMsg(""), 4000); }
+  }
+
+  const inputCls = "ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2";
+  const card = "bg-white rounded-2xl border border-stone-200 p-5 shadow-sm flex flex-col gap-3";
+
+  return (
+    <div className="max-w-md mx-auto flex flex-col gap-4">
+      <div className={card}>
+        <h3 className="ff-display text-base font-semibold" style={{color:INK}}>Your details</h3>
+        <div>
+          <label className="ff-body text-sm font-medium text-stone-700">Full name</label>
+          <input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} className={inputCls}/>
+        </div>
+        <div>
+          <label className="ff-body text-sm font-medium text-stone-700">Email address</label>
+          <input value={currentUser.email} disabled className={inputCls+" bg-stone-50 text-stone-400 cursor-not-allowed"}/>
+          <p className="ff-body text-xs text-stone-400 mt-1">Email cannot be changed. Contact shams@snbhive.com if needed.</p>
+        </div>
+        <div>
+          <label className="ff-body text-sm font-medium text-stone-700">Mobile number</label>
+          <input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} type="tel" className={inputCls}/>
+        </div>
+        {msg && <p className={"ff-body text-xs px-3 py-2 rounded-lg " + (msg.startsWith("✓") ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600")}>{msg}</p>}
+        <button onClick={saveDetails} disabled={saving}
+          className="ff-body font-semibold text-sm py-2.5 rounded-full disabled:opacity-50"
+          style={{backgroundColor:TEAL,color:"#fff"}}>{saving ? "Saving…" : "Save changes"}</button>
+      </div>
+
+      <div className={card}>
+        <h3 className="ff-display text-base font-semibold" style={{color:INK}}>Change password</h3>
+        {[["current","Current password",""],["next","New password","At least 8 characters"],["confirm","Confirm new password",""]].map(([k,label,ph]) => (
+          <div key={k}>
+            <label className="ff-body text-sm font-medium text-stone-700">{label}</label>
+            <div className="relative mt-1">
+              <input value={pw[k]} onChange={e=>setPw({...pw,[k]:e.target.value})} type={showPw?"text":"password"} placeholder={ph}
+                className={inputCls+" pr-10"}/>
+              {k==="current" && (
+                <button onClick={()=>setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400">
+                  {showPw ? <EyeOff size={16}/> : <Eye size={16}/>}
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+        {pwMsg && <p className={"ff-body text-xs px-3 py-2 rounded-lg " + (pwMsg.startsWith("✓") ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600")}>{pwMsg}</p>}
+        <button onClick={changePassword} disabled={pwSaving}
+          className="ff-body font-semibold text-sm py-2.5 rounded-full disabled:opacity-50"
+          style={{backgroundColor:TEAL,color:"#fff"}}>{pwSaving ? "Updating…" : "Change password"}</button>
+      </div>
+    </div>
+  );
+}
+
+/* ---- POLICY PAGES ---- */
+
+function PolicyPage({ title, children }) {
+  return (
+    <div className="min-h-screen" style={{backgroundColor:BG}}>
+      <Fonts/>
+      <div className="max-w-2xl mx-auto px-4 py-10">
+        <div className="text-center mb-8"><img src={LOGO} alt="SNB Hive" className="h-16 mx-auto mb-2"/></div>
+        <div className="bg-white rounded-2xl border border-stone-200 p-8 shadow-sm">
+          <h1 className="ff-display text-2xl font-semibold mb-6" style={{color:INK}}>{title}</h1>
+          <div className="ff-body text-sm text-stone-600 leading-relaxed flex flex-col gap-4">{children}</div>
+        </div>
+        <p className="ff-body text-xs text-stone-400 text-center mt-4">
+          Questions? Contact <a href="mailto:shams@snbhive.com" className="underline">shams@snbhive.com</a>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function PrivacyPage() {
+  return (
+    <PolicyPage title="Privacy Policy">
+      <p><strong>Who we are:</strong> SNB Hive (operated by Sunlight Events). Contact: shams@snbhive.com</p>
+      <p><strong>What we collect:</strong> Your name, email address, and mobile number when you create an account, and booking details when you register for a class or retreat.</p>
+      <p><strong>Why we collect it:</strong> To manage your bookings, send you confirmation emails, and notify you of class updates. We do not sell your data to third parties.</p>
+      <p><strong>How we store it:</strong> Your data is stored securely in Supabase (EU-based servers). Passwords are stored as salted hashes — we cannot read your password.</p>
+      <p><strong>How long we keep it:</strong> We keep your data for as long as you have an active account. You can request deletion at any time by emailing shams@snbhive.com.</p>
+      <p><strong>Your rights (UK GDPR):</strong> You have the right to access, correct, or delete your personal data. Contact us at shams@snbhive.com to exercise these rights.</p>
+      <p><strong>Last updated:</strong> July 2026</p>
+    </PolicyPage>
+  );
+}
+
+function TermsPage() {
+  return (
+    <PolicyPage title="Terms & Conditions">
+      <p><strong>1. Taster sessions</strong> — Taster sessions are free and subject to availability. Booking a taster does not guarantee a place on a regular class.</p>
+      <p><strong>2. Cancellations</strong> — Please cancel at least 24 hours in advance if you cannot attend. This allows us to offer your place to someone on the waitlist.</p>
+      <p><strong>3. Health & safety</strong> — By booking a taster you confirm you are in good health and able to participate. Please inform the instructor of any injuries before the session.</p>
+      <p><strong>4. Your account</strong> — You are responsible for keeping your login details secure. Contact shams@snbhive.com immediately if you suspect unauthorised access.</p>
+      <p><strong>5. Changes</strong> — We reserve the right to change session dates, times or venues. We will notify you by email if this affects a booking you have made.</p>
+      <p><strong>6. Governing law</strong> — These terms are governed by the laws of England and Wales.</p>
+      <p><strong>Last updated:</strong> July 2026</p>
+    </PolicyPage>
+  );
+}
+
+
 
 function ComingSoon() {
   return (
@@ -1538,7 +1786,10 @@ function AdminPage() {
 // /admin  → AdminPage  (private, passcode protected)
 // /       → BookingApp (public-facing booking site)
 export default function App() {
-  if (window.location.pathname.startsWith("/admin")) return <AdminPage/>;
+  const path = window.location.pathname;
+  if (path.startsWith("/admin"))   return <AdminPage/>;
+  if (path.startsWith("/privacy")) return <PrivacyPage/>;
+  if (path.startsWith("/terms"))   return <TermsPage/>;
   return <BookingApp/>;
 }
 
@@ -1551,11 +1802,19 @@ function BookingApp() {
   const [modalSession, setModalSession]     = useState(null);
   const [modalType, setModalType]           = useState(null);
 
-  // Restore session on load
+  // Restore session on load — check expiry
   useEffect(() => {
     (async () => {
-      const s = await storage.get("snb_session");
-      if (s) setCurrentUser(s);
+      try {
+        const s = await storage.get("snb_session");
+        if (s) {
+          if (s.expiresAt && s.expiresAt < Date.now()) {
+            await storage.remove("snb_session"); // expired — force re-login
+          } else {
+            setCurrentUser(s);
+          }
+        }
+      } catch {}
       setAuthLoading(false);
     })();
   }, []);
@@ -1587,9 +1846,21 @@ function BookingApp() {
   async function persist(next) { setBookings(next); await storage.set("bookings", next); }
   async function handleConfirmBooking(r) { await persist([...bookings, r]); }
   async function updateStatus(id, s)     { await persist(bookings.map(b => b.id===id ? {...b, status:s} : b)); }
-  async function handleSignOut()         {
+  async function handleSignOut() {
     await storage.remove("snb_session");
     setCurrentUser(null); setBookings([]);
+  }
+  async function cancelMyBooking(id) {
+    await persist(bookings.map(b => b.id===id ? {...b, status:"cancelled"} : b));
+  }
+  async function joinWaitlist(cls) {
+    if (!currentUser) return;
+    await persist([...bookings, {
+      id:uid(), sessionId:cls.id, sessionName:cls.name, type:"class",
+      userId:currentUser.id, name:currentUser.name, email:currentUser.email, phone:currentUser.phone,
+      plan:"Waitlist", amount:0, status:"waitlisted", createdAt:new Date().toISOString(),
+    }]);
+    alert("You\'ve been added to the waitlist for " + cls.name + ". We\'ll contact you if a spot opens.");
   }
 
   // Loading spinner while checking session
@@ -1614,7 +1885,7 @@ function BookingApp() {
           </div>
           <div className="flex items-center gap-2">
             <nav className="flex gap-1 bg-stone-100 rounded-full p-1">
-              {[["classes","Classes"],["retreats","Retreats"],["bookings","My bookings"]].map(([k,label]) => (
+              {[["classes","Classes"],["retreats","Retreats"],["bookings","My bookings"],["account","Account"]].map(([k,label]) => (
                 <button key={k} onClick={() => setTab(k)}
                   className="ff-body text-sm font-medium px-3.5 py-1.5 rounded-full transition"
                   style={{ backgroundColor:tab===k?"#fff":"transparent", color:tab===k?INK:"#8A8478", boxShadow:tab===k?"0 1px 2px rgba(0,0,0,0.08)":"none" }}>
@@ -1636,16 +1907,22 @@ function BookingApp() {
         {loading
           ? <div className="flex justify-center py-20"><Loader2 className="animate-spin text-stone-400"/></div>
           : tab==="classes"
-            ? <div className="grid sm:grid-cols-2 gap-4">
-                {DEFAULT_CLASSES.map(cls => (
-                  <ClassCard key={cls.id} cls={cls} booked={bookedCount(cls.id)}
-                    bookingType={getUserBookingType(cls.id)}
-                    onBook={() => { setModalSession(cls); setModalType("class"); }}/>
-                ))}
-              </div>
+            ? <>
+                <WelcomeHero currentUser={currentUser}/>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {DEFAULT_CLASSES.map(cls => (
+                    <ClassCard key={cls.id} cls={cls} booked={bookedCount(cls.id)}
+                      bookingType={getUserBookingType(cls.id)}
+                      onBook={() => { setModalSession(cls); setModalType("class"); }}
+                      onWaitlist={TASTER_MODE ? joinWaitlist : null}/>
+                  ))}
+                </div>
+              </>
             : tab==="retreats"
               ? <ComingSoon/>
-              : <MyBookings bookings={bookings} currentUser={currentUser}/>
+              : tab==="account"
+                ? <AccountPage currentUser={currentUser} onUpdate={s => setCurrentUser(s)}/>
+                : <MyBookings bookings={bookings} currentUser={currentUser} onCancel={cancelMyBooking}/>
         }
       </main>
 
