@@ -68,11 +68,30 @@ function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
-// ── All emails go through the Supabase Edge Function "send-email" ─────────────
-// which calls Brevo server-side with "Sunlight Events" as the FROM name.
-// No email API keys are needed in the frontend — everything is in Supabase secrets.
-// callEdgeFunction() below uses VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY
-// which are already in your Vercel environment variables.
+// ── Supabase Edge Function caller ─────────────────────────────────────────────
+// Calls the send-email function deployed on Supabase.
+// Requires VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in Vercel env vars.
+async function callEdgeFunction(name, data) {
+  let url = "", key = "";
+  try {
+    url = import.meta.env.VITE_SUPABASE_URL || "";
+    key = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+  } catch {}
+  if (!url) throw new Error("EDGE_NOT_CONFIGURED");
+  const res = await fetch(url + "/functions/v1/" + name, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + key,
+    },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(name + " returned " + res.status + ": " + errText);
+  }
+  return res.json();
+}
 
 function genCode() { return Math.floor(100000 + Math.random() * 900000).toString(); }
 
