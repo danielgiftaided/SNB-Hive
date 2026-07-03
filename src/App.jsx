@@ -1188,6 +1188,11 @@ function AdminPage() {
             style={{ backgroundColor: TEAL, color: "#fff" }}>
             Sign in
           </button>
+          <p className="ff-body text-xs text-center mt-2 rounded-lg px-2 py-1.5"
+             style={{ backgroundColor: import.meta.env.VITE_SUPABASE_URL ? "#E9F1EC" : "#F3E7E5",
+                      color: import.meta.env.VITE_SUPABASE_URL ? "#1F4A42" : "#9B3A2E" }}>
+            {import.meta.env.VITE_SUPABASE_URL ? "✓ Supabase connected" : "✗ VITE_SUPABASE_URL missing — check Vercel env vars & redeploy"}
+          </p>
         </div>
       </div>
     </div>
