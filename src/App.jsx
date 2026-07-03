@@ -180,20 +180,23 @@ function AuthScreen({ onAuth }) {
       const user = { id:uid(), name:form.name.trim(), email:form.email.trim().toLowerCase(), phone:form.phone.trim(), passwordHash, createdAt:new Date().toISOString() };
       await storage.set("snb_users", [...users, user]);
       const session = { id:user.id, name:user.name, email:user.email, phone:user.phone };
-      // Generate + store verification code, then email user and notify admin
+      // Send verification code — required before login is granted
       try {
         const code = genCode();
-        await storage.set("vc_" + user.email, { code, exp: Date.now() + 900000 }); // 15 min
+        await storage.set("vc_" + user.email, { code, exp: Date.now() + 900000 }); // 15 min expiry
         await callEdgeFunction("send-email", { type:"verify", to_email:user.email, to_name:user.name, code });
-        await callEdgeFunction("send-email", { type:"admin", user_name:user.name, user_email:user.email, user_phone:user.phone, signup_time:new Date().toLocaleString("en-GB") });
+        // Notify admin (non-blocking — failure here doesn't prevent signup)
+        callEdgeFunction("send-email", { type:"admin", user_name:user.name, user_email:user.email, user_phone:user.phone, signup_time:new Date().toLocaleString("en-GB") }).catch(() => {});
         await storage.set("snb_session", session);
         setVEmail(user.email);
         setResetMode(false);
         switchMode("verify");
-      } catch {
-        // EmailJS not configured yet — skip verification and log in directly
-        await storage.set("snb_session", session);
-        onAuth(session);
+      } catch(e) {
+        // Email send failed — show a clear message, do NOT log user in without verification
+        const isConfig = e.message.includes("EDGE_NOT_CONFIGURED") || e.message.includes("404");
+        setError(isConfig
+          ? "Email service not set up yet. Please contact shams@snbhive.com to complete your registration."
+          : "Couldn't send your verification email — please try again in a moment.");
       }
     } catch(e) { if (!error) setError("Something went wrong — please try again."); }
     finally { setLoading(false); }
@@ -231,13 +234,10 @@ function AuthScreen({ onAuth }) {
       setResetMode(true);
       switchMode("verify");
     } catch(e) {
-      if (e.message === "EDGE_NOT_CONFIGURED" || e.message.includes("404") || e.message.includes("returned")) {
-        setError("Password reset emails are not yet active. Please contact shams@snbhive.com to reset your password.");
-      } else {
-        setVEmail(form.email.trim().toLowerCase());
-        setResetMode(true);
-        switchMode("verify");
-      }
+      const isConfig = e.message.includes("EDGE_NOT_CONFIGURED") || e.message.includes("404");
+      setError(isConfig
+        ? "Password reset emails are not set up yet. Contact shams@snbhive.com for help."
+        : "Couldn't send reset email — please try again.");
     }
     finally { setLoading(false); }
   }
