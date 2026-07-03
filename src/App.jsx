@@ -205,7 +205,9 @@ function AuthScreen({ onAuth }) {
         await storage.set("vc_" + user.email, { code, exp: Date.now() + 900000 }); // 15 min expiry
         await callEdgeFunction("send-email", { type:"verify", to_email:user.email, to_name:user.name, code });
         // Notify admin (non-blocking — failure here doesn't prevent signup)
-        callEdgeFunction("send-email", { type:"admin", user_name:user.name, user_email:user.email, user_phone:user.phone, signup_time:new Date().toLocaleString("en-GB") }).catch(() => {});
+        callEdgeFunction("send-email", { type:"admin", user_name:user.name, user_email:user.email, user_phone:user.phone, signup_time:new Date().toLocaleString("en-GB") })
+          .then(() => console.log("[SNB] Admin notified of new signup"))
+          .catch(e => console.error("[SNB admin notify FAILED]:", e.message));
         await storage.set("snb_session", session);
         setVEmail(user.email);
         setResetMode(false);
@@ -245,10 +247,10 @@ function AuthScreen({ onAuth }) {
       const email = form.email.trim().toLowerCase();
       const code = genCode();
       await storage.set("vc_" + email, { code, exp: Date.now() + 900000 });
-      const users = await getUsers();
-      const user = users.find(u => u.email === email);
-      if (user) await callEdgeFunction("send-email", { type:"reset", to_email:email, code });
-      // Always show same message — don't reveal if account exists
+      // Send reset code to the entered email.
+      // Security is enforced by the verification step — only the person
+      // who receives the email can enter the correct code.
+      await callEdgeFunction("send-email", { type:"reset", to_email:email, code });
       setVEmail(email);
       setResetMode(true);
       switchMode("verify");
