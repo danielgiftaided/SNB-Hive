@@ -1281,17 +1281,20 @@ function AdminPage() {
 
         {/* Tab navigation */}
         <div className="flex gap-1 bg-stone-100 rounded-full p-1 w-fit">
-          {[["bookings","Bookings"], ["members","Members"]].map(([key, label]) => (
-            <button key={key} onClick={() => setAdminTab(key)}
-              className="ff-body text-sm font-medium px-5 py-1.5 rounded-full transition"
-              style={{
-                backgroundColor: adminTab === key ? "#fff" : "transparent",
-                color: adminTab === key ? INK : "#8A8478",
-                boxShadow: adminTab === key ? "0 1px 2px rgba(0,0,0,0.08)" : "none"
-              }}>
-              {label} {key === "members" ? `(${members.length})` : `(${bookings.filter(b=>b.status!=="cancelled").length})`}
-            </button>
-          ))}
+          {[["bookings","Bookings"],["members","Members"],["classes","Classes"]].map(([key, label]) => {
+            const count = key==="members" ? members.length : key==="classes" ? DEFAULT_CLASSES.length : bookings.filter(b=>b.status!=="cancelled").length;
+            return (
+              <button key={key} onClick={() => setAdminTab(key)}
+                className="ff-body text-sm font-medium px-5 py-1.5 rounded-full transition"
+                style={{
+                  backgroundColor: adminTab===key ? "#fff" : "transparent",
+                  color: adminTab===key ? INK : "#8A8478",
+                  boxShadow: adminTab===key ? "0 1px 2px rgba(0,0,0,0.08)" : "none"
+                }}>
+                {label} ({count})
+              </button>
+            );
+          })}
         </div>
 
         {/* ── BOOKINGS TAB ── */}
@@ -1451,6 +1454,76 @@ function AdminPage() {
                 ))
               }
             </div>
+          </div>
+        )}
+
+        {/* ── CLASSES TAB ── */}
+        {adminTab === "classes" && (
+          <div className="grid sm:grid-cols-2 gap-4">
+            {DEFAULT_CLASSES.map(cls => {
+              const Icon = ICONS[cls.icon] || Sparkles;
+              const clsBookings = bookings
+                .filter(b => b.sessionId === cls.id && b.status !== "cancelled")
+                .sort((a,b) => new Date(a.createdAt||0) - new Date(b.createdAt||0));
+              const pct = Math.min(100, cls.capacity ? (clsBookings.length / cls.capacity) * 100 : 0);
+              const full = clsBookings.length >= cls.capacity;
+              return (
+                <div key={cls.id} className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+                  {/* Class header */}
+                  <div className="p-4 border-b border-stone-100 flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                        style={{ backgroundColor: cls.color + "1A" }}>
+                        <Icon size={18} style={{ color: cls.color }}/>
+                      </div>
+                      <div>
+                        <p className="ff-body font-semibold text-sm" style={{ color: INK }}>{cls.name}</p>
+                        <p className="ff-body text-xs text-stone-400 mt-0.5">{cls.day} · {cls.time}</p>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="ff-display text-2xl font-bold" style={{ color: full ? "#B3261E" : TEAL }}>
+                        {clsBookings.length}
+                      </p>
+                      <p className="ff-body text-xs text-stone-400">of {cls.capacity}</p>
+                    </div>
+                  </div>
+
+                  {/* Progress bar */}
+                  <div className="px-4 pt-3 pb-2">
+                    <div className="w-full bg-stone-100 rounded-full h-1.5">
+                      <div className="h-1.5 rounded-full transition-all"
+                        style={{ width: pct + "%", backgroundColor: full ? "#B3261E" : cls.color }}/>
+                    </div>
+                    <p className="ff-body text-xs mt-1.5" style={{ color: full ? "#B3261E" : "#8A8478" }}>
+                      {full ? "Class full" : `${cls.capacity - clsBookings.length} spaces remaining`}
+                    </p>
+                  </div>
+
+                  {/* Registered members list */}
+                  <div className="px-4 pb-4">
+                    {clsBookings.length === 0 ? (
+                      <p className="ff-body text-xs text-stone-400 py-2 text-center italic">No registrations yet</p>
+                    ) : (
+                      <div>
+                        <p className="ff-body text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">Registered</p>
+                        <div className="flex flex-col divide-y divide-stone-50">
+                          {clsBookings.map((b, i) => (
+                            <div key={b.id} className="flex items-center justify-between py-2">
+                              <div className="flex items-center gap-2">
+                                <span className="ff-body text-xs text-stone-400 w-5 text-right shrink-0">{i+1}.</span>
+                                <span className="ff-body text-sm font-medium" style={{ color: INK }}>{b.name}</span>
+                              </div>
+                              <span className="ff-body text-xs text-stone-400 truncate ml-2">{b.email}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
 
