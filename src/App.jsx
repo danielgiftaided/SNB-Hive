@@ -1448,7 +1448,7 @@ function AdminPage() {
         <div className="text-center mb-8">
           <div className="mx-auto mb-3 flex justify-center">
             <div className="flex items-center justify-center rounded-2xl overflow-hidden" style={{ backgroundColor:TEAL, padding:"14px 28px" }}>
-              <img src={LOGO} alt="SNB Hive" style={{ height:"96px" }}/>
+              <img src={LOGO} alt="SNB Hive" style={{ height:"288px" }}/>
             </div>
           </div>
           <p className="ff-body text-sm font-semibold" style={{ color: INK }}>Admin Dashboard</p>
@@ -1884,7 +1884,7 @@ function BookingApp() {
       <header className="sticky top-0 z-30" style={{ backgroundColor:TEAL }}>
         <div className="max-w-3xl mx-auto px-4 py-3.5 flex items-center justify-between gap-3">
           <div className="shrink-0 flex items-center gap-2">
-            <img src={LOGO} alt="SNB Hive" className="h-14" />
+            <img src={LOGO} alt="SNB Hive" style={{ height:"168px" }} />
             <p className="ff-body text-xs hidden sm:block" style={{ color:"rgba(240,232,204,0.75)" }}>{BRAND.tagline}</p>
           </div>
           <div className="flex items-center gap-2">
