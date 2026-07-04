@@ -83,8 +83,10 @@ const GOLD = "#C99A4B";
 const BG   = "#f0e8cc";
 
 const ICONS = { music: Music2, flame: Flame, flower: Flower2, dumbbell: Dumbbell };
-// Logo points to your file: public/7.png
-const LOGO  = "/7.png";
+// Logo points to your actual file: public/7 (1).png
+// The space and parentheses are URL-encoded below, since raw spaces/special
+// characters aren't valid in a URL/path as-is.
+const LOGO  = "/7%20(1).png";
 
 function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
