@@ -83,7 +83,11 @@ const GOLD = "#C99A4B";
 const BG   = "#f0e8cc";
 
 const ICONS = { music: Music2, flame: Flame, flower: Flower2, dumbbell: Dumbbell };
-const LOGO  = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfQAAAFcCAIAAACx+9teAABiUklEQVR42u3dd4Ad1Z0n+t/vnMp1Q2epJbVyRhIIIRBBIAQm22BjsMc5LTMe28+e3dn3ZnZn387um5n33sy8WY89Y4/N2DhhAwZMzkGAUEQSQgHl0Gp1TjdUrnPO++O2EiirFbr5fQxY6r63bt2qW986de6p38H+9neAEELI8MJoExBCCIU7IYQQCndCCCEU7oQQQijcCSGEULgTQgiFOyGEEAp3QgghFO6EEEIo3AkhhFC4E0IIhTshhBAKd0IIIRTuhBBCKNwJIYRQuBNCCKFwJ4QQQuFOCCGEwp0QQgiFOyGEEAp3QgghFO6EEEIo3AkhhFC4E0IIoXAnhBBC4U4IIRTuhBBC4U4IIYTCnRBCKNwJIYRQuBNCCKFwJ4QQQuFOCCGEwp0QQgiFOyGEEAp3QgghFO6EEEIo3AkhhFC4E0IIoXAnhBBC4U4IIYTCnRBCKNwJIYRQuBNCCIU7IYQQCndCCKFwJ4QQQuFOCCGEwp0QQgiFOyGEEAp3QgihcCeEEArh3l8oAcOgAAA/pJREFUunj8CQAAgIiIiADgLtsAAAAAAElFTkSuQmCC";
+// Logo now points to the file in your GitHub /public folder rather than
+// an inline base64 string. Rename your uploaded file to "logo.png" (no
+// spaces or parentheses) and place it directly in /public — then this
+// path will resolve correctly in both dev and production builds.
+const LOGO  = "/logo.png";
 
 function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
@@ -689,28 +693,8 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
   const [saving, setSaving]       = useState(false);
   const [paymentUrl, setPUrl]     = useState("");
   const [error, setError]         = useState("");
-  const [countdown, setCountdown] = useState(5);
 
   const isPilates = TASTER_MODE && (session.id || "").startsWith("pilates_");
-  const redirectedRef = useRef(false);
-
-  // Auto-redirect countdown for Pilates bookings — opens the bsport page in a
-  // new tab automatically once the countdown reaches 0. Note: some browsers
-  // may still block this as a popup since it's not fired from a direct click
-  // (it's inside a setTimeout chain) — if that happens for some users, a
-  // fallback manual link may need to be reintroduced.
-  useEffect(() => {
-    if (step !== 2 || !isPilates) return;
-    if (countdown <= 0) {
-      if (!redirectedRef.current) {
-        redirectedRef.current = true;
-        window.open(PILATES_REDIRECT, "_blank", "noopener,noreferrer");
-      }
-      return;
-    }
-    const t = setTimeout(() => setCountdown(c => c - 1), 1000);
-    return () => clearTimeout(t);
-  }, [step, countdown, isPilates]);
 
   function toggleClass(id) {
     if (id === session.id) return; // primary class always stays selected
@@ -745,6 +729,12 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
           plan: "Taster", amount: 0,
           status: "confirmed", createdAt: new Date().toISOString(),
         });
+        // Open the Pilates registration page in a new tab right away — this
+        // stays tied to the user's original button click, which is what
+        // browsers require to allow a new tab without blocking it as a popup.
+        if (isPilates) {
+          window.open(PILATES_REDIRECT, "_blank", "noopener,noreferrer");
+        }
         // Send confirmation email with calendar invite (non-blocking)
         callEdgeFunction("send-email", {
           type: "confirm_taster",
@@ -961,9 +951,9 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
                       One more step — complete your registration
                     </p>
                     <p className="ff-body text-sm mt-1.5" style={{ color:"#9A7426" }}>
-                      Redirecting you automatically in{" "}
-                      <strong>{countdown}</strong> second{countdown !== 1 ? "s" : ""} to
-                      finalise your place. Please sign up or log in there to complete your booking.
+                      We've opened our Pilates booking portal in a new tab. Please sign up or
+                      log in there to finalise your place. If it didn't open, check your
+                      browser's popup settings for this site.
                     </p>
                   </div>
                 </>
@@ -1038,6 +1028,17 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
 
 /* ---- MY BOOKINGS ---- */
 
+// Resolves display info (day, time, venue, icon, colour) for any sessionId —
+// covers both regular classes (DEFAULT_CLASSES) and Pilates sessions, which
+// live in a separate PILATES_SESSIONS/PILATES_BASE structure.
+function getSessionInfo(sessionId) {
+  const cls = DEFAULT_CLASSES.find(c => c.id === sessionId);
+  if (cls) return cls;
+  const pilatesSession = PILATES_SESSIONS.find(p => p.id === sessionId);
+  if (pilatesSession) return { ...PILATES_BASE, ...pilatesSession, icon: "sparkles" };
+  return null;
+}
+
 function MyBookings({ bookings, currentUser, onCancel }) {
   const [confirmCancel, setConfirmCancel] = useState(null);
   const mine = bookings
@@ -1051,7 +1052,7 @@ function MyBookings({ bookings, currentUser, onCancel }) {
             <p className="text-xs text-stone-400 mt-1">Book a taster session to see it here.</p>
           </div>
         : mine.slice().reverse().map(b => {
-          const cls = DEFAULT_CLASSES.find(c => c.id === b.sessionId);
+          const cls = getSessionInfo(b.sessionId);
           const Icon = cls ? (ICONS[cls.icon] || Sparkles) : Sparkles;
           return (
             <div key={b.id} className="bg-white rounded-xl border border-stone-200 p-4 flex gap-3 items-start">
