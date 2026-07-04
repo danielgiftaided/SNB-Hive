@@ -21,16 +21,16 @@ const BRAND = {
 const DEFAULT_CLASSES = [
   { id:"zumba",    name:"Zumba",                  tagline:"High-energy dance cardio",  day:"Fri 10 Jul", time:"12:00–12:45pm", capacity:20, icon:"music",   color:"#C99A4B",
     venue:"6 Dispensary Lane, London E8 1FT",              venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
-    whatToBring:"Wear comfortable clothes and trainers. Bring a water bottle.", icsStart:"20260710T110000Z", icsEnd:"20260710T114500Z" },
+    whatToBring:"Wear comfortable clothes and trainers. Bring a water bottle.", icsStart:"20260710T110000Z", icsEnd:"20260710T114500Z", description:"Zumba is about much more than fitness. It's about community, confidence, and feeling good. Dance has been shown to support memory, coordination, and emotional wellbeing, and music and dance can help get through some of the most challenging times in life.\n\nIt has the power to bring people together, lift spirits, and remind us that exercise doesn't have to feel like a chore — it can be something you genuinely look forward to.\n\nZumba is based on repetitive movements throughout each song, so you don't need to be an experienced dancer or technically advanced to join in. It's all about having fun while getting fit.\n\nThe routines are repeated for about 6 weeks, which allows people to learn the moves and build their confidence and then new routines are introduced gradually over time. That repetition helps build confidence because your body begins to associate the movements with the music, allowing you to learn naturally without pressure. It's a welcoming, supportive environment." },
   { id:"boxing",   name:"Boxing",                  tagline:"Pad work & conditioning",   day:"Mon 6 Jul",  time:"1:30–2:30pm", capacity:20, icon:"flame",   color:"#9B5B45",
     venue:"SCK Fitness, 439 High Road, Leyton, London E10 5EL", venueMap:"https://www.google.com/maps/search/?api=1&query=SCK+Fitness+439+High+Road+Leyton+London+E10+5EL",
-    whatToBring:"Comfortable workout clothes. Boxing gloves provided.", icsStart:"20260706T123000Z", icsEnd:"20260706T133000Z" },
+    whatToBring:"Comfortable workout clothes. Boxing gloves provided.", icsStart:"20260706T123000Z", icsEnd:"20260706T133000Z", description:"Boxing is one of the most effective full-body workouts, combining cardiovascular fitness, strength, coordination and stress relief in a fun and empowering way.\n\nThis class is not about fighting or competition. Instead, it uses boxing drills, pad work and fitness exercises to help women improve their health, build confidence and enjoy movement in a supportive environment.\n\nBenefits include:\n• Increased calorie burn and support with weight loss goals\n• Improved cardiovascular fitness and stamina\n• Increased confidence and self-belief\n• A healthy outlet for stress and frustration\n• Improved coordination and balance\n• Stronger core and full-body conditioning\n• Improved mood and mental wellbeing\n\nMany women find boxing incredibly empowering because it allows them to release stress, develop resilience and discover strengths they never knew they had.\n\nSuitable for beginners and all fitness levels." },
   { id:"somatic",  name:"Somatic",                 tagline:"Move, breathe, reconnect",  day:"Thu 9 Jul",  time:"1:30–2:30pm", capacity:20, icon:"flower",  color:"#7C9885",
     venue:"6 Dispensary Lane, London E8 1FT",              venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
     whatToBring:"Loose, comfortable clothing. Mat provided.", icsStart:"20260709T123000Z", icsEnd:"20260709T133000Z" },
   { id:"strength", name:"Strength & Conditioning", tagline:"Build strength, build power", day:"Wed 8 Jul",  time:"1:30–2:30pm", capacity:20, icon:"dumbbell",color:"#1F4A42",
     venue:"SCK Fitness, 439 High Road, Leyton, London E10 5EL", venueMap:"https://www.google.com/maps/search/?api=1&query=SCK+Fitness+439+High+Road+Leyton+London+E10+5EL",
-    whatToBring:"Gym clothes and trainers. All equipment provided.", icsStart:"20260708T123000Z", icsEnd:"20260708T133000Z" },
+    whatToBring:"Gym clothes and trainers. All equipment provided.", icsStart:"20260708T123000Z", icsEnd:"20260708T133000Z", description:"Strength training is one of the most beneficial forms of exercise for women, particularly as we navigate the demands of motherhood, work and daily life.\n\nThis class focuses on building functional strength, improving mobility and helping women feel stronger and more capable in their everyday activities.\n\nUsing bodyweight exercises, resistance bands and light equipment, sessions are designed to be accessible while still providing an effective workout.\n\nBenefits include:\n• Increased muscle tone and strength\n• Support with sustainable fat loss and body composition goals\n• Improved posture and reduced aches and pains\n• Better balance and stability\n• Increased energy levels\n• Stronger bones and joints\n• Improved confidence in daily movement\n• Support for healthy ageing and long-term wellbeing\n\nRather than focusing on appearance alone, this class encourages women to appreciate what their bodies can do and develop strength that carries into everyday life.\n\nSuitable for all fitness levels and can be adapted to individual needs." },
 ];
 
 // 2 membership tiers only
@@ -962,9 +962,7 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
                     style={{ backgroundColor:TEAL, color:"#fff" }}>
                     Complete registration now <ArrowUpRight size={15}/>
                   </a>
-                  <button onClick={onClose} className="text-xs text-stone-400 underline">
-                    Close — I'll complete this later
-                  </button>
+
                 </>
               ) : (
                 /* ── Regular taster confirmation ── */
@@ -986,6 +984,21 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
                       </p>
                     )}
                   </div>
+                  {session.description && (
+                    <div className="w-full text-left">
+                      <p className="ff-body text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">About this class</p>
+                      <div className="max-h-48 overflow-y-auto rounded-xl bg-stone-50 px-4 py-3 flex flex-col gap-1.5">
+                        {session.description.split("\n").filter(l => l.trim()).map((line, i) => (
+                          line.startsWith("•")
+                            ? <div key={i} className="flex items-start gap-2">
+                                <span className="ff-body text-xs shrink-0 mt-0.5" style={{color:TEAL}}>•</span>
+                                <span className="ff-body text-xs text-stone-600">{line.slice(1).trim()}</span>
+                              </div>
+                            : <p key={i} className="ff-body text-xs text-stone-600 leading-relaxed">{line}</p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <p className="text-xs text-stone-400">We'll be in touch with everything you need to know before your first session.</p>
                   <button onClick={onClose}
                     className="w-full inline-flex items-center justify-center font-semibold text-sm py-3 rounded-full"
@@ -1421,28 +1434,18 @@ function PilatesCard({ bookedFri, bookedThu, bookingTypeFri, bookingTypeThu, onB
     const isBooked = bookingType === "membership";
     const full = booked >= session.capacity;
     const disabled = full || isBooked;
-    const pct = Math.min(100, session.capacity ? (booked / session.capacity) * 100 : 0);
-    const spotsLeft = Math.max(session.capacity - booked, 0);
     return (
       <div className="border border-stone-100 rounded-xl p-4 flex flex-col gap-3">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="ff-body text-sm font-semibold" style={{ color: INK }}>{session.day}</p>
-            <p className="ff-body text-xs text-stone-500">{session.time}</p>
-          </div>
-          {isBooked
-            ? <span className="ff-body text-xs font-semibold px-2.5 py-1 rounded-full" style={{ backgroundColor:"rgba(228,100,120,0.1)", color:TEAL }}>Taster booked</span>
-            : <div className="text-right shrink-0">
-                <p className="ff-display text-lg font-bold" style={{ color: full?"#B3261E":color }}>{spotsLeft}</p>
-                <p className="ff-body text-[10px] text-stone-400">of {session.capacity} left</p>
-              </div>
-          }
-        </div>
-        <div className="w-full bg-stone-100 rounded-full h-1.5">
-          <div className="h-1.5 rounded-full transition-all" style={{ width: pct+"%", backgroundColor: full?"#B3261E":color }}/>
+        <div>
+          <p className="ff-body text-sm font-semibold" style={{ color: INK }}>{session.day}</p>
+          <p className="ff-body text-xs text-stone-500">{session.time}</p>
+          {isBooked && (
+            <span className="ff-body text-xs font-semibold mt-1 inline-block px-2.5 py-0.5 rounded-full"
+              style={{ backgroundColor:"rgba(228,100,120,0.1)", color:TEAL }}>Taster booked</span>
+          )}
         </div>
         <button onClick={() => !disabled && onBook({...PILATES_BASE, ...session})} disabled={disabled}
-          className="ff-body text-sm font-semibold py-2 rounded-full transition disabled:cursor-not-allowed"
+          className="ff-body text-sm font-semibold py-2 rounded-full transition disabled:cursor-not-allowed mt-auto"
           style={{ backgroundColor: disabled?(isBooked?"#D4EBD9":"#E3DFD3"):TEAL, color: disabled?(isBooked?"#2D6B40":"#8A8478"):"#FFF" }}>
           {full ? "Full" : isBooked ? "Taster booked" : "Book taster"}
         </button>
@@ -1471,31 +1474,54 @@ function PilatesCard({ bookedFri, bookedThu, bookingTypeFri, bookingTypeThu, onB
           <MapPin size={11}/> {PILATES_BASE.venue}
         </a>
       )}
-      {PILATES_BASE.whatToBring && (
-        <p className="ff-body text-xs text-stone-400 flex items-start gap-1.5">
-          <span className="shrink-0">💡</span><span>{PILATES_BASE.whatToBring}</span>
-        </p>
-      )}
+
     </div>
   );
 }
 
 function ComingSoon() {
   return (
-    <div className="max-w-md mx-auto text-center py-16 flex flex-col items-center gap-5">
-      <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ backgroundColor:TEAL+"1A" }}>
-        <Sparkles size={28} style={{ color:TEAL }}/>
+    <div className="max-w-lg mx-auto flex flex-col gap-5 py-4">
+
+      {/* Header */}
+      <div className="text-center">
+        <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor:TEAL+"1A" }}>
+          <Sparkles size={28} style={{ color:TEAL }}/>
+        </div>
+        <h2 className="ff-display text-2xl font-semibold" style={{ color:INK }}>Women's Spa Retreat</h2>
+        <div className="inline-flex items-center gap-2 mt-2 px-3 py-1 rounded-full text-xs font-medium" style={{ backgroundColor:TEAL+"1A", color:TEAL }}>
+          <Bell size={12}/> Coming soon — July / August
+        </div>
       </div>
-      <div>
-        <h2 className="ff-display text-2xl font-semibold" style={{ color:INK }}>Retreats Coming Soon</h2>
-        <p className="ff-body text-sm text-stone-500 mt-2 leading-relaxed max-w-xs mx-auto">
-          We're putting together something special. Our women's wellness retreats will be announced here soon — sign up or log in to be the first to know.
+
+      {/* Content */}
+      <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm flex flex-col gap-4">
+        <p className="ff-body text-sm text-stone-600 leading-relaxed">Our retreats are built around women's needs.</p>
+        <p className="ff-body text-sm text-stone-600 leading-relaxed">
+          If you're looking for some time away, to relax, reset and unwind for a night or two, this is the
+          perfect opportunity to do that without the stress of travelling abroad.
         </p>
+        <p className="ff-body text-sm text-stone-600 leading-relaxed">
+          We organise quality retreats with access to spa facilities like an indoor pool, sauna and much
+          more, so that all you need to do is turn up and enjoy.
+        </p>
+        <div className="rounded-xl px-4 py-3" style={{ backgroundColor:TEAL+"1A" }}>
+          <p className="ff-body text-sm font-semibold leading-relaxed" style={{ color:TEAL }}>
+            We're currently planning a retreat for July/August. If you're interested, let us know as soon
+            as possible — spaces are limited.
+          </p>
+        </div>
       </div>
-      <div className="w-full rounded-xl border border-dashed border-stone-300 px-6 py-5 bg-white text-left">
-        <p className="ff-body text-sm font-medium text-stone-600 flex items-center gap-2"><Bell size={14}/> Stay in the loop</p>
-        <p className="ff-body text-xs text-stone-400 mt-1">All registered members will receive an email notification when retreat bookings open. Make sure your account email is up to date.</p>
-      </div>
+
+      {/* CTA */}
+      <a href={"mailto:shams@snbhive.com?subject=Retreat%20Interest%20%E2%80%94%20July%2FAugust"}
+        className="w-full inline-flex items-center justify-center gap-2 font-semibold text-sm py-3 rounded-full"
+        style={{ backgroundColor:TEAL, color:"#fff" }}>
+        <Mail size={15}/> Register your interest
+      </a>
+      <p className="ff-body text-xs text-stone-400 text-center -mt-2">
+        All registered members will also receive an email notification when retreat bookings open.
+      </p>
     </div>
   );
 }
