@@ -21,16 +21,16 @@ const BRAND = {
 const DEFAULT_CLASSES = [
   { id:"zumba",    name:"Zumba",                  tagline:"High-energy dance cardio",  day:"Fri 10 Jul", time:"12:00–12:45pm", capacity:20, icon:"music",   color:"#C99A4B",
     venue:"6 Dispensary Lane, London E8 1FT",              venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
-    whatToBring:"Wear comfortable clothes and trainers. Bring a water bottle.", icsStart:"20260710T110000Z", icsEnd:"20260710T114500Z", description:"Zumba is about much more than fitness. It's about community, confidence, and feeling good. Dance has been shown to support memory, coordination, and emotional wellbeing, and music and dance can help get through some of the most challenging times in life.\n\nIt has the power to bring people together, lift spirits, and remind us that exercise doesn't have to feel like a chore — it can be something you genuinely look forward to.\n\nZumba is based on repetitive movements throughout each song, so you don't need to be an experienced dancer or technically advanced to join in. It's all about having fun while getting fit.\n\nThe routines are repeated for about 6 weeks, which allows people to learn the moves and build their confidence and then new routines are introduced gradually over time. That repetition helps build confidence because your body begins to associate the movements with the music, allowing you to learn naturally without pressure. It's a welcoming, supportive environment." },
+    whatToBring:"Wear comfortable clothes and grip socks", icsStart:"20260710T110000Z", icsEnd:"20260710T114500Z", description:"Zumba is about much more than fitness. It's about community, confidence, and feeling good. Dance has been shown to support memory, coordination, and emotional wellbeing, and music and dance can help get through some of the most challenging times in life.\n\nIt has the power to bring people together, lift spirits, and remind us that exercise doesn't have to feel like a chore — it can be something you genuinely look forward to.\n\nZumba is based on repetitive movements throughout each song, so you don't need to be an experienced dancer or technically advanced to join in. It's all about having fun while getting fit.\n\nThe routines are repeated for about 6 weeks, which allows people to learn the moves and build their confidence and then new routines are introduced gradually over time. That repetition helps build confidence because your body begins to associate the movements with the music, allowing you to learn naturally without pressure. It's a welcoming, supportive environment." },
   { id:"boxing",   name:"Boxing",                  tagline:"Pad work & conditioning",   day:"Mon 6 Jul",  time:"1:30–2:30pm", capacity:20, icon:"flame",   color:"#9B5B45",
     venue:"SCK Fitness, 439 High Road, Leyton, London E10 5EL", venueMap:"https://www.google.com/maps/search/?api=1&query=SCK+Fitness+439+High+Road+Leyton+London+E10+5EL",
-    whatToBring:"Comfortable workout clothes. Boxing gloves provided.", icsStart:"20260706T123000Z", icsEnd:"20260706T133000Z", description:"Boxing is one of the most effective full-body workouts, combining cardiovascular fitness, strength, coordination and stress relief in a fun and empowering way.\n\nThis class is not about fighting or competition. Instead, it uses boxing drills, pad work and fitness exercises to help women improve their health, build confidence and enjoy movement in a supportive environment.\n\nBenefits include:\n• Increased calorie burn and support with weight loss goals\n• Improved cardiovascular fitness and stamina\n• Increased confidence and self-belief\n• A healthy outlet for stress and frustration\n• Improved coordination and balance\n• Stronger core and full-body conditioning\n• Improved mood and mental wellbeing\n\nMany women find boxing incredibly empowering because it allows them to release stress, develop resilience and discover strengths they never knew they had.\n\nSuitable for beginners and all fitness levels." },
+    whatToBring:"Wear comfortable workout clothes and trainers. Bring a water bottle", icsStart:"20260706T123000Z", icsEnd:"20260706T133000Z", description:"Boxing is one of the most effective full-body workouts, combining cardiovascular fitness, strength, coordination and stress relief in a fun and empowering way.\n\nThis class is not about fighting or competition. Instead, it uses boxing drills, pad work and fitness exercises to help women improve their health, build confidence and enjoy movement in a supportive environment.\n\nBenefits include:\n• Increased calorie burn and support with weight loss goals\n• Improved cardiovascular fitness and stamina\n• Increased confidence and self-belief\n• A healthy outlet for stress and frustration\n• Improved coordination and balance\n• Stronger core and full-body conditioning\n• Improved mood and mental wellbeing\n\nMany women find boxing incredibly empowering because it allows them to release stress, develop resilience and discover strengths they never knew they had.\n\nSuitable for beginners and all fitness levels." },
   { id:"somatic",  name:"Somatic",                 tagline:"Move, breathe, reconnect",  day:"Thu 9 Jul",  time:"1:30–2:30pm", capacity:20, icon:"flower",  color:"#7C9885",
     venue:"6 Dispensary Lane, London E8 1FT",              venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
-    whatToBring:"Loose, comfortable clothing. Mat provided.", icsStart:"20260709T123000Z", icsEnd:"20260709T133000Z" },
+    whatToBring:"Loose comfortable clothing and grip socks. Bring a water bottle.", icsStart:"20260709T123000Z", icsEnd:"20260709T133000Z", description:"Modern life places enormous demands on women. Many spend their days caring for others, managing households, working, raising children and carrying responsibilities that leave little time for themselves.\n\nThis class offers a gentle opportunity to slow down, reconnect with the body and create space for rest, reflection and renewal.\n\nThrough gentle movement, stretching, breathing exercises and guided relaxation, participants are supported in releasing physical tension and calming the nervous system.\n\nBenefits include:\n• Reduced stress and feelings of overwhelm\n• Improved sleep quality\n• Relief from physical tension and tightness\n• Improved body awareness\n• Support for emotional wellbeing\n• A greater sense of calm and balance\n• Time to pause and reconnect with oneself\n• Improved ability to manage the demands of everyday life\n\nSessions may also include gentle reminders around gratitude, self-care, reflection and caring for the body.\n\nFor many women, this class becomes a rare opportunity to simply pause, breathe and be present without expectation or pressure.\n\nSuitable for all ages, abilities and fitness levels.\n\nBecause when women are supported, strengthened and given space to care for themselves, they are better able to care for those around them." },
   { id:"strength", name:"Strength & Conditioning", tagline:"Build strength, build power", day:"Wed 8 Jul",  time:"1:30–2:30pm", capacity:20, icon:"dumbbell",color:"#1F4A42",
     venue:"SCK Fitness, 439 High Road, Leyton, London E10 5EL", venueMap:"https://www.google.com/maps/search/?api=1&query=SCK+Fitness+439+High+Road+Leyton+London+E10+5EL",
-    whatToBring:"Gym clothes and trainers. All equipment provided.", icsStart:"20260708T123000Z", icsEnd:"20260708T133000Z", description:"Strength training is one of the most beneficial forms of exercise for women, particularly as we navigate the demands of motherhood, work and daily life.\n\nThis class focuses on building functional strength, improving mobility and helping women feel stronger and more capable in their everyday activities.\n\nUsing bodyweight exercises, resistance bands and light equipment, sessions are designed to be accessible while still providing an effective workout.\n\nBenefits include:\n• Increased muscle tone and strength\n• Support with sustainable fat loss and body composition goals\n• Improved posture and reduced aches and pains\n• Better balance and stability\n• Increased energy levels\n• Stronger bones and joints\n• Improved confidence in daily movement\n• Support for healthy ageing and long-term wellbeing\n\nRather than focusing on appearance alone, this class encourages women to appreciate what their bodies can do and develop strength that carries into everyday life.\n\nSuitable for all fitness levels and can be adapted to individual needs." },
+    whatToBring:"Gym clothes and trainers and bring a water bottle.", icsStart:"20260708T123000Z", icsEnd:"20260708T133000Z", description:"Strength training is one of the most beneficial forms of exercise for women, particularly as we navigate the demands of motherhood, work and daily life.\n\nThis class focuses on building functional strength, improving mobility and helping women feel stronger and more capable in their everyday activities.\n\nUsing bodyweight exercises, resistance bands and light equipment, sessions are designed to be accessible while still providing an effective workout.\n\nBenefits include:\n• Increased muscle tone and strength\n• Support with sustainable fat loss and body composition goals\n• Improved posture and reduced aches and pains\n• Better balance and stability\n• Increased energy levels\n• Stronger bones and joints\n• Improved confidence in daily movement\n• Support for healthy ageing and long-term wellbeing\n\nRather than focusing on appearance alone, this class encourages women to appreciate what their bodies can do and develop strength that carries into everyday life.\n\nSuitable for all fitness levels and can be adapted to individual needs." },
 ];
 
 // 2 membership tiers only
@@ -39,7 +39,7 @@ const PILATES_BASE = {
   color: "#9b7ecb",
   venue: "6 Dispensary Lane, London E8 1FT",
   venueMap: "https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
-  whatToBring: "Wear comfortable, stretchy clothing. Mat provided.",
+  whatToBring: "Wear comfortable clothes and grip socks",
 };
 const PILATES_SESSIONS = [
   { id:"pilates_fri", day:"Fri 10 Jul", time:"9:15–10:00am", capacity:3, icsStart:"20260710T081500Z", icsEnd:"20260710T090000Z" },
@@ -348,8 +348,9 @@ function AuthScreen({ onAuth }) {
     setLoading(true);
     try {
       const users = await getUsers();
-      const hash = await hashPassword(form.password);
-      await storage.set("snb_users", users.map(u => u.email===verifyEmail ? {...u, passwordHash:hash} : u));
+      const ns = generateSalt();
+      const hash = await hashPassword(form.password, ns);
+      await storage.set("snb_users", users.map(u => u.email===verifyEmail ? {...u, passwordHash:hash, salt:ns} : u));
       setSuccess("Password updated! Please sign in.");
       setForm(p => ({...p, email:verifyEmail, password:"", confirm:""}));
       switchMode("login");
@@ -379,7 +380,9 @@ function AuthScreen({ onAuth }) {
       <Fonts/>
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <img src={LOGO} alt="SNB Hive" className="h-32 mx-auto mb-3" onError={e => { e.target.style.display = "none"; }}/>
+          <div className="inline-flex items-center justify-center rounded-2xl px-6 py-4 mb-3" style={{ backgroundColor:BG }}>
+            <img src={LOGO} alt="SNB Hive" style={{ height:"160px" }} onError={e => { e.target.style.display = "none"; }}/>
+          </div>
           <p className="ff-body text-sm text-stone-500">{BRAND.tagline}</p>
         </div>
 
@@ -1399,7 +1402,11 @@ function PolicyPage({ title, children }) {
     <div className="min-h-screen" style={{backgroundColor:BG}}>
       <Fonts/>
       <div className="max-w-2xl mx-auto px-4 py-10">
-        <div className="text-center mb-8"><img src={LOGO} alt="SNB Hive" className="h-16 mx-auto mb-2" onError={e => { e.target.style.display = "none"; }}/></div>
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center rounded-2xl px-5 py-3" style={{ backgroundColor:BG }}>
+            <img src={LOGO} alt="SNB Hive" style={{ height:"88px" }} onError={e => { e.target.style.display = "none"; }}/>
+          </div>
+        </div>
         <div className="bg-white rounded-2xl border border-stone-200 p-8 shadow-sm">
           <h1 className="ff-display text-2xl font-semibold mb-6" style={{color:INK}}>{title}</h1>
           <div className="ff-body text-sm text-stone-600 leading-relaxed flex flex-col gap-4">{children}</div>
@@ -1612,7 +1619,7 @@ function AdminPage() {
       <div className="w-full max-w-xs">
         <div className="text-center mb-8">
           <div className="mx-auto mb-3 flex justify-center">
-            <div className="flex items-center justify-center rounded-2xl overflow-hidden" style={{ backgroundColor:TEAL, padding:"14px 28px" }}>
+            <div className="flex items-center justify-center rounded-2xl overflow-hidden" style={{ backgroundColor:BG, padding:"14px 28px" }}>
               <img src={LOGO} alt="SNB Hive" style={{ height:"288px" }} onError={e => { e.target.style.display = "none"; }}/>
             </div>
           </div>
@@ -1664,7 +1671,9 @@ function AdminPage() {
       <div style={{ backgroundColor: TEAL }}>
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src={LOGO} alt="SNB Hive" className="h-10" onError={e => { e.target.style.display = "none"; }}/>
+            <div className="flex items-center justify-center rounded-xl overflow-hidden" style={{ backgroundColor:BG, padding:"6px 14px" }}>
+              <img src={LOGO} alt="SNB Hive" style={{ height:"56px" }} onError={e => { e.target.style.display = "none"; }}/>
+            </div>
             <div>
               <p className="ff-display text-base font-semibold" style={{ color: GOLD }}>SNB Hive</p>
               <p className="ff-body text-xs" style={{ color: "rgba(255,255,255,0.6)" }}>Admin Dashboard</p>
@@ -2049,7 +2058,7 @@ function BookingApp() {
       <header className="sticky top-0 z-30 border-b border-stone-200" style={{ backgroundColor:BG }}>
         <div className="max-w-3xl mx-auto px-4 py-2 flex items-center justify-between gap-3">
           <div className="shrink-0 flex items-center gap-2">
-            <img src={LOGO} alt="SNB Hive" style={{ height:"40px" }} onError={e => { e.target.style.display = "none"; }}/>
+            <img src={LOGO} alt="SNB Hive" style={{ height:"56px" }} onError={e => { e.target.style.display = "none"; }}/>
             <p className="ff-body text-xs text-stone-500 hidden sm:block">{BRAND.tagline}</p>
           </div>
           <div className="flex items-center gap-2">
