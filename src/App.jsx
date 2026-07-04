@@ -1443,7 +1443,8 @@ function TermsPage() {
       <p><strong>3. Health & safety</strong> — By booking a taster you confirm you are in good health and able to participate. Please inform the instructor of any injuries before the session.</p>
       <p><strong>4. Your account</strong> — You are responsible for keeping your login details secure. Contact shams@snbhive.com immediately if you suspect unauthorised access.</p>
       <p><strong>5. Changes</strong> — We reserve the right to change session dates, times or venues. We will notify you by email if this affects a booking you have made.</p>
-      <p><strong>6. Governing law</strong> — These terms are governed by the laws of England and Wales.</p>
+      <p><strong>6. We maintain a zero-tolerance policy for verbal abuse, intimidation, or harassment directed at staff or other members. Violations will result in immediate and permanent membership termination.</p> 
+      <p><strong>7. Governing law</strong> — These terms are governed by the laws of England and Wales.</p>
       <p><strong>Last updated:</strong> July 2026</p>
     </PolicyPage>
   );
