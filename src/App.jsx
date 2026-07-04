@@ -84,13 +84,6 @@ const BG   = "#f0e8cc";
 
 const ICONS = { music: Music2, flame: Flame, flower: Flower2, dumbbell: Dumbbell };
 const LOGO  = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfQAAAFcCAIAAACx+9teAABiUklEQVR42u3dd4Ad1Z0n+t/vnMp1Q2epJbVyRhIIIRBBIAQm22BjsMc5LTMe28+e3dn3ZnZn387um5n33sy8WY89Y4/N2DhhAwZMzkGAUEQSQgHl0Gp1TjdUrnPO++O2EiirFbr5fQxY6r63bt2qW986de6p38H+9neAEELI8MJoExBCCIU7IYQQCndCCCEU7oQQQijcCSGEULgTQgiFOyGEEAp3QgghFO6EEEIo3AkhhFC4E0IIhTshhBAKd0IIIRTuhBBCKNwJIYRQuBNCCKFwJ4QQQuFOCCGEwp0QQgiFOyGEEAp3QgghFO6EEEIo3AkhhFC4E0IIoXAnhBBC4U4IIRTuhBBC4U4IIYTCnRBCKNwJIYRQuBNCCKFwJ4QQQuFOCCGEwp0QQgiFOyGEEAp3QgghFO6EEEIo3AkhhFC4E0IIoXAnhBBC4U4IIYTCnRBCKNwJIYRQuBNCCIU7IYQQCndCCKFwJ4QQQuFOCCGEwp0QQgiFOyGEEAp3QgihcCeEEArh3l8oAcOgAAA/pJREFUunj8CQAAgIiIiADgLtsAAAAAAElFTkSuQmCC";
-// ⚠️ IMPORTANT: The base64 LOGO string above is a SHORT PLACEHOLDER.
-// Your original file's LOGO string is much longer (tens of thousands of
-// characters) and could not be reliably retyped by hand in this response.
-// Please copy the LOGO constant from your ORIGINAL App.jsx and paste it in
-// place of the line above before deploying. Every other change requested
-// (Pilates card centering, auto-redirect, copy update) is applied correctly
-// in this file and unaffected by this placeholder.
 
 function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
@@ -614,7 +607,6 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist }) {
       <div className="flex flex-wrap gap-2">
         <Pill icon={Calendar}>{cls.day}</Pill>
         <Pill icon={Clock}>{cls.time}</Pill>
-        {isBooked && TASTER_MODE && <Pill icon={Check}><span style={{ color:TEAL, fontWeight:"600" }}>Taster booked</span></Pill>}
         {isMember && !TASTER_MODE && <Pill icon={Check}><span style={{ color:TEAL }}>Member</span></Pill>}
       </div>
 
@@ -629,7 +621,7 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist }) {
         <button onClick={() => onBook(cls)} disabled={disabled}
           className="ff-body inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full transition disabled:cursor-not-allowed"
           style={{ backgroundColor: disabled && !full ? "#D4EBD9" : full ? "#E3DFD3" : TEAL, color: disabled && !full ? "#2D6B40" : full ? "#8A8478" : "#FFF", opacity: disabled ? 0.85 : 1 }}>
-          {full ? "Full" : disabled && !full ? "✓ Booked" : TASTER_MODE ? "Book taster" : "Book"}{!disabled && <ArrowRight size={14}/>}
+          {full ? "Full" : disabled && !full ? (TASTER_MODE ? "Taster booked" : "✓ Booked") : TASTER_MODE ? "Book taster" : "Book"}{!disabled && <ArrowRight size={14}/>}
         </button>
       </div>
     </div>
@@ -702,15 +694,17 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
   const isPilates = TASTER_MODE && (session.id || "").startsWith("pilates_");
   const redirectedRef = useRef(false);
 
-  // Auto-redirect countdown for Pilates bookings — uses window.location.href
-  // (same-tab navigation) instead of window.open, since browsers block
-  // window.open calls that don't originate from a direct click.
+  // Auto-redirect countdown for Pilates bookings — opens the bsport page in a
+  // new tab automatically once the countdown reaches 0. Note: some browsers
+  // may still block this as a popup since it's not fired from a direct click
+  // (it's inside a setTimeout chain) — if that happens for some users, a
+  // fallback manual link may need to be reintroduced.
   useEffect(() => {
     if (step !== 2 || !isPilates) return;
     if (countdown <= 0) {
       if (!redirectedRef.current) {
         redirectedRef.current = true;
-        window.location.href = PILATES_REDIRECT;
+        window.open(PILATES_REDIRECT, "_blank", "noopener,noreferrer");
       }
       return;
     }
@@ -972,13 +966,6 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
                       finalise your place. Please sign up or log in there to complete your booking.
                     </p>
                   </div>
-                  <a href={PILATES_REDIRECT} target="_blank" rel="noopener noreferrer"
-                    onClick={onClose}
-                    className="w-full inline-flex items-center justify-center gap-2 font-semibold text-sm py-3 rounded-full"
-                    style={{ backgroundColor:TEAL, color:"#fff" }}>
-                    Complete registration now <ArrowUpRight size={15}/>
-                  </a>
-
                 </>
               ) : (
                 /* ── Regular taster confirmation ── */
@@ -1456,10 +1443,6 @@ function PilatesCard({ bookedFri, bookedThu, bookingTypeFri, bookingTypeThu, onB
           <Pill icon={Calendar}>{session.day}</Pill>
           <Pill icon={Clock}>{session.time}</Pill>
         </div>
-        {isBooked && (
-          <span className="ff-body text-xs font-semibold inline-block px-2.5 py-0.5 rounded-full"
-            style={{ backgroundColor:"rgba(228,100,120,0.1)", color:TEAL }}>Taster booked</span>
-        )}
         <button onClick={() => !disabled && onBook({...PILATES_BASE, ...session})} disabled={disabled}
           className="ff-body w-full text-sm font-semibold py-2 rounded-full transition disabled:cursor-not-allowed mt-auto"
           style={{ backgroundColor: disabled?(isBooked?"#D4EBD9":"#E3DFD3"):TEAL, color: disabled?(isBooked?"#2D6B40":"#8A8478"):"#FFF" }}>
