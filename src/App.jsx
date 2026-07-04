@@ -19,9 +19,9 @@ const BRAND = {
 };
 
 const DEFAULT_CLASSES = [
-  { id:"zumba",    name:"Zumba",                  tagline:"High-energy dance cardio",  day:"Date TBC",   time:"",            capacity:20, icon:"music",   color:"#C99A4B",
+  { id:"zumba",    name:"Zumba",                  tagline:"High-energy dance cardio",  day:"Fri 10 Jul", time:"12:00–12:45pm", capacity:20, icon:"music",   color:"#C99A4B",
     venue:"6 Dispensary Lane, London E8 1FT",              venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
-    whatToBring:"Wear comfortable clothes and trainers. Bring a water bottle.", icsStart:null, icsEnd:null },
+    whatToBring:"Wear comfortable clothes and trainers. Bring a water bottle.", icsStart:"20260710T110000Z", icsEnd:"20260710T114500Z" },
   { id:"boxing",   name:"Boxing",                  tagline:"Pad work & conditioning",   day:"Mon 6 Jul",  time:"1:30–2:30pm", capacity:20, icon:"flame",   color:"#9B5B45",
     venue:"SCK Fitness, 439 High Road, Leyton, London E10 5EL", venueMap:"https://www.google.com/maps/search/?api=1&query=SCK+Fitness+439+High+Road+Leyton+London+E10+5EL",
     whatToBring:"Comfortable workout clothes. Boxing gloves provided.", icsStart:"20260706T123000Z", icsEnd:"20260706T133000Z" },
@@ -34,6 +34,18 @@ const DEFAULT_CLASSES = [
 ];
 
 // 2 membership tiers only
+const PILATES_BASE = {
+  name: "Pilates", tagline: "Strengthen, lengthen, balance",
+  color: "#9b7ecb",
+  venue: "6 Dispensary Lane, London E8 1FT",
+  venueMap: "https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
+  whatToBring: "Wear comfortable, stretchy clothing. Mat provided.",
+};
+const PILATES_SESSIONS = [
+  { id:"pilates_fri", day:"Fri 10 Jul", time:"9:15–10:00am", capacity:3, icsStart:"20260710T081500Z", icsEnd:"20260710T090000Z" },
+  { id:"pilates_thu", day:"Thursday",   time:"9:15–10:00am", capacity:4, icsStart:null,             icsEnd:null },
+];
+
 const MEMBERSHIP_TIERS = [
   { activities: 1, price: 26 },
   { activities: 2, price: 45 },
@@ -1184,6 +1196,10 @@ function AdminDashboard({ bookings, onMarkPaid, onMarkPending, onCancel, onResto
 
 function WelcomeHero({ currentUser }) {
   const firstName = (currentUser?.name || "").split(" ")[0] || "there";
+  // First visit ever → "Welcome"; all subsequent logins → "Welcome back"
+  const visitKey  = "snb_visited_" + currentUser.email;
+  const isFirst   = !localStorage.getItem(visitKey);
+  useEffect(() => { if (isFirst) localStorage.setItem(visitKey, "1"); }, []);
   return (
     <div className="rounded-2xl overflow-hidden mb-6 relative" style={{ backgroundColor: TEAL }}>
       <svg className="absolute inset-0 opacity-[0.07] w-full h-full" preserveAspectRatio="none">
@@ -1193,7 +1209,7 @@ function WelcomeHero({ currentUser }) {
         <rect width="100%" height="100%" fill="url(#wh)"/>
       </svg>
       <div className="relative p-6 sm:p-8">
-        <p className="ff-body text-sm font-medium mb-1" style={{ color: BG }}>Welcome back, {firstName} 👋</p>
+        <p className="ff-body text-sm font-medium mb-1" style={{ color: BG }}>{isFirst ? "Welcome" : "Welcome back"}, {firstName} 👋</p>
         <h2 className="ff-display text-xl sm:text-2xl font-semibold leading-snug" style={{ color: BG }}>
           Women&apos;s Fitness &amp; Wellness Classes
         </h2>
@@ -1351,6 +1367,71 @@ function TermsPage() {
 }
 
 
+function PilatesCard({ bookedFri, bookedThu, bookingTypeFri, bookingTypeThu, onBook }) {
+  const color = PILATES_BASE.color;
+
+  function SessionPanel({ session, booked, bookingType }) {
+    const isBooked = bookingType === "membership";
+    const full = booked >= session.capacity;
+    const disabled = full || isBooked;
+    const pct = Math.min(100, session.capacity ? (booked / session.capacity) * 100 : 0);
+    const spotsLeft = Math.max(session.capacity - booked, 0);
+    return (
+      <div className="border border-stone-100 rounded-xl p-4 flex flex-col gap-3">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="ff-body text-sm font-semibold" style={{ color: INK }}>{session.day}</p>
+            <p className="ff-body text-xs text-stone-500">{session.time}</p>
+          </div>
+          {isBooked
+            ? <span className="ff-body text-xs font-semibold px-2.5 py-1 rounded-full" style={{ backgroundColor:"rgba(228,100,120,0.1)", color:TEAL }}>Taster booked</span>
+            : <div className="text-right shrink-0">
+                <p className="ff-display text-lg font-bold" style={{ color: full?"#B3261E":color }}>{spotsLeft}</p>
+                <p className="ff-body text-[10px] text-stone-400">of {session.capacity} left</p>
+              </div>
+          }
+        </div>
+        <div className="w-full bg-stone-100 rounded-full h-1.5">
+          <div className="h-1.5 rounded-full transition-all" style={{ width: pct+"%", backgroundColor: full?"#B3261E":color }}/>
+        </div>
+        <button onClick={() => !disabled && onBook({...PILATES_BASE, ...session})} disabled={disabled}
+          className="ff-body text-sm font-semibold py-2 rounded-full transition disabled:cursor-not-allowed"
+          style={{ backgroundColor: disabled?(isBooked?"#D4EBD9":"#E3DFD3"):TEAL, color: disabled?(isBooked?"#2D6B40":"#8A8478"):"#FFF" }}>
+          {full ? "Full" : isBooked ? "Taster booked" : "Book taster"}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm mt-4">
+      <div className="flex items-start gap-3 mb-4">
+        <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: color+"1A" }}>
+          <Sparkles size={20} style={{ color }}/>
+        </div>
+        <div>
+          <h3 className="ff-display text-lg font-semibold" style={{ color: INK }}>{PILATES_BASE.name}</h3>
+          <p className="ff-body text-sm text-stone-500">{PILATES_BASE.tagline}</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4 mb-3">
+        <SessionPanel session={PILATES_SESSIONS[0]} booked={bookedFri} bookingType={bookingTypeFri}/>
+        <SessionPanel session={PILATES_SESSIONS[1]} booked={bookedThu} bookingType={bookingTypeThu}/>
+      </div>
+      {PILATES_BASE.venue && (
+        <a href={PILATES_BASE.venueMap} target="_blank" rel="noopener noreferrer"
+          className="ff-body inline-flex items-center gap-1.5 text-xs text-stone-400 hover:text-stone-600 transition mb-1">
+          <MapPin size={11}/> {PILATES_BASE.venue}
+        </a>
+      )}
+      {PILATES_BASE.whatToBring && (
+        <p className="ff-body text-xs text-stone-400 flex items-start gap-1.5">
+          <span className="shrink-0">💡</span><span>{PILATES_BASE.whatToBring}</span>
+        </p>
+      )}
+    </div>
+  );
+}
 
 function ComingSoon() {
   return (
@@ -1918,9 +1999,15 @@ function BookingApp() {
                     <ClassCard key={cls.id} cls={cls} booked={bookedCount(cls.id)}
                       bookingType={getUserBookingType(cls.id)}
                       onBook={() => { setModalSession(cls); setModalType("class"); }}
-                      onWaitlist={TASTER_MODE ? joinWaitlist : null}/>
+                      onWaitlist={TASTER_MODE ? null : joinWaitlist}/>
                   ))}
                 </div>
+                <PilatesCard
+                  bookedFri={bookedCount("pilates_fri")}
+                  bookedThu={bookedCount("pilates_thu")}
+                  bookingTypeFri={getUserBookingType("pilates_fri")}
+                  bookingTypeThu={getUserBookingType("pilates_thu")}
+                  onBook={session => { setModalSession(session); setModalType("class"); }}/>
               </>
             : tab==="retreats"
               ? <ComingSoon/>
