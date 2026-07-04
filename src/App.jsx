@@ -699,16 +699,16 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
 
   // Show the "you're about to be redirected" notice first (step 2 renders
   // immediately), then open the Pilates registration page in a new tab a
-  // short moment later — giving the user time to actually read the notice
-  // before the tab opens. Kept short (2s) so it's still likely to count as
-  // tied closely enough to the original click for browsers to allow the
-  // new tab rather than blocking it as a popup.
+  // few seconds later — giving the user time to actually read the notice
+  // before the tab opens. Note: the longer this delay, the more likely some
+  // browsers are to block the new tab as a popup, since it's less tightly
+  // tied to the user's original click — 4s is a reasonable middle ground.
   useEffect(() => {
     if (step !== 2 || !isPilates || redirectedRef.current) return;
     const t = setTimeout(() => {
       redirectedRef.current = true;
       window.open(PILATES_REDIRECT, "_blank", "noopener,noreferrer");
-    }, 2000);
+    }, 4000);
     return () => clearTimeout(t);
   }, [step, isPilates]);
 
