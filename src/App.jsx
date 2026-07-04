@@ -83,11 +83,11 @@ const GOLD = "#C99A4B";
 const BG   = "#f0e8cc";
 
 const ICONS = { music: Music2, flame: Flame, flower: Flower2, dumbbell: Dumbbell };
-// Logo now points to the file in your GitHub /public folder rather than
-// an inline base64 string. Rename your uploaded file to "logo.png" (no
-// spaces or parentheses) and place it directly in /public — then this
-// path will resolve correctly in both dev and production builds.
-const LOGO  = "/logo.png";
+// Logo points to your actual file: public/favicon (1).png
+// The space in the filename is URL-encoded as %20 below, since raw spaces
+// aren't valid in a URL/path. Files directly in /public are served from
+// the site root, so "favicon (1).png" becomes "/favicon%20(1).png".
+const LOGO  = "/favicon%20(1).png";
 
 function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
@@ -382,7 +382,7 @@ function AuthScreen({ onAuth }) {
       <Fonts/>
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <img src={LOGO} alt="SNB Hive" className="h-32 mx-auto mb-3"/>
+          <img src={LOGO} alt="SNB Hive" className="h-32 mx-auto mb-3" onError={e => { e.target.style.display = "none"; }}/>
           <p className="ff-body text-sm text-stone-500">{BRAND.tagline}</p>
         </div>
 
@@ -695,6 +695,22 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
   const [error, setError]         = useState("");
 
   const isPilates = TASTER_MODE && (session.id || "").startsWith("pilates_");
+  const redirectedRef = useRef(false);
+
+  // Show the "you're about to be redirected" notice first (step 2 renders
+  // immediately), then open the Pilates registration page in a new tab a
+  // short moment later — giving the user time to actually read the notice
+  // before the tab opens. Kept short (2s) so it's still likely to count as
+  // tied closely enough to the original click for browsers to allow the
+  // new tab rather than blocking it as a popup.
+  useEffect(() => {
+    if (step !== 2 || !isPilates || redirectedRef.current) return;
+    const t = setTimeout(() => {
+      redirectedRef.current = true;
+      window.open(PILATES_REDIRECT, "_blank", "noopener,noreferrer");
+    }, 2000);
+    return () => clearTimeout(t);
+  }, [step, isPilates]);
 
   function toggleClass(id) {
     if (id === session.id) return; // primary class always stays selected
@@ -729,12 +745,9 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
           plan: "Taster", amount: 0,
           status: "confirmed", createdAt: new Date().toISOString(),
         });
-        // Open the Pilates registration page in a new tab right away — this
-        // stays tied to the user's original button click, which is what
-        // browsers require to allow a new tab without blocking it as a popup.
-        if (isPilates) {
-          window.open(PILATES_REDIRECT, "_blank", "noopener,noreferrer");
-        }
+        // Open the Pilates registration page shortly after the confirmation
+        // screen appears (handled below in a useEffect) so the user sees the
+        // notice first, rather than the tab opening before they've read it.
         // Send confirmation email with calendar invite (non-blocking)
         callEdgeFunction("send-email", {
           type: "confirm_taster",
@@ -951,9 +964,9 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
                       One more step — complete your registration
                     </p>
                     <p className="ff-body text-sm mt-1.5" style={{ color:"#9A7426" }}>
-                      We've opened our Pilates booking portal in a new tab. Please sign up or
-                      log in there to finalise your place. If it didn't open, check your
-                      browser's popup settings for this site.
+                      We're about to open our Pilates booking portal in a new tab so you can
+                      sign up or log in there to finalise your place. If it doesn't open,
+                      check your browser's popup settings for this site.
                     </p>
                   </div>
                 </>
@@ -1070,7 +1083,7 @@ function MyBookings({ bookings, currentUser, onCancel }) {
                 {cls && <p className="text-xs text-stone-500 mt-1">{cls.day} · {cls.time}</p>}
                 {cls?.venue && (
                   <a href={cls.venueMap} target="_blank" rel="noopener noreferrer"
-                    className="ff-body inline-flex items-center gap-1 text-xs text-stone-400 hover:text-stone-600 hover:underline mt-1 transition">
+                    className="ff-body flex w-fit items-center gap-1 text-xs text-stone-400 hover:text-stone-600 hover:underline mt-1 transition">
                     <MapPin size={10}/> {cls.venue}
                   </a>
                 )}
@@ -1389,7 +1402,7 @@ function PolicyPage({ title, children }) {
     <div className="min-h-screen" style={{backgroundColor:BG}}>
       <Fonts/>
       <div className="max-w-2xl mx-auto px-4 py-10">
-        <div className="text-center mb-8"><img src={LOGO} alt="SNB Hive" className="h-16 mx-auto mb-2"/></div>
+        <div className="text-center mb-8"><img src={LOGO} alt="SNB Hive" className="h-16 mx-auto mb-2" onError={e => { e.target.style.display = "none"; }}/></div>
         <div className="bg-white rounded-2xl border border-stone-200 p-8 shadow-sm">
           <h1 className="ff-display text-2xl font-semibold mb-6" style={{color:INK}}>{title}</h1>
           <div className="ff-body text-sm text-stone-600 leading-relaxed flex flex-col gap-4">{children}</div>
@@ -1603,7 +1616,7 @@ function AdminPage() {
         <div className="text-center mb-8">
           <div className="mx-auto mb-3 flex justify-center">
             <div className="flex items-center justify-center rounded-2xl overflow-hidden" style={{ backgroundColor:TEAL, padding:"14px 28px" }}>
-              <img src={LOGO} alt="SNB Hive" style={{ height:"288px" }}/>
+              <img src={LOGO} alt="SNB Hive" style={{ height:"288px" }} onError={e => { e.target.style.display = "none"; }}/>
             </div>
           </div>
           <p className="ff-body text-sm font-semibold" style={{ color: INK }}>Admin Dashboard</p>
@@ -1654,7 +1667,7 @@ function AdminPage() {
       <div style={{ backgroundColor: TEAL }}>
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src={LOGO} alt="SNB Hive" className="h-10"/>
+            <img src={LOGO} alt="SNB Hive" className="h-10" onError={e => { e.target.style.display = "none"; }}/>
             <div>
               <p className="ff-display text-base font-semibold" style={{ color: GOLD }}>SNB Hive</p>
               <p className="ff-body text-xs" style={{ color: "rgba(255,255,255,0.6)" }}>Admin Dashboard</p>
@@ -2039,7 +2052,7 @@ function BookingApp() {
       <header className="sticky top-0 z-30 border-b border-stone-200" style={{ backgroundColor:BG }}>
         <div className="max-w-3xl mx-auto px-4 py-3.5 flex items-center justify-between gap-3">
           <div className="shrink-0 flex items-center gap-2">
-            <img src={LOGO} alt="SNB Hive" style={{ height:"168px" }} />
+            <img src={LOGO} alt="SNB Hive" style={{ height:"168px" }} onError={e => { e.target.style.display = "none"; }}/>
             <p className="ff-body text-xs text-stone-500 hidden sm:block">{BRAND.tagline}</p>
           </div>
           <div className="flex items-center gap-2">
