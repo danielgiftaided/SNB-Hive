@@ -73,6 +73,7 @@ try { ADMIN_PASSCODE = import.meta.env.VITE_ADMIN_PASSCODE || "CHANGE_ME_IN_VERC
 // false = full booking with PAYG / membership / Stripe payment
 // Change this one line to switch between the two modes.
 const TASTER_MODE = true;
+const PILATES_REDIRECT = "https://backoffice.bsport.io/login/customer?membership=4849&next=%2Fc%2F4849%2Fbooking%2F%26membership%3D4849";
 
 /* ===================================================================== */
 
@@ -689,6 +690,17 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
   const [saving, setSaving]       = useState(false);
   const [paymentUrl, setPUrl]     = useState("");
   const [error, setError]         = useState("");
+  const [countdown, setCountdown] = useState(5);
+
+  const isPilates = TASTER_MODE && (session.id || "").startsWith("pilates_");
+
+  // Auto-redirect countdown for Pilates bookings
+  useEffect(() => {
+    if (step !== 2 || !isPilates) return;
+    if (countdown <= 0) { window.open(PILATES_REDIRECT, "_blank"); return; }
+    const t = setTimeout(() => setCountdown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [step, countdown, isPilates]);
 
   function toggleClass(id) {
     if (id === session.id) return; // primary class always stays selected
@@ -924,29 +936,64 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
               <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{ backgroundColor:"#E9F1EC" }}>
                 <Check size={26} style={{ color:TEAL }}/>
               </div>
-              <div>
-                <h4 className="ff-display text-xl font-semibold" style={{ color:INK }}>Taster booked!</h4>
-                <p className="ff-body text-sm text-stone-500 mt-1">
-                  You're coming to <strong>{session.name}</strong>
-                </p>
-              </div>
-              <div className="w-full rounded-xl bg-stone-50 px-4 py-3 text-sm text-stone-600 text-left">
-                <p><span className="font-medium">Session:</span> {session.name}</p>
-                <p className="mt-1"><span className="font-medium">When:</span> {session.day} · {session.time}</p>
-                {session.venue && (
-                  <p className="mt-1">
-                    <span className="font-medium">Venue:</span>{" "}
-                    <a href={session.venueMap} target="_blank" rel="noopener noreferrer"
-                      className="underline hover:text-stone-800">{session.venue}</a>
-                  </p>
-                )}
-              </div>
-              <p className="text-xs text-stone-400">We'll be in touch with everything you need to know before your first session.</p>
-              <button onClick={onClose}
-                className="w-full inline-flex items-center justify-center font-semibold text-sm py-3 rounded-full"
-                style={{ backgroundColor:TEAL, color:"#fff" }}>
-                Great, see you there!
-              </button>
+
+              {isPilates ? (
+                /* ── Pilates: redirect to bsport to complete registration ── */
+                <>
+                  <div>
+                    <h4 className="ff-display text-xl font-semibold" style={{ color:INK }}>Taster booked!</h4>
+                    <p className="ff-body text-sm text-stone-500 mt-1">
+                      Your <strong>{session.name}</strong> taster is confirmed.
+                    </p>
+                  </div>
+                  <div className="w-full rounded-xl px-4 py-4 text-left" style={{ backgroundColor:"#FBF3E3", border:"1px solid #C99A4B" }}>
+                    <p className="ff-body text-sm font-semibold" style={{ color:"#7A5C20" }}>
+                      One more step — complete your registration
+                    </p>
+                    <p className="ff-body text-sm mt-1.5" style={{ color:"#9A7426" }}>
+                      You'll be taken to our Pilates booking portal in{" "}
+                      <strong>{countdown}</strong> second{countdown !== 1 ? "s" : ""} to
+                      finalise your place. Please sign up or log in there to complete your booking.
+                    </p>
+                  </div>
+                  <a href={PILATES_REDIRECT} target="_blank" rel="noopener noreferrer"
+                    onClick={onClose}
+                    className="w-full inline-flex items-center justify-center gap-2 font-semibold text-sm py-3 rounded-full"
+                    style={{ backgroundColor:TEAL, color:"#fff" }}>
+                    Complete registration now <ArrowUpRight size={15}/>
+                  </a>
+                  <button onClick={onClose} className="text-xs text-stone-400 underline">
+                    Close — I'll complete this later
+                  </button>
+                </>
+              ) : (
+                /* ── Regular taster confirmation ── */
+                <>
+                  <div>
+                    <h4 className="ff-display text-xl font-semibold" style={{ color:INK }}>Taster booked!</h4>
+                    <p className="ff-body text-sm text-stone-500 mt-1">
+                      You're coming to <strong>{session.name}</strong>
+                    </p>
+                  </div>
+                  <div className="w-full rounded-xl bg-stone-50 px-4 py-3 text-sm text-stone-600 text-left">
+                    <p><span className="font-medium">Session:</span> {session.name}</p>
+                    <p className="mt-1"><span className="font-medium">When:</span> {session.day} · {session.time}</p>
+                    {session.venue && (
+                      <p className="mt-1">
+                        <span className="font-medium">Venue:</span>{" "}
+                        <a href={session.venueMap} target="_blank" rel="noopener noreferrer"
+                          className="underline hover:text-stone-800">{session.venue}</a>
+                      </p>
+                    )}
+                  </div>
+                  <p className="text-xs text-stone-400">We'll be in touch with everything you need to know before your first session.</p>
+                  <button onClick={onClose}
+                    className="w-full inline-flex items-center justify-center font-semibold text-sm py-3 rounded-full"
+                    style={{ backgroundColor:TEAL, color:"#fff" }}>
+                    Great, see you there!
+                  </button>
+                </>
+              )}
             </div>
           )}
 
