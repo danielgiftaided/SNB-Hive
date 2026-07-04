@@ -83,11 +83,8 @@ const GOLD = "#C99A4B";
 const BG   = "#f0e8cc";
 
 const ICONS = { music: Music2, flame: Flame, flower: Flower2, dumbbell: Dumbbell };
-// Logo points to your actual file: public/favicon (1).png
-// The space in the filename is URL-encoded as %20 below, since raw spaces
-// aren't valid in a URL/path. Files directly in /public are served from
-// the site root, so "favicon (1).png" becomes "/favicon%20(1).png".
-const LOGO  = "/favicon%20(1).png";
+// Logo points to your file: public/7.png
+const LOGO  = "/7.png";
 
 function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
