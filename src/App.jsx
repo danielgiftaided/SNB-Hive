@@ -1881,24 +1881,25 @@ function BookingApp() {
     <div className="min-h-screen w-full" style={{ backgroundColor:BG }}>
       <Fonts/>
 
-      <header className="sticky top-0 z-30 border-b border-stone-200" style={{ backgroundColor:BG }}>
+      <header className="sticky top-0 z-30" style={{ backgroundColor:TEAL }}>
         <div className="max-w-3xl mx-auto px-4 py-3.5 flex items-center justify-between gap-3">
           <div className="shrink-0 flex items-center gap-2">
             <img src={LOGO} alt="SNB Hive" className="h-14" />
-            <p className="ff-body text-xs text-stone-500 hidden sm:block">{BRAND.tagline}</p>
+            <p className="ff-body text-xs hidden sm:block" style={{ color:"rgba(240,232,204,0.75)" }}>{BRAND.tagline}</p>
           </div>
           <div className="flex items-center gap-2">
-            <nav className="flex gap-1 bg-stone-100 rounded-full p-1">
+            <nav className="flex gap-1 rounded-full p-1" style={{ backgroundColor:"rgba(0,0,0,0.15)" }}>
               {[["classes","Classes"],["retreats","Retreats"],["bookings","My bookings"],["account","Account"]].map(([k,label]) => (
                 <button key={k} onClick={() => setTab(k)}
                   className="ff-body text-sm font-medium px-3.5 py-1.5 rounded-full transition"
-                  style={{ backgroundColor:tab===k?"#fff":"transparent", color:tab===k?INK:"#8A8478", boxShadow:tab===k?"0 1px 2px rgba(0,0,0,0.08)":"none" }}>
+                  style={{ backgroundColor:tab===k?"rgba(255,255,255,0.2)":"transparent", color:tab===k?BG:"rgba(240,232,204,0.6)", boxShadow:"none" }}>
                   {label}
                 </button>
               ))}
             </nav>
             <button onClick={handleSignOut} title="Sign out"
-              className="p-2 rounded-full text-stone-400 hover:text-stone-600 hover:bg-stone-100">
+              className="p-2 rounded-full transition"
+              style={{ color:"rgba(240,232,204,0.7)" }}>
               <LogOut size={16}/>
             </button>
           </div>
