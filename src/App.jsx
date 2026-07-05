@@ -73,6 +73,10 @@ try { ADMIN_PASSCODE = import.meta.env.VITE_ADMIN_PASSCODE || "CHANGE_ME_IN_VERC
 // false = full booking with PAYG / membership / Stripe payment
 // Change this one line to switch between the two modes.
 const TASTER_MODE = true;
+// Set to true to stop new taster bookings across every class (existing
+// bookings/cancellations are unaffected — this only blocks NEW bookings).
+// Flip back to false whenever you want to reopen taster bookings.
+const TASTERS_CLOSED = true;
 const PILATES_REDIRECT = "https://backoffice.bsport.io/login/customer?membership=4849&next=%2Fc%2F4849%2Fbooking%2F%26membership%3D4849";
 
 /* ===================================================================== */
@@ -592,8 +596,9 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist }) {
   const isMember  = bookingType === "membership";
   const isPayg    = bookingType === "payg";
   const isBooked  = !!bookingType;
+  const isClosed  = TASTER_MODE && TASTERS_CLOSED && !isBooked;
   const showRing  = !isBooked && spotsLeft <= 5;
-  const disabled  = full || isMember || (TASTER_MODE && isBooked);
+  const disabled  = full || isMember || (TASTER_MODE && isBooked) || isClosed;
 
   return (
     <div className="bg-white rounded-2xl border border-stone-200 p-5 flex flex-col gap-4 shadow-sm">
@@ -626,8 +631,16 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist }) {
       <div className="flex items-center justify-end pt-2 border-t border-stone-100 mt-auto">
         <button onClick={() => onBook(cls)} disabled={disabled}
           className="ff-body inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full transition disabled:cursor-not-allowed"
-          style={{ backgroundColor: disabled && !full ? "#D4EBD9" : full ? "#E3DFD3" : TEAL, color: disabled && !full ? "#2D6B40" : full ? "#8A8478" : "#FFF", opacity: disabled ? 0.85 : 1 }}>
-          {full ? "Full" : disabled && !full ? (TASTER_MODE ? "Taster booked" : "✓ Booked") : TASTER_MODE ? "Book taster" : "Book"}{!disabled && <ArrowRight size={14}/>}
+          style={{
+            backgroundColor: (TASTER_MODE && isBooked) ? "#D4EBD9" : (full || isClosed) ? "#E3DFD3" : TEAL,
+            color: (TASTER_MODE && isBooked) ? "#2D6B40" : (full || isClosed) ? "#8A8478" : "#FFF",
+            opacity: disabled ? 0.85 : 1
+          }}>
+          {full ? "Full"
+            : (TASTER_MODE && isBooked) ? "Taster booked"
+            : isClosed ? "Tasters closed"
+            : TASTER_MODE ? "Book taster" : "Book"}
+          {!disabled && <ArrowRight size={14}/>}
         </button>
       </div>
     </div>
@@ -1443,8 +1456,7 @@ function TermsPage() {
       <p><strong>3. Health & safety</strong> — By booking a taster you confirm you are in good health and able to participate. Please inform the instructor of any injuries before the session.</p>
       <p><strong>4. Your account</strong> — You are responsible for keeping your login details secure. Contact shams@snbhive.com immediately if you suspect unauthorised access.</p>
       <p><strong>5. Changes</strong> — We reserve the right to change session dates, times or venues. We will notify you by email if this affects a booking you have made.</p>
-      <p><strong>6. Zero tolerance</strong> — We maintain a zero-tolerance policy for verbal abuse, intimidation, or harassment directed at staff or other members. Violations will result in immediate and permanent membership termination.</p> 
-      <p><strong>7. Governing law</strong> — These terms are governed by the laws of England and Wales.</p>
+      <p><strong>6. Governing law</strong> — These terms are governed by the laws of England and Wales.</p>
       <p><strong>Last updated:</strong> July 2026</p>
     </PolicyPage>
   );
@@ -1457,7 +1469,8 @@ function PilatesCard({ bookedFri, bookedThu, bookingTypeFri, bookingTypeThu, onB
   function SessionPanel({ session, booked, bookingType }) {
     const isBooked = bookingType === "membership";
     const full = booked >= session.capacity;
-    const disabled = full || isBooked;
+    const isClosed = TASTER_MODE && TASTERS_CLOSED && !isBooked;
+    const disabled = full || isBooked || isClosed;
     return (
       <div className="border border-stone-100 rounded-xl p-4 flex flex-col items-center text-center gap-3">
         <div className="flex flex-wrap justify-center gap-1.5">
@@ -1466,8 +1479,8 @@ function PilatesCard({ bookedFri, bookedThu, bookingTypeFri, bookingTypeThu, onB
         </div>
         <button onClick={() => !disabled && onBook({...PILATES_BASE, ...session})} disabled={disabled}
           className="ff-body w-full text-sm font-semibold py-2 rounded-full transition disabled:cursor-not-allowed mt-auto"
-          style={{ backgroundColor: disabled?(isBooked?"#D4EBD9":"#E3DFD3"):TEAL, color: disabled?(isBooked?"#2D6B40":"#8A8478"):"#FFF" }}>
-          {full ? "Full" : isBooked ? "Taster booked" : "Book taster"}
+          style={{ backgroundColor: isBooked ? "#D4EBD9" : (full || isClosed) ? "#E3DFD3" : TEAL, color: isBooked ? "#2D6B40" : (full || isClosed) ? "#8A8478" : "#FFF" }}>
+          {full ? "Full" : isBooked ? "Taster booked" : isClosed ? "Tasters closed" : "Book taster"}
         </button>
       </div>
     );
@@ -2090,6 +2103,14 @@ function BookingApp() {
           : tab==="classes"
             ? <>
                 <WelcomeHero currentUser={currentUser}/>
+                {TASTER_MODE && TASTERS_CLOSED && (
+                  <div className="rounded-xl px-4 py-3 mb-4 flex items-center gap-2.5" style={{ backgroundColor:"#F3E7E5", border:"1px solid #E3C4BE" }}>
+                    <Bell size={15} style={{ color:"#9B3A2E" }}/>
+                    <p className="ff-body text-sm" style={{ color:"#9B3A2E" }}>
+                      Taster sessions are currently closed for new bookings. Check back soon!
+                    </p>
+                  </div>
+                )}
                 <div className="grid sm:grid-cols-2 gap-4">
                   {DEFAULT_CLASSES.map(cls => (
                     <ClassCard key={cls.id} cls={cls} booked={bookedCount(cls.id)}
