@@ -1437,7 +1437,7 @@ function PolicyPage({ title, children }) {
 function PrivacyPage() {
   return (
     <PolicyPage title="Privacy Policy">
-      <p><strong>Who we are:</strong> SNB Hive (operated by Sunlight Events). Contact: shams@snbhive.com</p>
+      <p><strong>Who we are:</strong> SNB Hive. Contact: shams@snbhive.com</p>
       <p><strong>What we collect:</strong> Your name, email address, and mobile number when you create an account, and booking details when you register for a class or retreat.</p>
       <p><strong>Why we collect it:</strong> To manage your bookings, send you confirmation emails, and notify you of class updates. We do not sell your data to third parties.</p>
       <p><strong>How we store it:</strong> Your data is stored securely in Supabase (EU-based servers). Passwords are stored as salted hashes — we cannot read your password.</p>
@@ -1568,15 +1568,18 @@ const SESSIONS_PER_WEEK_OPTIONS = ["1", "2", "3", "4", "5", "One-off"];
 function StudioHireForm({ currentUser }) {
   const [step, setStep]         = useState(1);
   const [form, setForm]         = useState({
-    name: currentUser.name || "", purpose: "", fitnessType: "",
-    qualifications: "", sessionsPerWeek: "", classSize: "",
+    name: currentUser.name || "", email: currentUser.email || "", phone: currentUser.phone || "",
+    purpose: "", fitnessType: "", qualifications: "", workshopType: "", otherType: "",
+    sessionsPerWeek: "", classSize: "",
   });
   const [saving, setSaving]     = useState(false);
   const [error, setError]       = useState("");
   const [submitted, setSubmitted] = useState(false);
 
-  const isFitness = form.purpose === "Fitness and Wellbeing";
-  const totalSteps = isFitness ? 6 : 4;
+  const isFitness  = form.purpose === "Fitness and Wellbeing";
+  const isWorkshop = form.purpose === "Creative Workshop";
+  const isOther    = form.purpose === "Other";
+  const totalSteps = isFitness ? 6 : 5;
 
   function next() { setError(""); setStep(s => s + 1); }
   function back() { setError(""); setStep(s => Math.max(1, s - 1)); }
@@ -1588,10 +1591,12 @@ function StudioHireForm({ currentUser }) {
     try {
       await storage.set("studio_hire_enquiries", {
         id: uid(), userId: currentUser.id,
-        name: form.name.trim(), email: currentUser.email, phone: currentUser.phone,
+        name: form.name.trim(), email: form.email.trim(), phone: form.phone.trim(),
         purpose: form.purpose,
         fitnessType: isFitness ? form.fitnessType.trim() : "",
         qualifications: isFitness ? form.qualifications.trim() : "",
+        workshopType: isWorkshop ? form.workshopType.trim() : "",
+        otherType: isOther ? form.otherType.trim() : "",
         sessionsPerWeek: form.sessionsPerWeek,
         classSize: form.classSize.trim(),
         createdAt: new Date().toISOString(),
@@ -1631,7 +1636,7 @@ function StudioHireForm({ currentUser }) {
           <p className="ff-body text-xs text-stone-400 mt-2">Step {step} of {totalSteps}</p>
         </div>
 
-        {/* Step 1 — Name */}
+        {/* Step 1 — Name, email, phone */}
         {step === 1 && (
           <div className="flex flex-col gap-3">
             <div>
@@ -1639,9 +1644,23 @@ function StudioHireForm({ currentUser }) {
               <input value={form.name} onChange={e => setForm({...form, name:e.target.value})}
                 autoFocus className={inputCls}/>
             </div>
+            <div>
+              <label className="ff-body text-sm font-medium text-stone-700">Email address</label>
+              <input value={form.email} onChange={e => setForm({...form, email:e.target.value})}
+                type="email" className={inputCls}/>
+            </div>
+            <div>
+              <label className="ff-body text-sm font-medium text-stone-700">Phone number</label>
+              <input value={form.phone} onChange={e => setForm({...form, phone:e.target.value})}
+                type="tel" className={inputCls}/>
+            </div>
             {error && <p className="ff-body text-xs text-red-600">{error}</p>}
-            <button onClick={() => form.name.trim() ? next() : setError("Please enter your name.")}
-              className="ff-body font-semibold text-sm py-2.5 rounded-full"
+            <button onClick={() => {
+              if (!form.name.trim()) return setError("Please enter your name.");
+              if (!/\S+@\S+\.\S+/.test(form.email)) return setError("Please enter a valid email address.");
+              if (form.phone.replace(/\D/g,"").length < 10) return setError("Please enter a valid phone number.");
+              next();
+            }} className="ff-body font-semibold text-sm py-2.5 rounded-full"
               style={{ backgroundColor: TEAL, color:"#fff" }}>Continue</button>
           </div>
         )}
@@ -1685,27 +1704,63 @@ function StudioHireForm({ currentUser }) {
           </div>
         )}
 
-        {/* Step 4 — Qualifications (Fitness and Wellbeing only) */}
-        {step === 4 && isFitness && (
+        {/* Step 3 — Workshop type (Creative Workshop only) */}
+        {step === 3 && isWorkshop && (
           <div className="flex flex-col gap-3">
             <div>
-              <label className="ff-body text-sm font-medium text-stone-700">What qualification(s) do you hold in this area?</label>
-              <textarea value={form.qualifications} onChange={e => setForm({...form, qualifications:e.target.value})}
-                autoFocus rows={3} className={inputCls}/>
+              <label className="ff-body text-sm font-medium text-stone-700">What type of workshop will this be?</label>
+              <input value={form.workshopType} onChange={e => setForm({...form, workshopType:e.target.value})}
+                autoFocus className={inputCls} placeholder="e.g. Pottery, Painting, Jewellery making"/>
             </div>
             {error && <p className="ff-body text-xs text-red-600">{error}</p>}
             <div className="flex gap-2">
               <button onClick={back} className="ff-body text-sm font-medium px-4 py-2.5 rounded-full border border-stone-200 text-stone-500">Back</button>
-              <button onClick={() => form.qualifications.trim() ? next() : setError("Please list your qualification(s).")}
+              <button onClick={() => form.workshopType.trim() ? next() : setError("Please tell us the type of workshop.")}
                 className="ff-body font-semibold text-sm py-2.5 rounded-full flex-1"
                 style={{ backgroundColor: TEAL, color:"#fff" }}>Continue</button>
             </div>
           </div>
         )}
 
-        {/* Sessions per week — reached straight from Purpose (Creative Workshop / Other)
-            or after Qualifications (Fitness and Wellbeing) */}
-        {((step === 3 && !isFitness) || (step === 5 && isFitness)) && (
+        {/* Step 3 — Other type (Other only) */}
+        {step === 3 && isOther && (
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className="ff-body text-sm font-medium text-stone-700">Please tell us a bit more about what this would be</label>
+              <input value={form.otherType} onChange={e => setForm({...form, otherType:e.target.value})}
+                autoFocus className={inputCls} placeholder="Tell us what you have in mind"/>
+            </div>
+            {error && <p className="ff-body text-xs text-red-600">{error}</p>}
+            <div className="flex gap-2">
+              <button onClick={back} className="ff-body text-sm font-medium px-4 py-2.5 rounded-full border border-stone-200 text-stone-500">Back</button>
+              <button onClick={() => form.otherType.trim() ? next() : setError("Please tell us a bit more.")}
+                className="ff-body font-semibold text-sm py-2.5 rounded-full flex-1"
+                style={{ backgroundColor: TEAL, color:"#fff" }}>Continue</button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 4 — Qualifications (Fitness and Wellbeing only) */}
+        {step === 4 && isFitness && (
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className="ff-body text-sm font-medium text-stone-700">What qualifications or certificates do you hold in this area?</label>
+              <textarea value={form.qualifications} onChange={e => setForm({...form, qualifications:e.target.value})}
+                autoFocus rows={3} className={inputCls}/>
+            </div>
+            {error && <p className="ff-body text-xs text-red-600">{error}</p>}
+            <div className="flex gap-2">
+              <button onClick={back} className="ff-body text-sm font-medium px-4 py-2.5 rounded-full border border-stone-200 text-stone-500">Back</button>
+              <button onClick={() => form.qualifications.trim() ? next() : setError("Please list your qualification(s) or certificate(s).")}
+                className="ff-body font-semibold text-sm py-2.5 rounded-full flex-1"
+                style={{ backgroundColor: TEAL, color:"#fff" }}>Continue</button>
+            </div>
+          </div>
+        )}
+
+        {/* Sessions per week — reached straight from the purpose-detail step
+            (Creative Workshop / Other) or after Qualifications (Fitness and Wellbeing) */}
+        {((step === 4 && (isWorkshop || isOther)) || (step === 5 && isFitness)) && (
           <div className="flex flex-col gap-3">
             <div>
               <label className="ff-body text-sm font-medium text-stone-700">How many sessions per week will you be running?</label>
@@ -1726,7 +1781,7 @@ function StudioHireForm({ currentUser }) {
         )}
 
         {/* Class size — final step */}
-        {((step === 4 && !isFitness) || (step === 6 && isFitness)) && (
+        {((step === 5 && (isWorkshop || isOther)) || (step === 6 && isFitness)) && (
           <div className="flex flex-col gap-3">
             <div>
               <label className="ff-body text-sm font-medium text-stone-700">What is the expected class size?</label>
@@ -2189,6 +2244,8 @@ function AdminPage() {
                     <div className="flex flex-wrap gap-1.5 mt-1">
                       <Pill>{e.purpose}</Pill>
                       {e.fitnessType && <Pill>{e.fitnessType}</Pill>}
+                      {e.workshopType && <Pill>{e.workshopType}</Pill>}
+                      {e.otherType && <Pill>{e.otherType}</Pill>}
                       <Pill>{e.sessionsPerWeek} session{e.sessionsPerWeek === "1" ? "" : "s"}/week</Pill>
                       <Pill>Class size: {e.classSize}</Pill>
                     </div>
