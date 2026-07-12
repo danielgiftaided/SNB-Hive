@@ -90,7 +90,7 @@ const storage = {
     if (key === "snb_users") {
       const rows = (Array.isArray(value) ? value : [value]).map(toSnake);
       const { error } = await supabase.from("users").upsert(rows);
-      if (error) console.error("[storage] set users:", error.message);
+      if (error) { console.error("[storage] set users:", error.message); throw new Error(error.message); }
       return;
     }
 
@@ -99,7 +99,7 @@ const storage = {
       if (!value?.length) return;
       const rows = value.map(toSnake);
       const { error } = await supabase.from("bookings").upsert(rows);
-      if (error) console.error("[storage] set bookings:", error.message);
+      if (error) { console.error("[storage] set bookings:", error.message); throw new Error(error.message); }
       return;
     }
 
@@ -107,7 +107,7 @@ const storage = {
     if (key === "studio_hire_enquiries") {
       const rows = (Array.isArray(value) ? value : [value]).map(toSnake);
       const { error } = await supabase.from("studio_hire_enquiries").upsert(rows);
-      if (error) console.error("[storage] set studio_hire_enquiries:", error.message);
+      if (error) { console.error("[storage] set studio_hire_enquiries:", error.message); throw new Error(error.message); }
       return;
     }
 
@@ -121,3 +121,4 @@ const storage = {
 };
 
 export default storage;
+export { supabase };
