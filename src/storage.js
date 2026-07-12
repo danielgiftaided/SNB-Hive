@@ -105,7 +105,7 @@ const storage = {
     if (key === "studio_hire_enquiries") {
       const rows = (Array.isArray(value) ? value : [value]).map(toSnake);
       const { error } = await supabase.from("studio_hire_enquiries").upsert(rows);
-      if (error) console.error("[storage] set studio_hire_enquiries:", error.message);
+      if (error) { console.error("[storage] set studio_hire_enquiries:", error.message); throw error; }
       return;
     }
 
