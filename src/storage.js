@@ -29,6 +29,8 @@ const SNAKE = {
   fitnessType:     "fitness_type",
   sessionsPerWeek: "sessions_per_week",
   classSize:       "class_size",
+  workshopType:    "workshop_type",
+  otherType:       "other_type",
 };
 const CAMEL = Object.fromEntries(Object.entries(SNAKE).map(([k, v]) => [v, k]));
 
@@ -105,7 +107,7 @@ const storage = {
     if (key === "studio_hire_enquiries") {
       const rows = (Array.isArray(value) ? value : [value]).map(toSnake);
       const { error } = await supabase.from("studio_hire_enquiries").upsert(rows);
-      if (error) { console.error("[storage] set studio_hire_enquiries:", error.message); throw error; }
+      if (error) console.error("[storage] set studio_hire_enquiries:", error.message);
       return;
     }
 
