@@ -21,11 +21,14 @@ const supabase = createClient(
 
 // ── Column name mapping (JS camelCase ↔ database snake_case) ─────────────────
 const SNAKE = {
-  passwordHash: "password_hash",
-  createdAt:    "created_at",
-  sessionId:    "session_id",
-  sessionName:  "session_name",
-  userId:       "user_id",
+  passwordHash:    "password_hash",
+  createdAt:       "created_at",
+  sessionId:       "session_id",
+  sessionName:     "session_name",
+  userId:          "user_id",
+  fitnessType:     "fitness_type",
+  sessionsPerWeek: "sessions_per_week",
+  classSize:       "class_size",
 };
 const CAMEL = Object.fromEntries(Object.entries(SNAKE).map(([k, v]) => [v, k]));
 
@@ -64,6 +67,16 @@ const storage = {
       return (data || []).map(toCamel);
     }
 
+    // Studio hire enquiries → Supabase
+    if (key === "studio_hire_enquiries") {
+      const { data, error } = await supabase
+        .from("studio_hire_enquiries")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) { console.error("[storage] get studio_hire_enquiries:", error.message); return []; }
+      return (data || []).map(toCamel);
+    }
+
     return localGet(key);
   },
 
@@ -85,6 +98,14 @@ const storage = {
       const rows = value.map(toSnake);
       const { error } = await supabase.from("bookings").upsert(rows);
       if (error) console.error("[storage] set bookings:", error.message);
+      return;
+    }
+
+    // Studio hire enquiries → upsert into Supabase
+    if (key === "studio_hire_enquiries") {
+      const rows = (Array.isArray(value) ? value : [value]).map(toSnake);
+      const { error } = await supabase.from("studio_hire_enquiries").upsert(rows);
+      if (error) console.error("[storage] set studio_hire_enquiries:", error.message);
       return;
     }
 
