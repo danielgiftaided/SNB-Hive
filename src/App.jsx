@@ -1564,16 +1564,6 @@ function ComingSoon() {
         </div>
       </div>
 
-      {/* Poster */}
-      <div className="rounded-2xl overflow-hidden shadow-sm border border-stone-200">
-        <img src={RETREAT_POSTER} alt="SNB Hive Wellness Series retreat poster" className="w-full h-auto block"
-          onError={e => { e.target.style.display = "none"; }}/>
-      </div>
-      <div className="rounded-2xl overflow-hidden shadow-sm border border-stone-200">
-        <img src={RETREAT_POSTER_2} alt="SNB Hive Wellness Series retreat details" className="w-full h-auto block"
-          onError={e => { e.target.style.display = "none"; }}/>
-      </div>
-
       {/* Content */}
       <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
         <p className="ff-body text-sm text-stone-600 leading-relaxed">
@@ -1582,6 +1572,16 @@ function ComingSoon() {
           meaningful conversations and a carefully curated itinerary designed to leave you feeling refreshed,
           empowered and inspired. Because self-care isn't a luxury—it's essential.
         </p>
+      </div>
+
+      {/* Poster */}
+      <div className="rounded-2xl overflow-hidden shadow-sm border border-stone-200">
+        <img src={RETREAT_POSTER} alt="SNB Hive Wellness Series retreat poster" className="w-full h-auto block"
+          onError={e => { e.target.style.display = "none"; }}/>
+      </div>
+      <div className="rounded-2xl overflow-hidden shadow-sm border border-stone-200">
+        <img src={RETREAT_POSTER_2} alt="SNB Hive Wellness Series retreat details" className="w-full h-auto block"
+          onError={e => { e.target.style.display = "none"; }}/>
       </div>
 
       {/* CTA */}
