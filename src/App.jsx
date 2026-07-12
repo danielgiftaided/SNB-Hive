@@ -94,6 +94,8 @@ const ICONS = { music: Music2, flame: Flame, flower: Flower2, dumbbell: Dumbbell
 // The space and parentheses are URL-encoded below, since raw spaces/special
 // characters aren't valid in a URL/path as-is.
 const LOGO  = "/7%20(1).png";
+// Retreats section poster — upload retreat-poster.png to your public folder.
+const RETREAT_POSTER = "/retreat-poster.png";
 
 function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
@@ -137,6 +139,21 @@ async function hashPassword(pw, salt = "") {
     return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,"0")).join("");
   } catch { return btoa(salt + pw); }
 }
+
+// ── Password strength ──────────────────────────────────────────────────────
+// Requires 10+ characters with at least one letter and one number — enough
+// to rule out the weakest passwords without being so strict people give up
+// or resort to writing it down somewhere insecure.
+function isStrongPassword(pw) {
+  return pw.length >= 10 && /[a-zA-Z]/.test(pw) && /[0-9]/.test(pw);
+}
+const PASSWORD_RULE_MSG = "Password must be at least 10 characters and include both letters and numbers.";
+
+// ── Session length ──────────────────────────────────────────────────────────
+// How long a "remember me" login stays valid before requiring a fresh sign
+// in, independent of the 30-minute inactivity auto-logout above. Shortened
+// from 30 days to 7 for better security while still avoiding daily logins.
+const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 
 // ── Login lockout (5 failures = 10 min lock, stored in localStorage) ─────
 function getAttempts(email) {
@@ -252,6 +269,7 @@ function CapacityRing({ booked, capacity, color }) {
 function AuthScreen({ onAuth }) {
   const [mode, setMode]           = useState("register"); // register | login | forgot | verify | new_password
   const [resetMode, setResetMode] = useState(false);      // true = verify is for password reset
+  const [loginMfaMode, setLoginMfaMode] = useState(false); // true = verify is a post-password login MFA step, not signup
   const [verifyEmail, setVEmail]  = useState("");
   const [code, setCode]           = useState("");
   const [form, setForm]           = useState({ name:"", email:"", phone:"", password:"", confirm:"" });
@@ -270,7 +288,7 @@ function AuthScreen({ onAuth }) {
     if (!form.name.trim()) return setError("Please enter your full name.");
     if (!/\S+@\S+\.\S+/.test(form.email)) return setError("Please enter a valid email address.");
     if (form.phone.replace(/\D/g,"").length < 10) return setError("Please enter a valid mobile number.");
-    if (form.password.length < 8) return setError("Password must be at least 8 characters.");
+    if (!isStrongPassword(form.password)) return setError(PASSWORD_RULE_MSG);
     if (form.password !== form.confirm) return setError("Passwords do not match.");
     if (!agreed) return setError("Please agree to the Privacy Policy and Terms & Conditions to continue.");
     setLoading(true);
@@ -326,9 +344,15 @@ function AuthScreen({ onAuth }) {
         const ns = generateSalt(); const nh = await hashPassword(form.password, ns);
         await storage.set("snb_users", users.map(u => u.email===email ? {...u, salt:ns, passwordHash:nh} : u)).catch(()=>{});
       }
-      const session = { id:user.id, name:user.name, email:user.email, phone:user.phone, expiresAt: Date.now()+30*24*60*60*1000 };
-      await storage.set("snb_session", session);
-      onAuth(session);
+      // Password correct — require a fresh emailed code before granting
+      // access, every time, for every account (not just new signups).
+      const mfaCode = genCode();
+      await storage.set("vc_" + user.email, { code: mfaCode, exp: Date.now() + 900000 });
+      await callEdgeFunction("send-email", { type:"login_mfa", to_email:user.email, to_name:user.name, code:mfaCode });
+      setVEmail(user.email);
+      setResetMode(false);
+      setLoginMfaMode(true);
+      switchMode("verify");
     } catch { setError("Something went wrong — please try again."); }
     finally { setLoading(false); }
   }
@@ -368,17 +392,28 @@ function AuthScreen({ onAuth }) {
       if (resetMode) {
         setResetMode(false);
         switchMode("new_password");
+      } else if (loginMfaMode) {
+        setLoginMfaMode(false);
+        const users = await getUsers();
+        const user = users.find(u => u.email === verifyEmail);
+        if (user) {
+          const s = { id:user.id, name:user.name, email:user.email, phone:user.phone, expiresAt: Date.now() + SESSION_DURATION_MS };
+          await storage.set("snb_session", s); onAuth(s);
+        }
       } else {
         const users = await getUsers();
         const user = users.find(u => u.email === verifyEmail);
-        if (user) { const s = {id:user.id,name:user.name,email:user.email,phone:user.phone}; await storage.set("snb_session",s); onAuth(s); }
+        if (user) {
+          const s = { id:user.id, name:user.name, email:user.email, phone:user.phone, expiresAt: Date.now() + SESSION_DURATION_MS };
+          await storage.set("snb_session", s); onAuth(s);
+        }
       }
     } catch(e) { if (!e.message.includes("code")) setError("Something went wrong — please try again."); }
     finally { setLoading(false); }
   }
 
   async function handleNewPassword() {
-    if (!form.password || form.password.length < 8) return setError("Password must be at least 8 characters.");
+    if (!form.password || !isStrongPassword(form.password)) return setError(PASSWORD_RULE_MSG);
     if (form.password !== form.confirm) return setError("Passwords don\'t match.");
     setLoading(true);
     try {
@@ -402,6 +437,8 @@ function AuthScreen({ onAuth }) {
       const user  = users.find(u => u.email === verifyEmail);
       if (resetMode) {
         await callEdgeFunction("send-email", { type:"reset", to_email:verifyEmail, code:newCode });
+      } else if (loginMfaMode) {
+        await callEdgeFunction("send-email", { type:"login_mfa", to_email:verifyEmail, to_name:user?.name||"", code:newCode });
       } else {
         await callEdgeFunction("send-email", { type:"verify", to_email:verifyEmail, to_name:user?.name||"", code:newCode });
       }
@@ -464,7 +501,7 @@ function AuthScreen({ onAuth }) {
                 <div className="relative mt-1">
                   <input value={form.password} onChange={e=>f("password",e.target.value)} type={showPw?"text":"password"}
                     className="ff-body w-full rounded-xl border border-stone-200 px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2"
-                    placeholder={mode==="register"?"At least 8 characters":"Your password"}
+                    placeholder={mode==="register"?"At least 10 characters, incl. a letter and a number":"Your password"}
                     autoComplete={mode==="register"?"new-password":"current-password"}
                     onKeyDown={e=>{if(e.key==="Enter"&&mode==="login")handleLogin();}}/>
                   <button onClick={()=>setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400">
@@ -565,7 +602,7 @@ function AuthScreen({ onAuth }) {
                 <button onClick={handleResendCode} disabled={loading} className="ff-body text-xs text-stone-400 hover:text-stone-600">
                   Resend code
                 </button>
-                <button onClick={()=>switchMode(resetMode?"forgot":"register")} className="ff-body text-xs text-stone-400 hover:text-stone-600">
+                <button onClick={()=>{ setLoginMfaMode(false); switchMode(resetMode?"forgot":loginMfaMode?"login":"register"); }} className="ff-body text-xs text-stone-400 hover:text-stone-600">
                   Go back
                 </button>
               </div>
@@ -583,7 +620,7 @@ function AuthScreen({ onAuth }) {
                 <div className="relative mt-1">
                   <input value={form.password} onChange={e=>f("password",e.target.value)} type={showPw?"text":"password"}
                     className="ff-body w-full rounded-xl border border-stone-200 px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2"
-                    placeholder="At least 8 characters" autoComplete="new-password"/>
+                    placeholder="At least 10 characters, incl. a letter and a number" autoComplete="new-password"/>
                   <button onClick={()=>setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400">
                     {showPw?<EyeOff size={16}/>:<Eye size={16}/>}
                   </button>
@@ -1330,7 +1367,7 @@ function AccountPage({ currentUser, onUpdate }) {
       const users = (await storage.get("snb_users")) || [];
       const updated = users.map(u => u.id===currentUser.id ? {...u, name:form.name.trim(), phone:form.phone.trim()} : u);
       await storage.set("snb_users", updated);
-      const session = {...currentUser, name:form.name.trim(), phone:form.phone.trim(), expiresAt:Date.now()+30*24*60*60*1000};
+      const session = {...currentUser, name:form.name.trim(), phone:form.phone.trim(), expiresAt:Date.now()+SESSION_DURATION_MS};
       await storage.set("snb_session", session);
       onUpdate(session);
       setMsg("✓ Details saved.");
@@ -1340,7 +1377,7 @@ function AccountPage({ currentUser, onUpdate }) {
 
   async function changePassword() {
     if (!pw.current) return setPwMsg("Enter your current password.");
-    if (pw.next.length < 8) return setPwMsg("New password must be at least 8 characters.");
+    if (!isStrongPassword(pw.next)) return setPwMsg(PASSWORD_RULE_MSG);
     if (pw.next !== pw.confirm) return setPwMsg("Passwords don\'t match.");
     setPwS(true);
     try {
@@ -1385,7 +1422,7 @@ function AccountPage({ currentUser, onUpdate }) {
 
       <div className={card}>
         <h3 className="ff-display text-base font-semibold" style={{color:INK}}>Change password</h3>
-        {[["current","Current password",""],["next","New password","At least 8 characters"],["confirm","Confirm new password",""]].map(([k,label,ph]) => (
+        {[["current","Current password",""],["next","New password","At least 10 characters, incl. a letter and a number"],["confirm","Confirm new password",""]].map(([k,label,ph]) => (
           <div key={k}>
             <label className="ff-body text-sm font-medium text-stone-700">{label}</label>
             <div className="relative mt-1">
@@ -1520,33 +1557,30 @@ function ComingSoon() {
         <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor:TEAL+"1A" }}>
           <Sparkles size={28} style={{ color:TEAL }}/>
         </div>
-        <h2 className="ff-display text-2xl font-semibold" style={{ color:INK }}>Women's Spa Retreat</h2>
+        <h2 className="ff-display text-2xl font-semibold" style={{ color:INK }}>SNB Hive Wellness Series</h2>
         <div className="inline-flex items-center gap-2 mt-2 px-3 py-1 rounded-full text-xs font-medium" style={{ backgroundColor:TEAL+"1A", color:TEAL }}>
-          <Bell size={12}/> Coming soon — July / August
+          <Bell size={12}/> Coming soon — August 2026
         </div>
+      </div>
+
+      {/* Poster */}
+      <div className="rounded-2xl overflow-hidden shadow-sm border border-stone-200">
+        <img src={RETREAT_POSTER} alt="SNB Hive Wellness Series retreat poster" className="w-full h-auto block"
+          onError={e => { e.target.style.display = "none"; }}/>
       </div>
 
       {/* Content */}
-      <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm flex flex-col gap-4">
-        <p className="ff-body text-sm text-stone-600 leading-relaxed">Our retreats are built around women's needs.</p>
+      <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
         <p className="ff-body text-sm text-stone-600 leading-relaxed">
-          If you're looking for some time away, to relax, reset and unwind for a night or two, this is the
-          perfect opportunity to do that without the stress of travelling abroad.
+          Introducing the SNB Hive Wellness Series – exclusive luxury retreats created for women who deserve
+          time to pause, breathe and reconnect. Expect beautiful venues, wellness experiences, delicious food,
+          meaningful conversations and a carefully curated itinerary designed to leave you feeling refreshed,
+          empowered and inspired. Because self-care isn't a luxury—it's essential.
         </p>
-        <p className="ff-body text-sm text-stone-600 leading-relaxed">
-          We organise quality retreats with access to spa facilities like an indoor pool, sauna and much
-          more, so that all you need to do is turn up and enjoy.
-        </p>
-        <div className="rounded-xl px-4 py-3" style={{ backgroundColor:TEAL+"1A" }}>
-          <p className="ff-body text-sm font-semibold leading-relaxed" style={{ color:TEAL }}>
-            We're currently planning a retreat for July/August. If you're interested, let us know as soon
-            as possible — spaces are limited.
-          </p>
-        </div>
       </div>
 
       {/* CTA */}
-      <a href={"mailto:shams@snbhive.com?subject=Retreat%20Interest%20%E2%80%94%20July%2FAugust"}
+      <a href={"mailto:shams@snbhive.com?subject=Retreat%20Interest%20%E2%80%94%20August%202026"}
         className="w-full inline-flex items-center justify-center gap-2 font-semibold text-sm py-3 rounded-full"
         style={{ backgroundColor:TEAL, color:"#fff" }}>
         <Mail size={15}/> Register your interest
