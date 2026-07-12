@@ -96,6 +96,7 @@ const ICONS = { music: Music2, flame: Flame, flower: Flower2, dumbbell: Dumbbell
 const LOGO  = "/7%20(1).png";
 // Retreats section poster — upload retreat-poster.png to your public folder.
 const RETREAT_POSTER = "/retreat-poster.png";
+const RETREAT_POSTER_2 = "/retreat-poster-2.png";
 
 function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
@@ -1568,6 +1569,10 @@ function ComingSoon() {
         <img src={RETREAT_POSTER} alt="SNB Hive Wellness Series retreat poster" className="w-full h-auto block"
           onError={e => { e.target.style.display = "none"; }}/>
       </div>
+      <div className="rounded-2xl overflow-hidden shadow-sm border border-stone-200">
+        <img src={RETREAT_POSTER_2} alt="SNB Hive Wellness Series retreat details" className="w-full h-auto block"
+          onError={e => { e.target.style.display = "none"; }}/>
+      </div>
 
       {/* Content */}
       <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
@@ -1915,6 +1920,7 @@ function AdminPage() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [mfaSentMsg, setMfaSentMsg] = useState("");
+  const [showAdminPw, setShowAdminPw] = useState(false);
 
   const [bookings, setBookings]   = useState([]);
   const [members, setMembers]     = useState([]);
@@ -2055,11 +2061,17 @@ function AdminPage() {
             </div>
             <div>
               <label className="ff-body text-sm font-medium text-stone-700">Password</label>
-              <input type="password" value={password}
-                onChange={e => { setPassword(e.target.value); setLoginError(""); }}
-                onKeyDown={e => e.key === "Enter" && handleLoginStep1()}
-                className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
-                placeholder="••••••••"/>
+              <div className="relative mt-1">
+                <input type={showAdminPw ? "text" : "password"} value={password}
+                  onChange={e => { setPassword(e.target.value); setLoginError(""); }}
+                  onKeyDown={e => e.key === "Enter" && handleLoginStep1()}
+                  className="ff-body w-full rounded-xl border border-stone-200 px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2"
+                  placeholder="••••••••"/>
+                <button type="button" onClick={() => setShowAdminPw(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400">
+                  {showAdminPw ? <EyeOff size={16}/> : <Eye size={16}/>}
+                </button>
+              </div>
             </div>
             {loginError && <p className="ff-body text-xs text-red-600 text-center">{loginError}</p>}
             <button onClick={handleLoginStep1} disabled={loginLoading}
