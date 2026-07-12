@@ -19,18 +19,18 @@ const BRAND = {
 };
 
 const DEFAULT_CLASSES = [
-  { id:"zumba",    name:"Zumba",                  tagline:"High-energy dance cardio",  day:"Fri 10 Jul", time:"12:00–12:45pm", capacity:20, icon:"music",   color:"#C99A4B",
+  { id:"zumba",    name:"Zumba",                  tagline:"High-energy dance cardio",  day:"TBC — September 2026", time:"TBC", capacity:20, icon:"music",   color:"#C99A4B",
     venue:"6 Dispensary Lane, London E8 1FT",              venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
-    whatToBring:"Wear comfortable clothes and grip socks", icsStart:"20260710T110000Z", icsEnd:"20260710T114500Z", description:"Zumba is about much more than fitness. It's about community, confidence, and feeling good. Dance has been shown to support memory, coordination, and emotional wellbeing, and music and dance can help get through some of the most challenging times in life.\n\nIt has the power to bring people together, lift spirits, and remind us that exercise doesn't have to feel like a chore — it can be something you genuinely look forward to.\n\nZumba is based on repetitive movements throughout each song, so you don't need to be an experienced dancer or technically advanced to join in. It's all about having fun while getting fit.\n\nThe routines are repeated for about 6 weeks, which allows people to learn the moves and build their confidence and then new routines are introduced gradually over time. That repetition helps build confidence because your body begins to associate the movements with the music, allowing you to learn naturally without pressure. It's a welcoming, supportive environment." },
-  { id:"boxing",   name:"Boxing",                  tagline:"Pad work, Co-ordination",   day:"Mon 6 Jul",  time:"1:30–2:30pm", capacity:20, icon:"flame",   color:"#9B5B45",
+    whatToBring:"Wear comfortable clothes and grip socks", icsStart:null, icsEnd:null, description:"Zumba is about much more than fitness. It's about community, confidence, and feeling good. Dance has been shown to support memory, coordination, and emotional wellbeing, and music and dance can help get through some of the most challenging times in life.\n\nIt has the power to bring people together, lift spirits, and remind us that exercise doesn't have to feel like a chore — it can be something you genuinely look forward to.\n\nZumba is based on repetitive movements throughout each song, so you don't need to be an experienced dancer or technically advanced to join in. It's all about having fun while getting fit.\n\nThe routines are repeated for about 6 weeks, which allows people to learn the moves and build their confidence and then new routines are introduced gradually over time. That repetition helps build confidence because your body begins to associate the movements with the music, allowing you to learn naturally without pressure. It's a welcoming, supportive environment." },
+  { id:"boxing",   name:"Boxing",                  tagline:"Pad work, Co-ordination",   day:"TBC — September 2026", time:"TBC", capacity:20, icon:"flame",   color:"#9B5B45",
     venue:"SCK Fitness, 439 High Road, Leyton, London E10 5EL", venueMap:"https://www.google.com/maps/search/?api=1&query=SCK+Fitness+439+High+Road+Leyton+London+E10+5EL",
-    whatToBring:"Wear comfortable workout clothes and trainers. Bring a water bottle", icsStart:"20260706T123000Z", icsEnd:"20260706T133000Z", description:"Boxing is one of the most effective full-body workouts, combining cardiovascular fitness, strength, coordination and stress relief in a fun and empowering way.\n\nThis class is not about fighting or competition. Instead, it uses boxing drills, pad work and fitness exercises to help women improve their health, build confidence and enjoy movement in a supportive environment.\n\nBenefits include:\n• Increased calorie burn and support with weight loss goals\n• Improved cardiovascular fitness and stamina\n• Increased confidence and self-belief\n• A healthy outlet for stress and frustration\n• Improved coordination and balance\n• Stronger core and full-body conditioning\n• Improved mood and mental wellbeing\n\nMany women find boxing incredibly empowering because it allows them to release stress, develop resilience and discover strengths they never knew they had.\n\nSuitable for beginners and all fitness levels." },
-  { id:"somatic",  name:"Somatic",                 tagline:"Move, breathe, reconnect",  day:"Thu 9 Jul",  time:"1:30–2:30pm", capacity:20, icon:"flower",  color:"#7C9885",
+    whatToBring:"Wear comfortable workout clothes and trainers. Bring a water bottle", icsStart:null, icsEnd:null, description:"Boxing is one of the most effective full-body workouts, combining cardiovascular fitness, strength, coordination and stress relief in a fun and empowering way.\n\nThis class is not about fighting or competition. Instead, it uses boxing drills, pad work and fitness exercises to help women improve their health, build confidence and enjoy movement in a supportive environment.\n\nBenefits include:\n• Increased calorie burn and support with weight loss goals\n• Improved cardiovascular fitness and stamina\n• Increased confidence and self-belief\n• A healthy outlet for stress and frustration\n• Improved coordination and balance\n• Stronger core and full-body conditioning\n• Improved mood and mental wellbeing\n\nMany women find boxing incredibly empowering because it allows them to release stress, develop resilience and discover strengths they never knew they had.\n\nSuitable for beginners and all fitness levels." },
+  { id:"somatic",  name:"Somatic",                 tagline:"Move, breathe, reconnect",  day:"TBC — September 2026", time:"TBC", capacity:20, icon:"flower",  color:"#7C9885",
     venue:"6 Dispensary Lane, London E8 1FT",              venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
-    whatToBring:"Loose comfortable clothing and grip socks. Bring a water bottle.", icsStart:"20260709T123000Z", icsEnd:"20260709T133000Z", description:"Modern life places enormous demands on women. Many spend their days caring for others, managing households, working, raising children and carrying responsibilities that leave little time for themselves.\n\nThis class offers a gentle opportunity to slow down, reconnect with the body and create space for rest, reflection and renewal.\n\nThrough gentle movement, stretching, breathing exercises and guided relaxation, participants are supported in releasing physical tension and calming the nervous system.\n\nBenefits include:\n• Reduced stress and feelings of overwhelm\n• Improved sleep quality\n• Relief from physical tension and tightness\n• Improved body awareness\n• Support for emotional wellbeing\n• A greater sense of calm and balance\n• Time to pause and reconnect with oneself\n• Improved ability to manage the demands of everyday life\n\nSessions may also include gentle reminders around gratitude, self-care, reflection and caring for the body.\n\nFor many women, this class becomes a rare opportunity to simply pause, breathe and be present without expectation or pressure.\n\nSuitable for all ages, abilities and fitness levels.\n\nBecause when women are supported, strengthened and given space to care for themselves, they are better able to care for those around them." },
-  { id:"strength", name:"Strength & Conditioning", tagline:"Build strength, build power", day:"Wed 8 Jul",  time:"1:30–2:30pm", capacity:20, icon:"dumbbell",color:"#1F4A42",
+    whatToBring:"Loose comfortable clothing and grip socks. Bring a water bottle.", icsStart:null, icsEnd:null, description:"Modern life places enormous demands on women. Many spend their days caring for others, managing households, working, raising children and carrying responsibilities that leave little time for themselves.\n\nThis class offers a gentle opportunity to slow down, reconnect with the body and create space for rest, reflection and renewal.\n\nThrough gentle movement, stretching, breathing exercises and guided relaxation, participants are supported in releasing physical tension and calming the nervous system.\n\nBenefits include:\n• Reduced stress and feelings of overwhelm\n• Improved sleep quality\n• Relief from physical tension and tightness\n• Improved body awareness\n• Support for emotional wellbeing\n• A greater sense of calm and balance\n• Time to pause and reconnect with oneself\n• Improved ability to manage the demands of everyday life\n\nSessions may also include gentle reminders around gratitude, self-care, reflection and caring for the body.\n\nFor many women, this class becomes a rare opportunity to simply pause, breathe and be present without expectation or pressure.\n\nSuitable for all ages, abilities and fitness levels.\n\nBecause when women are supported, strengthened and given space to care for themselves, they are better able to care for those around them." },
+  { id:"strength", name:"Strength & Conditioning", tagline:"Build strength, build power", day:"TBC — September 2026", time:"TBC", capacity:20, icon:"dumbbell",color:"#1F4A42",
     venue:"SCK Fitness, 439 High Road, Leyton, London E10 5EL", venueMap:"https://www.google.com/maps/search/?api=1&query=SCK+Fitness+439+High+Road+Leyton+London+E10+5EL",
-    whatToBring:"Gym clothes and trainers and bring a water bottle.", icsStart:"20260708T123000Z", icsEnd:"20260708T133000Z", description:"Strength training is one of the most beneficial forms of exercise for women, particularly as we navigate the demands of motherhood, work and daily life.\n\nThis class focuses on building functional strength, improving mobility and helping women feel stronger and more capable in their everyday activities.\n\nUsing bodyweight exercises, resistance bands and light equipment, sessions are designed to be accessible while still providing an effective workout.\n\nBenefits include:\n• Increased muscle tone and strength\n• Support with sustainable fat loss and body composition goals\n• Improved posture and reduced aches and pains\n• Better balance and stability\n• Increased energy levels\n• Stronger bones and joints\n• Improved confidence in daily movement\n• Support for healthy ageing and long-term wellbeing\n\nRather than focusing on appearance alone, this class encourages women to appreciate what their bodies can do and develop strength that carries into everyday life.\n\nSuitable for all fitness levels and can be adapted to individual needs." },
+    whatToBring:"Gym clothes and trainers and bring a water bottle.", icsStart:null, icsEnd:null, description:"Strength training is one of the most beneficial forms of exercise for women, particularly as we navigate the demands of motherhood, work and daily life.\n\nThis class focuses on building functional strength, improving mobility and helping women feel stronger and more capable in their everyday activities.\n\nUsing bodyweight exercises, resistance bands and light equipment, sessions are designed to be accessible while still providing an effective workout.\n\nBenefits include:\n• Increased muscle tone and strength\n• Support with sustainable fat loss and body composition goals\n• Improved posture and reduced aches and pains\n• Better balance and stability\n• Increased energy levels\n• Stronger bones and joints\n• Improved confidence in daily movement\n• Support for healthy ageing and long-term wellbeing\n\nRather than focusing on appearance alone, this class encourages women to appreciate what their bodies can do and develop strength that carries into everyday life.\n\nSuitable for all fitness levels and can be adapted to individual needs." },
 ];
 
 // 2 membership tiers only
@@ -42,8 +42,8 @@ const PILATES_BASE = {
   whatToBring: "Wear comfortable clothes and grip socks",
 };
 const PILATES_SESSIONS = [
-  { id:"pilates_fri", day:"Fri 10 Jul", time:"9:15–10:00am", capacity:3, icsStart:"20260710T081500Z", icsEnd:"20260710T090000Z" },
-  { id:"pilates_thu", day:"Thursday",   time:"9:15–10:00am", capacity:4, icsStart:null,             icsEnd:null },
+  { id:"pilates_fri", label:"Friday",   day:"TBC — September 2026", time:"TBC", capacity:3, icsStart:null, icsEnd:null },
+  { id:"pilates_thu", label:"Thursday", day:"TBC — September 2026", time:"TBC", capacity:4, icsStart:null, icsEnd:null },
 ];
 
 const MEMBERSHIP_TIERS = [
@@ -1560,7 +1560,259 @@ function ComingSoon() {
   );
 }
 
+/* ---- STUDIO HIRE ENQUIRY FORM ---- */
+
+const STUDIO_HIRE_PURPOSES = ["Fitness and Wellbeing", "Creative Workshop", "Other"];
+const SESSIONS_PER_WEEK_OPTIONS = ["1", "2", "3", "4", "5", "One-off"];
+
+function StudioHireForm({ currentUser }) {
+  const [step, setStep]         = useState(1);
+  const [form, setForm]         = useState({
+    name: currentUser.name || "", purpose: "", fitnessType: "",
+    qualifications: "", sessionsPerWeek: "", classSize: "",
+  });
+  const [saving, setSaving]     = useState(false);
+  const [error, setError]       = useState("");
+  const [submitted, setSubmitted] = useState(false);
+
+  const isFitness = form.purpose === "Fitness and Wellbeing";
+  const totalSteps = isFitness ? 6 : 4;
+
+  function next() { setError(""); setStep(s => s + 1); }
+  function back() { setError(""); setStep(s => Math.max(1, s - 1)); }
+
+  async function submit() {
+    if (!form.sessionsPerWeek) return setError("Please select how many sessions per week.");
+    if (!form.classSize.trim()) return setError("Please tell us the expected class size.");
+    setSaving(true); setError("");
+    try {
+      await storage.set("studio_hire_enquiries", {
+        id: uid(), userId: currentUser.id,
+        name: form.name.trim(), email: currentUser.email, phone: currentUser.phone,
+        purpose: form.purpose,
+        fitnessType: isFitness ? form.fitnessType.trim() : "",
+        qualifications: isFitness ? form.qualifications.trim() : "",
+        sessionsPerWeek: form.sessionsPerWeek,
+        classSize: form.classSize.trim(),
+        createdAt: new Date().toISOString(),
+      });
+      setSubmitted(true);
+    } catch { setError("Couldn't submit your enquiry — please try again."); }
+    finally { setSaving(false); }
+  }
+
+  const inputCls = "ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2";
+  const card = "bg-white rounded-2xl border border-stone-200 p-6 shadow-sm flex flex-col gap-4";
+
+  if (submitted) {
+    return (
+      <div className="max-w-md mx-auto flex flex-col gap-4">
+        <div className={card + " items-center text-center"}>
+          <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: TEAL+"1A" }}>
+            <Check size={22} style={{ color: TEAL }}/>
+          </div>
+          <h3 className="ff-display text-lg font-semibold" style={{ color: INK }}>Enquiry sent</h3>
+          <p className="ff-body text-sm text-stone-500">
+            Thank you — we've received your studio hire enquiry and will be in touch shortly.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-md mx-auto flex flex-col gap-4">
+      <div className={card}>
+        <div>
+          <h3 className="ff-display text-lg font-semibold" style={{ color: INK }}>Studio Hire Enquiry</h3>
+          <p className="ff-body text-sm text-stone-500 mt-1">
+            Tell us a little about what you'd like to run, and we'll be in touch to discuss availability.
+          </p>
+          <p className="ff-body text-xs text-stone-400 mt-2">Step {step} of {totalSteps}</p>
+        </div>
+
+        {/* Step 1 — Name */}
+        {step === 1 && (
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className="ff-body text-sm font-medium text-stone-700">Full name</label>
+              <input value={form.name} onChange={e => setForm({...form, name:e.target.value})}
+                autoFocus className={inputCls}/>
+            </div>
+            {error && <p className="ff-body text-xs text-red-600">{error}</p>}
+            <button onClick={() => form.name.trim() ? next() : setError("Please enter your name.")}
+              className="ff-body font-semibold text-sm py-2.5 rounded-full"
+              style={{ backgroundColor: TEAL, color:"#fff" }}>Continue</button>
+          </div>
+        )}
+
+        {/* Step 2 — Purpose */}
+        {step === 2 && (
+          <div className="flex flex-col gap-3">
+            <label className="ff-body text-sm font-medium text-stone-700">What would you like to hire the studio for?</label>
+            <div className="flex flex-col gap-2">
+              {STUDIO_HIRE_PURPOSES.map(p => (
+                <button key={p} onClick={() => { setForm({...form, purpose:p}); next(); }}
+                  className="ff-body text-sm font-medium text-left px-4 py-2.5 rounded-xl border transition"
+                  style={{
+                    borderColor: form.purpose===p ? TEAL : "#E7E2D3",
+                    backgroundColor: form.purpose===p ? TEAL+"14" : "#fff",
+                    color: INK,
+                  }}>{p}</button>
+              ))}
+            </div>
+            <button onClick={back} className="ff-body text-xs text-stone-400 hover:text-stone-600 self-start flex items-center gap-1 mt-1">
+              <ChevronLeft size={14}/> Back
+            </button>
+          </div>
+        )}
+
+        {/* Step 3 — Fitness type (Fitness and Wellbeing only) */}
+        {step === 3 && isFitness && (
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className="ff-body text-sm font-medium text-stone-700">What type of fitness class would this be?</label>
+              <input value={form.fitnessType} onChange={e => setForm({...form, fitnessType:e.target.value})}
+                autoFocus className={inputCls} placeholder="e.g. Yoga, Boxing, Strength training"/>
+            </div>
+            {error && <p className="ff-body text-xs text-red-600">{error}</p>}
+            <div className="flex gap-2">
+              <button onClick={back} className="ff-body text-sm font-medium px-4 py-2.5 rounded-full border border-stone-200 text-stone-500">Back</button>
+              <button onClick={() => form.fitnessType.trim() ? next() : setError("Please tell us the type of class.")}
+                className="ff-body font-semibold text-sm py-2.5 rounded-full flex-1"
+                style={{ backgroundColor: TEAL, color:"#fff" }}>Continue</button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 4 — Qualifications (Fitness and Wellbeing only) */}
+        {step === 4 && isFitness && (
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className="ff-body text-sm font-medium text-stone-700">What qualification(s) do you hold in this area?</label>
+              <textarea value={form.qualifications} onChange={e => setForm({...form, qualifications:e.target.value})}
+                autoFocus rows={3} className={inputCls}/>
+            </div>
+            {error && <p className="ff-body text-xs text-red-600">{error}</p>}
+            <div className="flex gap-2">
+              <button onClick={back} className="ff-body text-sm font-medium px-4 py-2.5 rounded-full border border-stone-200 text-stone-500">Back</button>
+              <button onClick={() => form.qualifications.trim() ? next() : setError("Please list your qualification(s).")}
+                className="ff-body font-semibold text-sm py-2.5 rounded-full flex-1"
+                style={{ backgroundColor: TEAL, color:"#fff" }}>Continue</button>
+            </div>
+          </div>
+        )}
+
+        {/* Sessions per week — reached straight from Purpose (Creative Workshop / Other)
+            or after Qualifications (Fitness and Wellbeing) */}
+        {((step === 3 && !isFitness) || (step === 5 && isFitness)) && (
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className="ff-body text-sm font-medium text-stone-700">How many sessions per week will you be running?</label>
+              <select value={form.sessionsPerWeek} onChange={e => setForm({...form, sessionsPerWeek:e.target.value})}
+                className={inputCls}>
+                <option value="">Select…</option>
+                {SESSIONS_PER_WEEK_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
+            {error && <p className="ff-body text-xs text-red-600">{error}</p>}
+            <div className="flex gap-2">
+              <button onClick={back} className="ff-body text-sm font-medium px-4 py-2.5 rounded-full border border-stone-200 text-stone-500">Back</button>
+              <button onClick={() => form.sessionsPerWeek ? next() : setError("Please select an option.")}
+                className="ff-body font-semibold text-sm py-2.5 rounded-full flex-1"
+                style={{ backgroundColor: TEAL, color:"#fff" }}>Continue</button>
+            </div>
+          </div>
+        )}
+
+        {/* Class size — final step */}
+        {((step === 4 && !isFitness) || (step === 6 && isFitness)) && (
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className="ff-body text-sm font-medium text-stone-700">What is the expected class size?</label>
+              <input value={form.classSize} onChange={e => setForm({...form, classSize:e.target.value})}
+                autoFocus className={inputCls} placeholder="e.g. 10–15 people"/>
+            </div>
+            {error && <p className="ff-body text-xs text-red-600">{error}</p>}
+            <div className="flex gap-2">
+              <button onClick={back} className="ff-body text-sm font-medium px-4 py-2.5 rounded-full border border-stone-200 text-stone-500">Back</button>
+              <button onClick={submit} disabled={saving}
+                className="ff-body font-semibold text-sm py-2.5 rounded-full flex-1 disabled:opacity-50"
+                style={{ backgroundColor: TEAL, color:"#fff" }}>{saving ? "Submitting…" : "Submit enquiry"}</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ---- ADMIN PAGE (accessed at /admin — never linked from the user site) ---- */
+
+function AdminClassCard({ cls, bookings }) {
+  const Icon = ICONS[cls.icon] || Sparkles;
+  const clsBookings = bookings
+    .filter(b => b.sessionId === cls.id && b.status !== "cancelled")
+    .sort((a,b) => new Date(a.createdAt||0) - new Date(b.createdAt||0));
+  const pct = Math.min(100, cls.capacity ? (clsBookings.length / cls.capacity) * 100 : 0);
+  const full = clsBookings.length >= cls.capacity;
+  return (
+    <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+      {/* Class header */}
+      <div className="p-4 border-b border-stone-100 flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+            style={{ backgroundColor: cls.color + "1A" }}>
+            <Icon size={18} style={{ color: cls.color }}/>
+          </div>
+          <div>
+            <p className="ff-body font-semibold text-sm" style={{ color: INK }}>{cls.name}</p>
+            <p className="ff-body text-xs text-stone-400 mt-0.5">{cls.day} · {cls.time}</p>
+          </div>
+        </div>
+        <div className="text-right shrink-0">
+          <p className="ff-display text-2xl font-bold" style={{ color: full ? "#B3261E" : TEAL }}>
+            {clsBookings.length}
+          </p>
+          <p className="ff-body text-xs text-stone-400">of {cls.capacity}</p>
+        </div>
+      </div>
+
+      {/* Progress bar */}
+      <div className="px-4 pt-3 pb-2">
+        <div className="w-full bg-stone-100 rounded-full h-1.5">
+          <div className="h-1.5 rounded-full transition-all"
+            style={{ width: pct + "%", backgroundColor: full ? "#B3261E" : cls.color }}/>
+        </div>
+        <p className="ff-body text-xs mt-1.5" style={{ color: full ? "#B3261E" : "#8A8478" }}>
+          {full ? "Class full" : `${cls.capacity - clsBookings.length} spaces remaining`}
+        </p>
+      </div>
+
+      {/* Registered members list */}
+      <div className="px-4 pb-4">
+        {clsBookings.length === 0 ? (
+          <p className="ff-body text-xs text-stone-400 py-2 text-center italic">No registrations yet</p>
+        ) : (
+          <div>
+            <p className="ff-body text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">Registered</p>
+            <div className="flex flex-col divide-y divide-stone-50">
+              {clsBookings.map((b, i) => (
+                <div key={b.id} className="flex items-center justify-between py-2">
+                  <div className="flex items-center gap-2">
+                    <span className="ff-body text-xs text-stone-400 w-5 text-right shrink-0">{i+1}.</span>
+                    <span className="ff-body text-sm font-medium" style={{ color: INK }}>{b.name}</span>
+                  </div>
+                  <span className="ff-body text-xs text-stone-400 truncate ml-2">{b.email}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function AdminPage() {
   const [unlocked, setUnlocked] = useState(() =>
@@ -1570,6 +1822,7 @@ function AdminPage() {
   const [err, setErr]           = useState(false);
   const [bookings, setBookings]   = useState([]);
   const [members, setMembers]     = useState([]);
+  const [enquiries, setEnquiries] = useState([]);
   const [loading, setLoading]     = useState(false);
   const [adminTab, setAdminTab]   = useState("bookings");
   const [statusFilter, setFilter] = useState("all");
@@ -1579,16 +1832,18 @@ function AdminPage() {
   const [notifMessage, setNMessage] = useState("");
   const [notifStatus, setNStatus]   = useState("idle");
 
-  // Load bookings + members once unlocked
+  // Load bookings + members + studio hire enquiries once unlocked
   useEffect(() => {
     if (!unlocked) return;
     setLoading(true);
     Promise.all([
       storage.get("bookings"),
       storage.get("snb_users"),
-    ]).then(([b, u]) => {
+      storage.get("studio_hire_enquiries"),
+    ]).then(([b, u, e]) => {
       setBookings(b || []);
       setMembers(u || []);
+      setEnquiries(e || []);
     }).finally(() => setLoading(false));
   }, [unlocked]);
 
@@ -1723,8 +1978,11 @@ function AdminPage() {
 
         {/* Tab navigation */}
         <div className="flex gap-1 bg-stone-100 rounded-full p-1 w-fit">
-          {[["bookings","Bookings"],["members","Members"],["classes","Classes"]].map(([key, label]) => {
-            const count = key==="members" ? members.length : key==="classes" ? DEFAULT_CLASSES.length : bookings.filter(b=>b.status!=="cancelled").length;
+          {[["bookings","Bookings"],["members","Members"],["classes","Classes"],["studio-hire","Studio Hire"]].map(([key, label]) => {
+            const count = key==="members" ? members.length
+              : key==="classes" ? DEFAULT_CLASSES.length + PILATES_SESSIONS.length
+              : key==="studio-hire" ? enquiries.length
+              : bookings.filter(b=>b.status!=="cancelled").length;
             return (
               <button key={key} onClick={() => setAdminTab(key)}
                 className="ff-body text-sm font-medium px-5 py-1.5 rounded-full transition"
@@ -1902,70 +2160,45 @@ function AdminPage() {
         {/* ── CLASSES TAB ── */}
         {adminTab === "classes" && (
           <div className="grid sm:grid-cols-2 gap-4">
-            {DEFAULT_CLASSES.map(cls => {
-              const Icon = ICONS[cls.icon] || Sparkles;
-              const clsBookings = bookings
-                .filter(b => b.sessionId === cls.id && b.status !== "cancelled")
-                .sort((a,b) => new Date(a.createdAt||0) - new Date(b.createdAt||0));
-              const pct = Math.min(100, cls.capacity ? (clsBookings.length / cls.capacity) * 100 : 0);
-              const full = clsBookings.length >= cls.capacity;
-              return (
-                <div key={cls.id} className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
-                  {/* Class header */}
-                  <div className="p-4 border-b border-stone-100 flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                        style={{ backgroundColor: cls.color + "1A" }}>
-                        <Icon size={18} style={{ color: cls.color }}/>
-                      </div>
-                      <div>
-                        <p className="ff-body font-semibold text-sm" style={{ color: INK }}>{cls.name}</p>
-                        <p className="ff-body text-xs text-stone-400 mt-0.5">{cls.day} · {cls.time}</p>
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="ff-display text-2xl font-bold" style={{ color: full ? "#B3261E" : TEAL }}>
-                        {clsBookings.length}
+            {DEFAULT_CLASSES.map(cls => <AdminClassCard key={cls.id} cls={cls} bookings={bookings}/>)}
+            {PILATES_SESSIONS.map(s => (
+              <AdminClassCard key={s.id} bookings={bookings} cls={{
+                id: s.id, name: `Pilates — ${s.label}`, day: s.day, time: s.time,
+                capacity: s.capacity, icon: "sparkles", color: PILATES_BASE.color,
+              }}/>
+            ))}
+          </div>
+        )}
+
+        {/* ── STUDIO HIRE TAB ── */}
+        {adminTab === "studio-hire" && (
+          <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+            {enquiries.length === 0 ? (
+              <p className="ff-body text-sm text-stone-400 text-center py-16">No studio hire enquiries yet.</p>
+            ) : (
+              <div className="divide-y divide-stone-100">
+                {enquiries.slice().sort((a,b) => new Date(b.createdAt||0) - new Date(a.createdAt||0)).map(e => (
+                  <div key={e.id} className="px-4 py-3 flex flex-col gap-1.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="ff-body text-sm font-semibold" style={{ color: INK }}>{e.name}</p>
+                      <p className="ff-body text-xs text-stone-400">
+                        {e.createdAt ? new Date(e.createdAt).toLocaleString("en-GB",{day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}) : "—"}
                       </p>
-                      <p className="ff-body text-xs text-stone-400">of {cls.capacity}</p>
                     </div>
-                  </div>
-
-                  {/* Progress bar */}
-                  <div className="px-4 pt-3 pb-2">
-                    <div className="w-full bg-stone-100 rounded-full h-1.5">
-                      <div className="h-1.5 rounded-full transition-all"
-                        style={{ width: pct + "%", backgroundColor: full ? "#B3261E" : cls.color }}/>
+                    <p className="ff-body text-xs text-stone-500">{e.email}{e.phone ? ` · ${e.phone}` : ""}</p>
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                      <Pill>{e.purpose}</Pill>
+                      {e.fitnessType && <Pill>{e.fitnessType}</Pill>}
+                      <Pill>{e.sessionsPerWeek} session{e.sessionsPerWeek === "1" ? "" : "s"}/week</Pill>
+                      <Pill>Class size: {e.classSize}</Pill>
                     </div>
-                    <p className="ff-body text-xs mt-1.5" style={{ color: full ? "#B3261E" : "#8A8478" }}>
-                      {full ? "Class full" : `${cls.capacity - clsBookings.length} spaces remaining`}
-                    </p>
-                  </div>
-
-                  {/* Registered members list */}
-                  <div className="px-4 pb-4">
-                    {clsBookings.length === 0 ? (
-                      <p className="ff-body text-xs text-stone-400 py-2 text-center italic">No registrations yet</p>
-                    ) : (
-                      <div>
-                        <p className="ff-body text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">Registered</p>
-                        <div className="flex flex-col divide-y divide-stone-50">
-                          {clsBookings.map((b, i) => (
-                            <div key={b.id} className="flex items-center justify-between py-2">
-                              <div className="flex items-center gap-2">
-                                <span className="ff-body text-xs text-stone-400 w-5 text-right shrink-0">{i+1}.</span>
-                                <span className="ff-body text-sm font-medium" style={{ color: INK }}>{b.name}</span>
-                              </div>
-                              <span className="ff-body text-xs text-stone-400 truncate ml-2">{b.email}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+                    {e.qualifications && (
+                      <p className="ff-body text-xs text-stone-500 mt-1"><span className="font-medium text-stone-600">Qualifications:</span> {e.qualifications}</p>
                     )}
                   </div>
-                </div>
-              );
-            })}
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -2079,7 +2312,7 @@ function BookingApp() {
           </div>
           <div className="flex items-center gap-2">
             <nav className="flex gap-1 bg-stone-200 rounded-full p-1">
-              {[["classes","Classes"],["retreats","Retreats"],["bookings","My bookings"],["account","Account"]].map(([k,label]) => (
+              {[["classes","Classes"],["retreats","Retreats"],["studio-hire","Studio Hire"],["bookings","My bookings"],["account","Account"]].map(([k,label]) => (
                 <button key={k} onClick={() => setTab(k)}
                   className="ff-body text-sm font-medium px-3.5 py-1.5 rounded-full transition"
                   style={{ backgroundColor:tab===k?"#fff":"transparent", color:tab===k?INK:"#6B6457", boxShadow:tab===k?"0 1px 2px rgba(0,0,0,0.08)":"none" }}>
@@ -2130,7 +2363,9 @@ function BookingApp() {
               ? <ComingSoon/>
               : tab==="account"
                 ? <AccountPage currentUser={currentUser} onUpdate={s => setCurrentUser(s)}/>
-                : <MyBookings bookings={bookings} currentUser={currentUser} onCancel={cancelMyBooking}/>
+                : tab==="studio-hire"
+                  ? <StudioHireForm currentUser={currentUser}/>
+                  : <MyBookings bookings={bookings} currentUser={currentUser} onCancel={cancelMyBooking}/>
         }
       </main>
 
