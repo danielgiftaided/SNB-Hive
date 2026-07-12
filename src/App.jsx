@@ -5,12 +5,14 @@ import {
   ShieldCheck, Search, ArrowUpRight, Lock, Download, Eye, EyeOff, LogOut,
   Banknote, Hourglass, Ban, Undo2, LayoutDashboard, Mail, Send, Bell
 } from "lucide-react";
-import storage from "./storage.js";
+import storage, { supabase } from "./storage.js";
 
 /* =====================================================================
    CONFIG — edit these to customise the app.
    Swap STRIPE_LINKS values for your real Stripe Payment Link URLs.
-   Change ADMIN_PASSCODE before sharing with anyone.
+   Admin login now uses real email+password+MFA (see AdminPage) rather
+   than a hardcoded passcode — set up your admin account via
+   generate-admin-hash.mjs, see the accompanying setup notes.
    ===================================================================== */
 
 const BRAND = {
@@ -64,9 +66,10 @@ const STRIPE_LINKS = {
   retreatFull:    { "retreat-1": "https://buy.stripe.com/REPLACE_RETREAT_FULL" },
 };
 
-// Admin passcode lives in Vercel env var VITE_ADMIN_PASSCODE — never in source code.
-let ADMIN_PASSCODE = "CHANGE_ME_IN_VERCEL";
-try { ADMIN_PASSCODE = import.meta.env.VITE_ADMIN_PASSCODE || "CHANGE_ME_IN_VERCEL"; } catch {}
+// Admin login is now real email+password+MFA, verified server-side by the
+// admin-auth Edge Function — see AdminPage below. Nothing admin-related is
+// ever stored as a client-exposed VITE_ env var, since those are readable by
+// anyone viewing the site's JavaScript.
 
 // ── TASTER MODE ───────────────────────────────────────────────────────
 // true  = simple "Book taster" flow, no pricing or payments shown
@@ -151,6 +154,32 @@ function lockMsg(email) {
   if (a.until <= Date.now()) return null;
   const m = Math.ceil((a.until - Date.now())/60000);
   return `Too many failed attempts. Try again in ${m} minute${m!==1?"s":""}.`;
+}
+
+// ── Inactivity auto-logout ─────────────────────────────────────────────────
+// Signs the user out after `minutes` of no mouse/keyboard/touch/scroll
+// activity. Used for both the regular member session and the admin
+// dashboard — `active` should be true only while there's a live session to
+// protect, so the timers don't run (and get cleaned up) once signed out.
+function useIdleLogout(active, onTimeout, minutes = 30) {
+  const timerRef = useRef(null);
+  const onTimeoutRef = useRef(onTimeout);
+  useEffect(() => { onTimeoutRef.current = onTimeout; }, [onTimeout]);
+
+  useEffect(() => {
+    if (!active) return;
+    function reset() {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => onTimeoutRef.current(), minutes * 60 * 1000);
+    }
+    const events = ["mousedown", "keydown", "scroll", "touchstart"];
+    events.forEach(ev => window.addEventListener(ev, reset));
+    reset();
+    return () => {
+      events.forEach(ev => window.removeEventListener(ev, reset));
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [active, minutes]);
 }
 
 function exportCSV(bookings) {
@@ -1125,37 +1154,6 @@ function MyBookings({ bookings, currentUser, onCancel }) {
   );
 }
 
-/* ---- ADMIN PASSCODE GATE ---- */
-
-function AdminPasscodeGate({ onUnlock, onClose }) {
-  const [value, setValue] = useState("");
-  const [err, setErr]     = useState(false);
-  return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-      <div className="ff-body bg-white rounded-2xl w-full max-w-xs p-6 flex flex-col items-center gap-3 text-center">
-        <div className="w-11 h-11 rounded-full flex items-center justify-center" style={{ backgroundColor:"#E9F1EC" }}>
-          <Lock size={18} style={{ color:TEAL }}/>
-        </div>
-        <h4 className="ff-display font-semibold" style={{ color:INK }}>Admin access</h4>
-        <p className="text-xs text-stone-500 -mt-1">Prototype passcode — not real security.</p>
-        <input type="password" value={value} autoFocus
-          onChange={e => { setValue(e.target.value); setErr(false); }}
-          onKeyDown={e => e.key==="Enter" && (value===ADMIN_PASSCODE ? onUnlock() : setErr(true))}
-          className="w-full text-center rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none"
-          placeholder="Passcode"/>
-        {err && <p className="text-xs text-red-600">Incorrect passcode.</p>}
-        <div className="flex gap-2 w-full mt-1">
-          <button onClick={onClose} className="flex-1 text-sm font-medium py-2.5 rounded-full border border-stone-200 text-stone-600">Cancel</button>
-          <button onClick={() => value===ADMIN_PASSCODE ? onUnlock() : setErr(true)}
-            className="flex-1 text-sm font-semibold py-2.5 rounded-full" style={{ backgroundColor:TEAL, color:"#fff" }}>
-            Unlock
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ---- ADMIN DASHBOARD ---- */
 
 function AdminDashboard({ bookings, onMarkPaid, onMarkPending, onCancel, onRestore, onClose }) {
@@ -1870,11 +1868,20 @@ function AdminClassCard({ cls, bookings }) {
 }
 
 function AdminPage() {
-  const [unlocked, setUnlocked] = useState(() =>
-    sessionStorage.getItem("snb_admin_auth") === ADMIN_PASSCODE
-  );
-  const [input, setInput]       = useState("");
-  const [err, setErr]           = useState(false);
+  const [adminSession, setAdminSession] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem("snb_admin_session")) || null; }
+    catch { return null; }
+  });
+  const unlocked = !!adminSession;
+
+  const [loginStep, setLoginStep]   = useState("credentials"); // credentials | mfa
+  const [email, setEmail]           = useState("");
+  const [password, setPassword]     = useState("");
+  const [mfaCode, setMfaCode]       = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState("");
+  const [mfaSentMsg, setMfaSentMsg] = useState("");
+
   const [bookings, setBookings]   = useState([]);
   const [members, setMembers]     = useState([]);
   const [enquiries, setEnquiries] = useState([]);
@@ -1886,6 +1893,10 @@ function AdminPage() {
   const [notifSubject, setNSubject] = useState("");
   const [notifMessage, setNMessage] = useState("");
   const [notifStatus, setNStatus]   = useState("idle");
+
+  // Auto-logout after 30 minutes of inactivity — same protection as the
+  // main user-facing app, arguably even more important here.
+  useIdleLogout(unlocked, handleAdminSignOut, 30);
 
   // Load bookings + members + studio hire enquiries once unlocked
   useEffect(() => {
@@ -1902,13 +1913,59 @@ function AdminPage() {
     }).finally(() => setLoading(false));
   }, [unlocked]);
 
-  function handleUnlock() {
-    if (input === ADMIN_PASSCODE) {
-      sessionStorage.setItem("snb_admin_auth", ADMIN_PASSCODE);
-      setUnlocked(true);
-    } else {
-      setErr(true);
-    }
+  function handleAdminSignOut() {
+    sessionStorage.removeItem("snb_admin_session");
+    setAdminSession(null);
+    setLoginStep("credentials");
+    setEmail(""); setPassword(""); setMfaCode("");
+  }
+
+  async function handleLoginStep1() {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!/\S+@\S+\.\S+/.test(cleanEmail)) return setLoginError("Please enter a valid email address.");
+    if (!password) return setLoginError("Please enter your password.");
+    const lock = lockMsg("admin_" + cleanEmail);
+    if (lock) return setLoginError(lock);
+
+    setLoginLoading(true); setLoginError("");
+    try {
+      const res = await callEdgeFunction("admin-auth", { step: "login", email: cleanEmail, password });
+      if (res.mfaRequired) {
+        clearAttempts("admin_" + cleanEmail);
+        setMfaSentMsg(`We've sent a 6-digit code to ${cleanEmail}.`);
+        setLoginStep("mfa");
+      }
+    } catch (e) {
+      recordFailure("admin_" + cleanEmail);
+      const isConfig = e.message.includes("EDGE_NOT_CONFIGURED");
+      setLoginError(isConfig ? "Admin login isn't set up yet — deploy the admin-auth Edge Function." : "Incorrect email or password.");
+    } finally { setLoginLoading(false); }
+  }
+
+  async function handleVerifyMfa() {
+    if (!mfaCode || mfaCode.length !== 6) return setLoginError("Please enter the 6-digit code from your email.");
+    setLoginLoading(true); setLoginError("");
+    try {
+      const cleanEmail = email.trim().toLowerCase();
+      const res = await callEdgeFunction("admin-auth", { step: "verify_mfa", email: cleanEmail, code: mfaCode });
+      if (res.success) {
+        const session = { email: res.admin.email, loginAt: Date.now() };
+        sessionStorage.setItem("snb_admin_session", JSON.stringify(session));
+        setAdminSession(session);
+      }
+    } catch {
+      setLoginError("Incorrect or expired code. Please try again.");
+    } finally { setLoginLoading(false); }
+  }
+
+  async function handleResendMfaCode() {
+    setLoginLoading(true); setLoginError("");
+    try {
+      await callEdgeFunction("admin-auth", { step: "login", email: email.trim().toLowerCase(), password });
+      setMfaSentMsg("New code sent — check your email.");
+    } catch {
+      setLoginError("Couldn't resend the code — please try again.");
+    } finally { setLoginLoading(false); }
   }
 
   async function updateStatus(id, status) {
@@ -1937,7 +1994,7 @@ function AdminPage() {
     }
   }
 
-  // ── Passcode screen ───────────────────────────────────────────────────
+  // ── Login screen ───────────────────────────────────────────────────
   if (!unlocked) return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4"
          style={{ backgroundColor: BG }}>
@@ -1952,20 +2009,63 @@ function AdminPage() {
           <p className="ff-body text-sm font-semibold" style={{ color: INK }}>Admin Dashboard</p>
         </div>
         <div className="bg-white rounded-2xl border border-stone-200 p-6 flex flex-col gap-4 shadow-sm">
-          <div>
-            <label className="ff-body text-sm font-medium text-stone-700">Passcode</label>
-            <input type="password" value={input} autoFocus
-              onChange={e => { setInput(e.target.value); setErr(false); }}
-              onKeyDown={e => e.key === "Enter" && handleUnlock()}
-              className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm text-center tracking-widest focus:outline-none focus:ring-2"
-              placeholder="••••••••"/>
-          </div>
-          {err && <p className="ff-body text-xs text-red-600 text-center">Incorrect passcode.</p>}
-          <button onClick={handleUnlock}
-            className="ff-body font-semibold text-sm py-3 rounded-full"
-            style={{ backgroundColor: TEAL, color: "#fff" }}>
-            Sign in
-          </button>
+
+          {loginStep === "credentials" && (<>
+            <div>
+              <label className="ff-body text-sm font-medium text-stone-700">Email address</label>
+              <input type="email" value={email} autoFocus
+                onChange={e => { setEmail(e.target.value); setLoginError(""); }}
+                onKeyDown={e => e.key === "Enter" && handleLoginStep1()}
+                className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
+                placeholder="you@snbhive.com"/>
+            </div>
+            <div>
+              <label className="ff-body text-sm font-medium text-stone-700">Password</label>
+              <input type="password" value={password}
+                onChange={e => { setPassword(e.target.value); setLoginError(""); }}
+                onKeyDown={e => e.key === "Enter" && handleLoginStep1()}
+                className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
+                placeholder="••••••••"/>
+            </div>
+            {loginError && <p className="ff-body text-xs text-red-600 text-center">{loginError}</p>}
+            <button onClick={handleLoginStep1} disabled={loginLoading}
+              className="ff-body font-semibold text-sm py-3 rounded-full disabled:opacity-50"
+              style={{ backgroundColor: TEAL, color: "#fff" }}>
+              {loginLoading ? "Checking…" : "Sign in"}
+            </button>
+          </>)}
+
+          {loginStep === "mfa" && (<>
+            <div className="text-center mb-1">
+              <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3" style={{backgroundColor:"#E9F1EC"}}>
+                <Mail size={20} style={{color:TEAL}}/>
+              </div>
+              <p className="ff-body text-xs text-stone-500">{mfaSentMsg}</p>
+            </div>
+            <div>
+              <label className="ff-body text-sm font-medium text-stone-700">Verification code</label>
+              <input value={mfaCode} onChange={e => { setMfaCode(e.target.value.replace(/\D/g,"").slice(0,6)); setLoginError(""); }}
+                onKeyDown={e => e.key === "Enter" && handleVerifyMfa()}
+                type="text" inputMode="numeric" maxLength={6}
+                className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-3 text-center tracking-[0.5em] text-lg font-semibold focus:outline-none focus:ring-2"
+                placeholder="000000"/>
+            </div>
+            {loginError && <p className="ff-body text-xs text-red-600 text-center">{loginError}</p>}
+            <button onClick={handleVerifyMfa} disabled={loginLoading || mfaCode.length !== 6}
+              className="ff-body font-semibold text-sm py-3 rounded-full disabled:opacity-50"
+              style={{ backgroundColor: TEAL, color: "#fff" }}>
+              {loginLoading ? "Verifying…" : "Verify & sign in"}
+            </button>
+            <div className="flex items-center justify-between">
+              <button onClick={handleResendMfaCode} disabled={loginLoading} className="ff-body text-xs text-stone-400 hover:text-stone-600">
+                Resend code
+              </button>
+              <button onClick={() => { setLoginStep("credentials"); setMfaCode(""); setLoginError(""); }} className="ff-body text-xs text-stone-400 hover:text-stone-600">
+                Go back
+              </button>
+            </div>
+          </>)}
+
           <p className="ff-body text-xs text-center mt-2 rounded-lg px-2 py-1.5"
              style={{ backgroundColor: import.meta.env.VITE_SUPABASE_URL ? "#E9F1EC" : "#F3E7E5",
                       color: import.meta.env.VITE_SUPABASE_URL ? "#1F4A42" : "#9B3A2E" }}>
@@ -2005,7 +2105,7 @@ function AdminPage() {
               <p className="ff-body text-xs" style={{ color: "rgba(255,255,255,0.6)" }}>Admin Dashboard</p>
             </div>
           </div>
-          <button onClick={() => { sessionStorage.removeItem("snb_admin_auth"); setUnlocked(false); }}
+          <button onClick={handleAdminSignOut}
             className="ff-body text-xs px-3 py-1.5 rounded-full"
             style={{ backgroundColor: "rgba(255,255,255,0.15)", color: "#fff" }}>
             Sign out
@@ -2313,6 +2413,11 @@ function BookingApp() {
   }, []);
 
   useEffect(() => { if (currentUser) load(); }, [currentUser, load]);
+
+  // Auto-logout after 30 minutes of inactivity. Separate from the existing
+  // 30-day expiresAt check above — that's a "how long can this login stay
+  // valid at all" cap, this is "sign out if nobody's actually using it".
+  useIdleLogout(!!currentUser, handleSignOut, 30);
 
   function bookedCount(id) {
     return bookings.filter(b => b.sessionId===id && b.status!=="cancelled").length;
