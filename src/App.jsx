@@ -1664,6 +1664,36 @@ function StudioHireForm({ currentUser }) {
 
   return (
     <div className="max-w-md mx-auto flex flex-col gap-4">
+
+      {/* Intro */}
+      <div className="text-center">
+        <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor:TEAL+"1A" }}>
+          <Sparkles size={28} style={{ color:TEAL }}/>
+        </div>
+        <h2 className="ff-display text-2xl font-semibold" style={{ color:INK }}>
+          Host Your Next Event in Our Boutique Women-Only Wellness Studio
+        </h2>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm flex flex-col gap-4">
+        <p className="ff-body text-sm text-stone-600 leading-relaxed">
+          Nestled in the heart of Hackney, our beautifully designed women-only wellness studio provides
+          an elegant and versatile space for inspiring experiences. Featuring a bright, spacious studio,
+          private changing facilities, a bathroom and a peaceful garden, it's the perfect setting for
+          events that bring women together.
+        </p>
+        <p className="ff-body text-sm text-stone-600 leading-relaxed">
+          Ideal for yoga and fitness classes, coaching sessions, networking events, wellbeing workshops,
+          creative experiences, photoshoots and community gatherings, the studio offers a warm,
+          professional and welcoming atmosphere where women can connect, learn and thrive.
+        </p>
+        <p className="ff-body text-sm text-stone-600 leading-relaxed">
+          Whether you're a wellness practitioner, coach, therapist, creative or business owner, our space
+          is designed to help you deliver exceptional experiences in a setting that reflects the quality
+          of your brand. Let us provide the space while you focus on creating something unforgettable.
+        </p>
+      </div>
+
       <div className={card}>
         <div>
           <h3 className="ff-display text-lg font-semibold" style={{ color: INK }}>Studio Hire Enquiry</h3>
