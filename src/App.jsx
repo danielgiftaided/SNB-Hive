@@ -20,6 +20,18 @@ const BRAND = {
   tagline: "Women's Fitness and Wellness Classes & Retreats",
 };
 
+// ── Instructor Open Day ──────────────────────────────────────────────
+// Shown as a one-time popup after login (once per browser session) and as
+// a persistent banner on the dashboard, both linking through to the
+// existing Studio Hire enquiry form. Set ENABLED to false to turn off
+// both the popup and the banner once the event has passed.
+const OPEN_DAY = {
+  enabled: true,
+  title: "Instructor Open Day",
+  dates: "15th–16th August 2026",
+  blurb: "Thinking about hiring our studio? Come see the space for yourself — we're opening our doors to instructors and practitioners for a two-day open day.",
+};
+
 const DEFAULT_CLASSES = [
   { id:"zumba",    name:"Zumba",                  tagline:"High-energy dance cardio",  day:"TBC — September 2026", time:"TBC", capacity:20, icon:"music",   color:"#C99A4B",
     venue:"6 Dispensary Lane, London E8 1FT",              venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
@@ -62,8 +74,16 @@ const DEFAULT_RETREATS = [
 const STRIPE_LINKS = {
   payg: "https://buy.stripe.com/REPLACE_PAYG",
   membership: { 1: "https://buy.stripe.com/REPLACE_MEMBERSHIP_1", 2: "https://buy.stripe.com/REPLACE_MEMBERSHIP_2" },
-  retreatDeposit: { "retreat-1": "https://buy.stripe.com/REPLACE_RETREAT_DEPOSIT" },
-  retreatFull:    { "retreat-1": "https://buy.stripe.com/REPLACE_RETREAT_FULL" },
+};
+
+// Retreat payments go via bank transfer rather than Stripe. Replace these
+// with your real account details before going live — knowing an account
+// number/sort code only lets someone SEND you money, not take it, so
+// there's no security risk in these being visible in the app's source.
+const BANK_TRANSFER_DETAILS = {
+  accountName: "REPLACE_WITH_ACCOUNT_NAME",
+  sortCode:    "00-00-00",
+  accountNumber: "00000000",
 };
 
 // Admin login is now real email+password+MFA, verified server-side by the
@@ -774,6 +794,7 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
   const [selectedClasses, setSel] = useState([session.id]);
   const [saving, setSaving]       = useState(false);
   const [paymentUrl, setPUrl]     = useState("");
+  const [bankRef, setBankRef]     = useState("");
   const [error, setError]         = useState("");
 
   const isPilates = TASTER_MODE && (session.id || "").startsWith("pilates_");
@@ -852,11 +873,11 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
     try {
       const url = type==="class"
         ? (plan==="payg" ? STRIPE_LINKS.payg : STRIPE_LINKS.membership[activities])
-        : (plan==="deposit" ? STRIPE_LINKS.retreatDeposit[session.id] : STRIPE_LINKS.retreatFull[session.id]);
+        : null; // retreats pay by bank transfer, not a Stripe link
 
       const planLabel = type==="class"
         ? (plan==="payg" ? "Pay as you go" : `Membership — ${activities} class${activities>1?"es":""}`)
-        : (plan==="deposit" ? "Deposit" : "Paid in full");
+        : (plan==="deposit" ? "Deposit (bank transfer)" : "Paid in full (bank transfer)");
 
       const base = {
         type, userId: currentUser.id, name: currentUser.name,
@@ -875,11 +896,17 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
           });
         }
       } else {
+        const bookingId = uid();
+        // A short, unique reference the person includes on their bank
+        // transfer, so it can be matched back to this booking manually.
+        const ref = type === "retreat" ? bookingId.slice(0, 8).toUpperCase() : null;
         await onConfirm({
-          ...base, id: uid(),
+          ...base, id: bookingId,
           sessionId: session.id, sessionName: session.name,
           amount,
+          ...(ref ? { bankRef: ref } : {}),
         });
+        if (ref) setBankRef(ref);
       }
 
       setPUrl(url); setStep(2);
@@ -1098,7 +1125,7 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
             </div>
           )}
 
-          {step === 2 && !TASTER_MODE && (
+          {step === 2 && !TASTER_MODE && type === "class" && (
             <div className="flex flex-col items-center text-center gap-3 py-4">
               <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor:"#E9F1EC" }}>
                 <ShieldCheck size={24} style={{ color:TEAL }}/>
@@ -1115,7 +1142,63 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
               <button onClick={onClose} className="text-xs text-stone-400 mt-1 underline">Close — I'll pay later</button>
             </div>
           )}
+
+          {step === 2 && !TASTER_MODE && type === "retreat" && (
+            <div className="flex flex-col items-center text-center gap-3 py-4">
+              <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor:"#E9F1EC" }}>
+                <Banknote size={24} style={{ color:TEAL }}/>
+              </div>
+              <h4 className="ff-display text-lg font-semibold" style={{ color:INK }}>Almost there — pay by bank transfer</h4>
+              <p className="text-sm text-stone-500 leading-relaxed">
+                Your spot is reserved. Transfer <strong>£{typeof amount==="number" ? amount.toFixed(2) : amount}</strong> using
+                the details below, making sure to include your reference — this is how we match your payment to your booking.
+              </p>
+              <div className="w-full rounded-xl bg-stone-50 px-4 py-3 text-sm text-stone-700 text-left flex flex-col gap-1.5">
+                <p><span className="font-medium text-stone-500">Account name:</span> {BANK_TRANSFER_DETAILS.accountName}</p>
+                <p><span className="font-medium text-stone-500">Sort code:</span> {BANK_TRANSFER_DETAILS.sortCode}</p>
+                <p><span className="font-medium text-stone-500">Account number:</span> {BANK_TRANSFER_DETAILS.accountNumber}</p>
+              </div>
+              <div className="w-full rounded-xl px-4 py-3" style={{ backgroundColor:"#FBF3E3", border:"1px solid #C99A4B" }}>
+                <p className="ff-body text-xs font-semibold uppercase tracking-wide" style={{ color:"#7A5C20" }}>Payment reference</p>
+                <p className="ff-display text-xl font-bold tracking-wider mt-1" style={{ color:"#7A5C20" }}>{bankRef}</p>
+              </div>
+              <p className="text-xs text-stone-400">
+                Once we receive your transfer, we'll confirm your booking by email — usually within 1–2 working days.
+              </p>
+              <button onClick={onClose}
+                className="w-full inline-flex items-center justify-center font-semibold text-sm py-3 rounded-full mt-1"
+                style={{ backgroundColor:TEAL, color:"#fff" }}>
+                Got it, thank you
+              </button>
+            </div>
+          )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---- OPEN DAY POPUP ---- */
+
+function OpenDayModal({ onClose, onRegister }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+      <div className="ff-body bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-sm p-6 flex flex-col items-center text-center gap-4">
+        <button onClick={onClose} className="self-end -mt-2 -mr-2 text-stone-400"><X size={20}/></button>
+        <div className="w-14 h-14 rounded-full flex items-center justify-center -mt-6" style={{ backgroundColor:"#E9F1EC" }}>
+          <Calendar size={26} style={{ color:TEAL }}/>
+        </div>
+        <div>
+          <h3 className="ff-display text-xl font-semibold" style={{ color:INK }}>{OPEN_DAY.title}</h3>
+          <p className="ff-body text-sm font-semibold mt-1" style={{ color:TEAL }}>{OPEN_DAY.dates}</p>
+        </div>
+        <p className="ff-body text-sm text-stone-500 leading-relaxed">{OPEN_DAY.blurb}</p>
+        <button onClick={onRegister}
+          className="w-full inline-flex items-center justify-center gap-1.5 font-semibold text-sm py-3 rounded-full transition"
+          style={{ backgroundColor:TEAL, color:"#fff" }}>
+          Register my interest
+        </button>
+        <button onClick={onClose} className="text-xs text-stone-400 underline">Maybe later</button>
       </div>
     </div>
   );
@@ -2461,6 +2544,7 @@ function BookingApp() {
   const [loading, setLoading]               = useState(true);
   const [modalSession, setModalSession]     = useState(null);
   const [modalType, setModalType]           = useState(null);
+  const [showOpenDay, setShowOpenDay]       = useState(false);
 
   // Restore session on load — check expiry
   useEffect(() => {
@@ -2489,6 +2573,17 @@ function BookingApp() {
   }, []);
 
   useEffect(() => { if (currentUser) load(); }, [currentUser, load]);
+
+  // Show the Open Day popup once per browser session after login — not on
+  // every render/navigation, but again on a fresh session (new tab/browser
+  // restart) so returning users still see it once more.
+  useEffect(() => {
+    if (!currentUser || !OPEN_DAY.enabled) return;
+    if (!sessionStorage.getItem("openday_seen")) {
+      setShowOpenDay(true);
+      sessionStorage.setItem("openday_seen", "1");
+    }
+  }, [currentUser]);
 
   // Auto-logout after 30 minutes of inactivity. Separate from the existing
   // 30-day expiresAt check above — that's a "how long can this login stay
@@ -2574,6 +2669,21 @@ function BookingApp() {
           : tab==="classes"
             ? <>
                 <WelcomeHero currentUser={currentUser}/>
+                {OPEN_DAY.enabled && (
+                  <div className="rounded-xl px-4 py-3 mb-4 flex flex-wrap items-center justify-between gap-3" style={{ backgroundColor:"#FBF3E3", border:"1px solid #C99A4B" }}>
+                    <div className="flex items-center gap-2.5">
+                      <Calendar size={15} style={{ color:"#7A5C20" }}/>
+                      <p className="ff-body text-sm" style={{ color:"#7A5C20" }}>
+                        <strong>{OPEN_DAY.title}</strong> — {OPEN_DAY.dates}. Come see the studio!
+                      </p>
+                    </div>
+                    <button onClick={() => setTab("studio-hire")}
+                      className="ff-body text-xs font-semibold px-3.5 py-1.5 rounded-full shrink-0"
+                      style={{ backgroundColor:TEAL, color:"#fff" }}>
+                      Register
+                    </button>
+                  </div>
+                )}
                 {TASTER_MODE && TASTERS_CLOSED && (
                   <div className="rounded-xl px-4 py-3 mb-4 flex items-center gap-2.5" style={{ backgroundColor:"#F3E7E5", border:"1px solid #E3C4BE" }}>
                     <Bell size={15} style={{ color:"#9B3A2E" }}/>
@@ -2612,6 +2722,12 @@ function BookingApp() {
       {modalSession && (
         <BookingModal session={modalSession} type={modalType} currentUser={currentUser}
           onClose={() => setModalSession(null)} onConfirm={handleConfirmBooking}/>
+      )}
+
+      {showOpenDay && (
+        <OpenDayModal
+          onClose={() => setShowOpenDay(false)}
+          onRegister={() => { setShowOpenDay(false); setTab("studio-hire"); }}/>
       )}
 
     </div>
