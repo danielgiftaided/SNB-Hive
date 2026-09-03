@@ -3,7 +3,8 @@ import {
   Calendar, MapPin, Clock, Check, X, ArrowRight, ChevronLeft,
   Loader2, Sparkles, RotateCcw, Music2, Flame, Dumbbell, Flower2,
   ShieldCheck, Search, ArrowUpRight, Lock, Download, Eye, EyeOff, LogOut,
-  Banknote, Hourglass, Ban, Undo2, LayoutDashboard, Mail, Send, Bell
+  Banknote, Hourglass, Ban, Undo2, LayoutDashboard, Mail, Send, Bell,
+  Paintbrush, UserPlus, Trash2
 } from "lucide-react";
 import storage, { supabase } from "./storage.js";
 
@@ -20,17 +21,43 @@ const BRAND = {
   tagline: "Women's Fitness and Wellness Classes & Retreats",
 };
 
-// ── Instructor Open Day ──────────────────────────────────────────────
+// ── Studio Open Day ──────────────────────────────────────────────
 // Shown as a one-time popup after login (once per browser session) and as
 // a persistent banner on the dashboard, both linking through to the
 // existing Studio Hire enquiry form. Set ENABLED to false to turn off
 // both the popup and the banner once the event has passed.
 const OPEN_DAY = {
-  enabled: true,
-  title: "Instructor Open Day",
-  dates: "15th–16th August 2026",
-  blurb: "Thinking about hiring our studio? Come see the space for yourself — we're opening our doors to instructors and practitioners for a two-day open day.",
+  enabled: false, // event has passed — flip back to true and update details for a future one
+  title: "Studio Open Day",
+  dates: "15th August 2026, 13:00–16:00",
+  blurb: "Thinking about hiring our studio? Come see the space for yourself — we're opening our doors to instructors and practitioners.",
 };
+
+// ── Workshops ────────────────────────────────────────────────────────────
+// Each workshop is a one-off event (not recurring like classes). Set
+// enabled to false once the event has passed, same pattern as OPEN_DAY.
+const WORKSHOPS = [
+  {
+    id: "tote-ally-social",
+    enabled: true,
+    name: "Tote-ally Social",
+    tagline: "Tote bag painting workshop",
+    description: "Get creative and paint your own unique tote bag in a fun, relaxed women-only setting. No artistic experience needed — just come along, socialise, and take home something you've made yourself.",
+    date: "Saturday 26th September 2026",
+    time: "14:00 – 16:00",
+    price: 29,
+    capacity: 20,
+    venue: "6 Dispensary Lane, London E8 1FT",
+    venueMap: "https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
+    whatToBring: "Wear something you don't mind getting a little paint on",
+    icsStart: "20260926T130000",
+    icsEnd: "20260926T150000",
+    color: "#B47D6D",
+    icon: "paintbrush",
+    allowGuests: true,
+    maxGuests: 3,
+  },
+];
 
 const DEFAULT_CLASSES = [
   { id:"zumba",    name:"Zumba",                  tagline:"High-energy dance cardio",  day:"TBC — September 2026", time:"TBC", capacity:20, icon:"music",   color:"#C99A4B",
@@ -109,7 +136,7 @@ const TEAL = "#e46478";
 const GOLD = "#C99A4B";
 const BG   = "#f0e8cc";
 
-const ICONS = { music: Music2, flame: Flame, flower: Flower2, dumbbell: Dumbbell };
+const ICONS = { music: Music2, flame: Flame, flower: Flower2, dumbbell: Dumbbell, paintbrush: Paintbrush };
 // Logo points to your actual file: public/7 (1).png
 // The space and parentheses are URL-encoded below, since raw spaces/special
 // characters aren't valid in a URL/path as-is.
@@ -1173,6 +1200,217 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---- WORKSHOP CARD ---- */
+
+function WorkshopCard({ workshop, booked, isBooked, onBook }) {
+  const Icon = ICONS[workshop.icon] || Paintbrush;
+  const full = booked >= workshop.capacity;
+  const spotsLeft = Math.max(workshop.capacity - booked, 0);
+  const showRing = !isBooked && spotsLeft <= 5;
+  const disabled = full || isBooked;
+
+  return (
+    <div className="bg-white rounded-2xl border border-stone-200 p-5 flex flex-col gap-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor:workshop.color+"1A" }}>
+            <Icon size={20} style={{ color:workshop.color }}/>
+          </div>
+          <div>
+            <p className="ff-body text-xs font-semibold uppercase tracking-wider mb-0.5" style={{ color:workshop.color }}>Workshop</p>
+            <h3 className="ff-display text-lg font-semibold" style={{ color:INK }}>{workshop.name}</h3>
+            <p className="ff-body text-sm text-stone-500">{workshop.tagline}</p>
+          </div>
+        </div>
+        {showRing && <CapacityRing booked={booked} capacity={workshop.capacity} color={workshop.color}/>}
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Pill icon={Calendar}>{workshop.date}</Pill>
+        <Pill icon={Clock}>{workshop.time}</Pill>
+        <Pill icon={Banknote}>£{workshop.price}</Pill>
+      </div>
+
+      {workshop.venue && (
+        <a href={workshop.venueMap} target="_blank" rel="noopener noreferrer"
+          className="ff-body inline-flex items-center gap-1.5 text-xs text-stone-400 hover:text-stone-600 transition -mt-1">
+          <MapPin size={11}/> {workshop.venue}
+        </a>
+      )}
+
+      <p className="ff-body text-sm text-stone-500 leading-relaxed">{workshop.description}</p>
+
+      <div className="flex items-center justify-end pt-2 border-t border-stone-100 mt-auto">
+        <button onClick={() => onBook(workshop)} disabled={disabled}
+          className="ff-body inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full transition disabled:cursor-not-allowed"
+          style={{
+            backgroundColor: isBooked ? "#D4EBD9" : full ? "#E3DFD3" : TEAL,
+            color: isBooked ? "#2D6B40" : full ? "#8A8478" : "#FFF",
+            opacity: disabled ? 0.85 : 1
+          }}>
+          {full ? "Full" : isBooked ? "Booked ✓" : "Book now"}
+          {!disabled && <ArrowRight size={14}/>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---- WORKSHOP BOOKING MODAL ---- */
+
+function WorkshopBookingModal({ workshop, currentUser, onClose, onConfirm }) {
+  const [guests, setGuests] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [done, setDone]     = useState(false);
+  const [error, setError]   = useState("");
+
+  const totalPeople = 1 + guests.length;
+  const totalPrice  = totalPeople * workshop.price;
+
+  function addGuest() {
+    if (guests.length >= (workshop.maxGuests || 3)) return;
+    setGuests([...guests, { name:"", email:"", phone:"" }]);
+  }
+  function removeGuest(i) { setGuests(guests.filter((_,idx) => idx !== i)); }
+  function updateGuest(i, field, value) {
+    setGuests(guests.map((g,idx) => idx === i ? {...g, [field]:value} : g));
+  }
+
+  async function handleConfirm() {
+    // Validate guests
+    for (let i = 0; i < guests.length; i++) {
+      const g = guests[i];
+      if (!g.name.trim()) return setError(`Please enter a name for guest ${i+1}.`);
+      if (!/\S+@\S+\.\S+/.test(g.email)) return setError(`Please enter a valid email for guest ${i+1}.`);
+      if (g.phone.replace(/\D/g,"").length < 10) return setError(`Please enter a valid phone number for guest ${i+1}.`);
+    }
+    setSaving(true); setError("");
+    try {
+      const booking = {
+        id: uid(), sessionId: workshop.id, sessionName: workshop.name, type: "workshop",
+        userId: currentUser.id, name: currentUser.name,
+        email: currentUser.email, phone: currentUser.phone,
+        plan: "Workshop", amount: totalPrice,
+        guests: guests.length > 0 ? guests.map(g => ({ name:g.name.trim(), email:g.email.trim(), phone:g.phone.trim() })) : [],
+        status: "confirmed", createdAt: new Date().toISOString(),
+      };
+      await onConfirm(booking);
+      // Confirmation email (non-blocking)
+      callEdgeFunction("send-email", {
+        type: "confirm_taster",
+        to_email: currentUser.email, to_name: currentUser.name,
+        session_name: workshop.name, day: workshop.date, time: workshop.time,
+        venue: workshop.venue || "", what_to_bring: workshop.whatToBring || "",
+        ics_start: workshop.icsStart, ics_end: workshop.icsEnd,
+      }).catch(() => {});
+      setDone(true);
+    } catch { setError("Couldn't save your booking — please try again."); }
+    finally { setSaving(false); }
+  }
+
+  if (done) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+        <div className="ff-body bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md p-6 text-center">
+          <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor:"#D4EBD9" }}>
+            <Check size={26} style={{ color:TEAL }}/>
+          </div>
+          <h3 className="ff-display text-xl font-semibold mb-2" style={{ color:INK }}>You're booked!</h3>
+          <p className="ff-body text-sm text-stone-500 mb-1">
+            {workshop.name} — {workshop.date}, {workshop.time}
+          </p>
+          {guests.length > 0 && (
+            <p className="ff-body text-sm text-stone-500">
+              + {guests.length} guest{guests.length > 1 ? "s" : ""}
+            </p>
+          )}
+          <p className="ff-body text-sm text-stone-400 mt-3">A confirmation email has been sent to {currentUser.email}.</p>
+          <button onClick={onClose}
+            className="mt-5 w-full py-3 rounded-full font-semibold text-sm text-white transition"
+            style={{ backgroundColor:TEAL }}>Done</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+      <div className="ff-body bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md p-6 flex flex-col gap-4 max-h-[85vh] overflow-y-auto">
+        <div className="flex justify-between items-center">
+          <h3 className="ff-display text-xl font-semibold" style={{ color:INK }}>{workshop.name}</h3>
+          <button onClick={onClose} className="text-stone-400 hover:text-stone-600"><X size={20}/></button>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Pill icon={Calendar}>{workshop.date}</Pill>
+          <Pill icon={Clock}>{workshop.time}</Pill>
+        </div>
+
+        <div className="bg-stone-50 rounded-xl p-4">
+          <p className="ff-body text-sm text-stone-600"><strong>Your booking</strong></p>
+          <p className="ff-body text-sm text-stone-500 mt-1">{currentUser.name} — {currentUser.email}</p>
+        </div>
+
+        {/* Guest management */}
+        {workshop.allowGuests && (
+          <div className="border-t border-stone-100 pt-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="ff-body text-sm font-semibold text-stone-700">Bring a friend?</p>
+              {guests.length < (workshop.maxGuests || 3) && (
+                <button onClick={addGuest}
+                  className="ff-body inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-full transition"
+                  style={{ backgroundColor:workshop.color+"1A", color:workshop.color }}>
+                  <UserPlus size={13}/> Add guest
+                </button>
+              )}
+            </div>
+
+            {guests.map((g, i) => (
+              <div key={i} className="bg-stone-50 rounded-xl p-4 mb-3 relative">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="ff-body text-xs font-semibold text-stone-500 uppercase tracking-wider">Guest {i+1}</p>
+                  <button onClick={() => removeGuest(i)} className="text-stone-400 hover:text-red-500 transition"><Trash2 size={14}/></button>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <input value={g.name} onChange={e => updateGuest(i, "name", e.target.value)}
+                    placeholder="Full name *" type="text"
+                    className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-stone-400"/>
+                  <input value={g.email} onChange={e => updateGuest(i, "email", e.target.value)}
+                    placeholder="Email address *" type="email"
+                    className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-stone-400"/>
+                  <input value={g.phone} onChange={e => updateGuest(i, "phone", e.target.value)}
+                    placeholder="Phone number *" type="tel"
+                    className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-stone-400"/>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Price summary */}
+        <div className="bg-stone-50 rounded-xl p-4">
+          <div className="flex justify-between items-center">
+            <p className="ff-body text-sm text-stone-600">
+              {totalPeople} {totalPeople === 1 ? "person" : "people"} × £{workshop.price}
+            </p>
+            <p className="ff-display text-xl font-semibold" style={{ color:INK }}>£{totalPrice}</p>
+          </div>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border-l-2 border-red-400 text-red-700 px-4 py-2 rounded text-sm">{error}</div>
+        )}
+
+        <button onClick={handleConfirm} disabled={saving}
+          className="w-full py-3 rounded-full font-semibold text-sm text-white transition disabled:opacity-60"
+          style={{ backgroundColor:TEAL }}>
+          {saving ? "Booking…" : `Confirm & pay £${totalPrice}`}
+        </button>
       </div>
     </div>
   );
@@ -2545,6 +2783,7 @@ function BookingApp() {
   const [modalSession, setModalSession]     = useState(null);
   const [modalType, setModalType]           = useState(null);
   const [showOpenDay, setShowOpenDay]       = useState(false);
+  const [workshopModal, setWorkshopModal]   = useState(null);
 
   // Restore session on load — check expiry
   useEffect(() => {
@@ -2645,7 +2884,7 @@ function BookingApp() {
           </div>
           <div className="flex items-center gap-2">
             <nav className="flex gap-1 bg-stone-200 rounded-full p-1">
-              {[["classes","Classes"],["retreats","Retreats"],["studio-hire","Studio Hire"],["bookings","My bookings"],["account","Account"]].map(([k,label]) => (
+              {[["classes","Classes"],["workshops","Workshops"],["retreats","Retreats"],["studio-hire","Studio Hire"],["bookings","My bookings"],["account","Account"]].map(([k,label]) => (
                 <button key={k} onClick={() => setTab(k)}
                   className="ff-body text-sm font-medium px-3.5 py-1.5 rounded-full transition"
                   style={{ backgroundColor:tab===k?"#fff":"transparent", color:tab===k?INK:"#6B6457", boxShadow:tab===k?"0 1px 2px rgba(0,0,0,0.08)":"none" }}>
@@ -2707,6 +2946,25 @@ function BookingApp() {
                   bookingTypeThu={getUserBookingType("pilates_thu")}
                   onBook={session => { setModalSession(session); setModalType("class"); }}/>
               </>
+            : tab==="workshops"
+            ? <>
+                <h2 className="ff-display text-2xl font-semibold mb-1" style={{ color:INK }}>Workshops</h2>
+                <p className="ff-body text-sm text-stone-500 mb-5">One-off creative and social experiences</p>
+                <div className="grid sm:grid-cols-1 gap-4">
+                  {WORKSHOPS.filter(w => w.enabled).map(w => (
+                    <WorkshopCard key={w.id} workshop={w}
+                      booked={bookedCount(w.id)}
+                      isBooked={!!getUserBookingType(w.id)}
+                      onBook={() => setWorkshopModal(w)}/>
+                  ))}
+                  {WORKSHOPS.filter(w => w.enabled).length === 0 && (
+                    <div className="text-center py-12">
+                      <Paintbrush size={32} className="mx-auto text-stone-300 mb-3"/>
+                      <p className="ff-body text-sm text-stone-400">No workshops scheduled right now — check back soon!</p>
+                    </div>
+                  )}
+                </div>
+              </>
             : tab==="retreats"
               ? <ComingSoon/>
               : tab==="account"
@@ -2722,6 +2980,11 @@ function BookingApp() {
       {modalSession && (
         <BookingModal session={modalSession} type={modalType} currentUser={currentUser}
           onClose={() => setModalSession(null)} onConfirm={handleConfirmBooking}/>
+      )}
+
+      {workshopModal && (
+        <WorkshopBookingModal workshop={workshopModal} currentUser={currentUser}
+          onClose={() => setWorkshopModal(null)} onConfirm={handleConfirmBooking}/>
       )}
 
       {showOpenDay && (
