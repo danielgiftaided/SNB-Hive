@@ -1300,12 +1300,14 @@ function WorkshopBookingModal({ workshop, currentUser, onClose, onConfirm }) {
         status: "confirmed", createdAt: new Date().toISOString(),
       };
       await onConfirm(booking);
-      // Confirmation email (non-blocking)
+      // Workshop confirmation email with payment instructions (non-blocking)
       callEdgeFunction("send-email", {
-        type: "confirm_taster",
+        type: "confirm_workshop",
         to_email: currentUser.email, to_name: currentUser.name,
         session_name: workshop.name, day: workshop.date, time: workshop.time,
         venue: workshop.venue || "", what_to_bring: workshop.whatToBring || "",
+        price: String(totalPrice), num_people: String(totalPeople),
+        guests: guests.length > 0 ? guests.map(g => g.name.trim()).join(", ") : "",
         ics_start: workshop.icsStart, ics_end: workshop.icsEnd,
       }).catch(() => {});
       setDone(true);
@@ -1320,19 +1322,30 @@ function WorkshopBookingModal({ workshop, currentUser, onClose, onConfirm }) {
           <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor:"#D4EBD9" }}>
             <Check size={26} style={{ color:TEAL }}/>
           </div>
-          <h3 className="ff-display text-xl font-semibold mb-2" style={{ color:INK }}>You're booked!</h3>
-          <p className="ff-body text-sm text-stone-500 mb-1">
+          <h3 className="ff-display text-xl font-semibold mb-2" style={{ color:INK }}>You're in! 🎨</h3>
+          <p className="ff-body text-sm text-stone-600 mb-1">
             {workshop.name} — {workshop.date}, {workshop.time}
           </p>
           {guests.length > 0 && (
-            <p className="ff-body text-sm text-stone-500">
-              + {guests.length} guest{guests.length > 1 ? "s" : ""}
+            <p className="ff-body text-sm text-stone-500 mb-2">
+              + {guests.length} guest{guests.length > 1 ? "s" : ""} ({totalPeople} people total)
             </p>
           )}
-          <p className="ff-body text-sm text-stone-400 mt-3">A confirmation email has been sent to {currentUser.email}.</p>
+          <div className="rounded-xl px-4 py-4 mt-3 text-left" style={{ backgroundColor:"#FBF3E3", border:"1px solid #C99A4B" }}>
+            <p className="ff-body text-sm font-semibold mb-1.5" style={{ color:"#7A5C20" }}>
+              Keep an eye on your inbox 📬
+            </p>
+            <p className="ff-body text-sm leading-relaxed" style={{ color:"#9A7426" }}>
+              We've just sent a confirmation email to <strong>{currentUser.email}</strong> with
+              all the details and payment instructions. If you don't see it in a few minutes,
+              check your spam folder — and if you have any questions at all, just reply to the email
+              or drop us a message at shams@snbhive.com.
+            </p>
+          </div>
+          <p className="ff-body text-xs text-stone-400 mt-4">We can't wait to see you there!</p>
           <button onClick={onClose}
-            className="mt-5 w-full py-3 rounded-full font-semibold text-sm text-white transition"
-            style={{ backgroundColor:TEAL }}>Done</button>
+            className="mt-4 w-full py-3 rounded-full font-semibold text-sm text-white transition"
+            style={{ backgroundColor:TEAL }}>Lovely, see you there!</button>
         </div>
       </div>
     );
@@ -1409,7 +1422,7 @@ function WorkshopBookingModal({ workshop, currentUser, onClose, onConfirm }) {
         <button onClick={handleConfirm} disabled={saving}
           className="w-full py-3 rounded-full font-semibold text-sm text-white transition disabled:opacity-60"
           style={{ backgroundColor:TEAL }}>
-          {saving ? "Booking…" : `Confirm & pay £${totalPrice}`}
+          {saving ? "Booking…" : `Confirm booking — £${totalPrice}`}
         </button>
       </div>
     </div>
@@ -2777,7 +2790,11 @@ export default function App() {
 function BookingApp() {
   const [currentUser, setCurrentUser]       = useState(null);
   const [authLoading, setAuthLoading]       = useState(true);
-  const [tab, setTab]                       = useState("classes");
+  const [tab, setTab]                       = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    const t = params.get("tab");
+    return ["classes","workshops","retreats","studio-hire","bookings","account"].includes(t) ? t : "classes";
+  });
   const [bookings, setBookings]             = useState([]);
   const [loading, setLoading]               = useState(true);
   const [modalSession, setModalSession]     = useState(null);
