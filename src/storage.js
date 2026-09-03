@@ -31,6 +31,7 @@ const SNAKE = {
   classSize:       "class_size",
   workshopType:    "workshop_type",
   otherType:       "other_type",
+  numPeople:       "num_people",
 };
 const CAMEL = Object.fromEntries(Object.entries(SNAKE).map(([k, v]) => [v, k]));
 
