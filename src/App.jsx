@@ -1295,8 +1295,8 @@ function WorkshopBookingModal({ workshop, currentUser, onClose, onConfirm }) {
         id: uid(), sessionId: workshop.id, sessionName: workshop.name, type: "workshop",
         userId: currentUser.id, name: currentUser.name,
         email: currentUser.email, phone: currentUser.phone,
-        plan: "Workshop", amount: totalPrice,
-        guests: guests.length > 0 ? guests.map(g => ({ name:g.name.trim(), email:g.email.trim(), phone:g.phone.trim() })) : [],
+        plan: "Workshop", amount: totalPrice, numPeople: totalPeople,
+        guests: guests.length > 0 ? guests.map(g => ({ name:g.name.trim(), email:g.email.trim(), phone:g.phone.trim() })) : null,
         status: "confirmed", createdAt: new Date().toISOString(),
       };
       await onConfirm(booking);
@@ -1311,7 +1311,7 @@ function WorkshopBookingModal({ workshop, currentUser, onClose, onConfirm }) {
         ics_start: workshop.icsStart, ics_end: workshop.icsEnd,
       }).catch(() => {});
       setDone(true);
-    } catch { setError("Couldn't save your booking — please try again."); }
+    } catch(err) { console.error("[Workshop booking error]:", err); setError("Couldn't save your booking — please try again."); }
     finally { setSaving(false); }
   }
 
