@@ -60,18 +60,21 @@ const WORKSHOPS = [
 ];
 
 const DEFAULT_CLASSES = [
-  { id:"zumba",    name:"Zumba",                  tagline:"High-energy dance cardio",  day:"TBC — September 2026", time:"TBC", capacity:20, icon:"music",   color:"#C99A4B",
+  { id:"zumba",    name:"Zumba",                  tagline:"High-energy dance cardio",  day:"Friday 25 September 2026", time:"12:00–12:45", capacity:20, icon:"music",   color:"#C99A4B",
     venue:"6 Dispensary Lane, London E8 1FT",              venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
-    whatToBring:"Wear comfortable clothes and grip socks", icsStart:null, icsEnd:null, description:"Zumba is about much more than fitness. It's about community, confidence, and feeling good. Dance has been shown to support memory, coordination, and emotional wellbeing, and music and dance can help get through some of the most challenging times in life.\n\nIt has the power to bring people together, lift spirits, and remind us that exercise doesn't have to feel like a chore — it can be something you genuinely look forward to.\n\nZumba is based on repetitive movements throughout each song, so you don't need to be an experienced dancer or technically advanced to join in. It's all about having fun while getting fit.\n\nThe routines are repeated for about 6 weeks, which allows people to learn the moves and build their confidence and then new routines are introduced gradually over time. That repetition helps build confidence because your body begins to associate the movements with the music, allowing you to learn naturally without pressure. It's a welcoming, supportive environment." },
-  { id:"boxing",   name:"Boxing",                  tagline:"Pad work, Co-ordination",   day:"TBC — September 2026", time:"TBC", capacity:20, icon:"flame",   color:"#9B5B45",
+    whatToBring:"Wear comfortable clothes and grip socks", icsStart:"20260925T110000", icsEnd:"20260925T114500", description:"Zumba is about much more than fitness. It's about community, confidence, and feeling good. Dance has been shown to support memory, coordination, and emotional wellbeing, and music and dance can help get through some of the most challenging times in life.\n\nIt has the power to bring people together, lift spirits, and remind us that exercise doesn't have to feel like a chore — it can be something you genuinely look forward to.\n\nZumba is based on repetitive movements throughout each song, so you don't need to be an experienced dancer or technically advanced to join in. It's all about having fun while getting fit.\n\nThe routines are repeated for about 6 weeks, which allows people to learn the moves and build their confidence and then new routines are introduced gradually over time. That repetition helps build confidence because your body begins to associate the movements with the music, allowing you to learn naturally without pressure. It's a welcoming, supportive environment." },
+  { id:"boxing",   name:"Boxing",                  tagline:"Pad work, Co-ordination",   day:"Monday 21 September 2026", time:"13:30–14:15", capacity:20, icon:"flame",   color:"#9B5B45",
     venue:"SCK Fitness, 439 High Road, Leyton, London E10 5EL", venueMap:"https://www.google.com/maps/search/?api=1&query=SCK+Fitness+439+High+Road+Leyton+London+E10+5EL",
-    whatToBring:"Wear comfortable workout clothes and trainers. Bring a water bottle", icsStart:null, icsEnd:null, description:"Boxing is one of the most effective full-body workouts, combining cardiovascular fitness, strength, coordination and stress relief in a fun and empowering way.\n\nThis class is not about fighting or competition. Instead, it uses boxing drills, pad work and fitness exercises to help women improve their health, build confidence and enjoy movement in a supportive environment.\n\nBenefits include:\n• Increased calorie burn and support with weight loss goals\n• Improved cardiovascular fitness and stamina\n• Increased confidence and self-belief\n• A healthy outlet for stress and frustration\n• Improved coordination and balance\n• Stronger core and full-body conditioning\n• Improved mood and mental wellbeing\n\nMany women find boxing incredibly empowering because it allows them to release stress, develop resilience and discover strengths they never knew they had.\n\nSuitable for beginners and all fitness levels." },
-  { id:"somatic",  name:"Somatic",                 tagline:"Move, breathe, reconnect",  day:"TBC — September 2026", time:"TBC", capacity:20, icon:"flower",  color:"#7C9885",
+    whatToBring:"Wear comfortable workout clothes and trainers. Bring a water bottle", icsStart:"20260921T123000", icsEnd:"20260921T131500", description:"Boxing is one of the most effective full-body workouts, combining cardiovascular fitness, strength, coordination and stress relief in a fun and empowering way.\n\nThis class is not about fighting or competition. Instead, it uses boxing drills, pad work and fitness exercises to help women improve their health, build confidence and enjoy movement in a supportive environment.\n\nBenefits include:\n• Increased calorie burn and support with weight loss goals\n• Improved cardiovascular fitness and stamina\n• Increased confidence and self-belief\n• A healthy outlet for stress and frustration\n• Improved coordination and balance\n• Stronger core and full-body conditioning\n• Improved mood and mental wellbeing\n\nMany women find boxing incredibly empowering because it allows them to release stress, develop resilience and discover strengths they never knew they had.\n\nSuitable for beginners and all fitness levels." },
+  { id:"somatic",  name:"Somatic",                 tagline:"Move, breathe, reconnect",  day:"Tuesday 22 September 2026", time:"12:00–12:45", capacity:20, icon:"flower",  color:"#7C9885",
     venue:"6 Dispensary Lane, London E8 1FT",              venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
-    whatToBring:"Loose comfortable clothing and grip socks. Bring a water bottle.", icsStart:null, icsEnd:null, description:"Modern life places enormous demands on women. Many spend their days caring for others, managing households, working, raising children and carrying responsibilities that leave little time for themselves.\n\nThis class offers a gentle opportunity to slow down, reconnect with the body and create space for rest, reflection and renewal.\n\nThrough gentle movement, stretching, breathing exercises and guided relaxation, participants are supported in releasing physical tension and calming the nervous system.\n\nBenefits include:\n• Reduced stress and feelings of overwhelm\n• Improved sleep quality\n• Relief from physical tension and tightness\n• Improved body awareness\n• Support for emotional wellbeing\n• A greater sense of calm and balance\n• Time to pause and reconnect with oneself\n• Improved ability to manage the demands of everyday life\n\nSessions may also include gentle reminders around gratitude, self-care, reflection and caring for the body.\n\nFor many women, this class becomes a rare opportunity to simply pause, breathe and be present without expectation or pressure.\n\nSuitable for all ages, abilities and fitness levels.\n\nBecause when women are supported, strengthened and given space to care for themselves, they are better able to care for those around them." },
-  { id:"strength", name:"Strength & Conditioning", tagline:"Build strength, build power", day:"TBC — September 2026", time:"TBC", capacity:20, icon:"dumbbell",color:"#1F4A42",
+    whatToBring:"Loose comfortable clothing and grip socks. Bring a water bottle.", icsStart:"20260922T110000", icsEnd:"20260922T114500", description:"Modern life places enormous demands on women. Many spend their days caring for others, managing households, working, raising children and carrying responsibilities that leave little time for themselves.\n\nThis class offers a gentle opportunity to slow down, reconnect with the body and create space for rest, reflection and renewal.\n\nThrough gentle movement, stretching, breathing exercises and guided relaxation, participants are supported in releasing physical tension and calming the nervous system.\n\nBenefits include:\n• Reduced stress and feelings of overwhelm\n• Improved sleep quality\n• Relief from physical tension and tightness\n• Improved body awareness\n• Support for emotional wellbeing\n• A greater sense of calm and balance\n• Time to pause and reconnect with oneself\n• Improved ability to manage the demands of everyday life\n\nSessions may also include gentle reminders around gratitude, self-care, reflection and caring for the body.\n\nFor many women, this class becomes a rare opportunity to simply pause, breathe and be present without expectation or pressure.\n\nSuitable for all ages, abilities and fitness levels.\n\nBecause when women are supported, strengthened and given space to care for themselves, they are better able to care for those around them." },
+  { id:"strength", name:"Strength & Conditioning", tagline:"Build strength, build power", day:"Thursday 24 September 2026", time:"12:00–12:45", capacity:20, icon:"dumbbell",color:"#1F4A42",
     venue:"SCK Fitness, 439 High Road, Leyton, London E10 5EL", venueMap:"https://www.google.com/maps/search/?api=1&query=SCK+Fitness+439+High+Road+Leyton+London+E10+5EL",
-    whatToBring:"Gym clothes and trainers and bring a water bottle.", icsStart:null, icsEnd:null, description:"Strength training is one of the most beneficial forms of exercise for women, particularly as we navigate the demands of motherhood, work and daily life.\n\nThis class focuses on building functional strength, improving mobility and helping women feel stronger and more capable in their everyday activities.\n\nUsing bodyweight exercises, resistance bands and light equipment, sessions are designed to be accessible while still providing an effective workout.\n\nBenefits include:\n• Increased muscle tone and strength\n• Support with sustainable fat loss and body composition goals\n• Improved posture and reduced aches and pains\n• Better balance and stability\n• Increased energy levels\n• Stronger bones and joints\n• Improved confidence in daily movement\n• Support for healthy ageing and long-term wellbeing\n\nRather than focusing on appearance alone, this class encourages women to appreciate what their bodies can do and develop strength that carries into everyday life.\n\nSuitable for all fitness levels and can be adapted to individual needs." },
+    whatToBring:"Gym clothes and trainers and bring a water bottle.", icsStart:"20260924T110000", icsEnd:"20260924T114500", description:"Strength training is one of the most beneficial forms of exercise for women, particularly as we navigate the demands of motherhood, work and daily life.\n\nThis class focuses on building functional strength, improving mobility and helping women feel stronger and more capable in their everyday activities.\n\nUsing bodyweight exercises, resistance bands and light equipment, sessions are designed to be accessible while still providing an effective workout.\n\nBenefits include:\n• Increased muscle tone and strength\n• Support with sustainable fat loss and body composition goals\n• Improved posture and reduced aches and pains\n• Better balance and stability\n• Increased energy levels\n• Stronger bones and joints\n• Improved confidence in daily movement\n• Support for healthy ageing and long-term wellbeing\n\nRather than focusing on appearance alone, this class encourages women to appreciate what their bodies can do and develop strength that carries into everyday life.\n\nSuitable for all fitness levels and can be adapted to individual needs." },
+  { id:"self_defence", name:"Self Defence", tagline:"Intensive 3-week course", day:"October 2026 start", time:"Wednesdays, 12:00–14:00", capacity:20, icon:"shield", color:"#6F596E", bookingKind:"waitlist",
+    venue:"6 Dispensary Lane, London E8 1FT", venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
+    details:["2-hour session each week for 3 weeks", "£90 per person", "Limited spaces available"], description:"Join the waiting list for our intensive three-week self defence course, starting in October." },
 ];
 
 // 2 membership tiers only
@@ -83,8 +86,7 @@ const PILATES_BASE = {
   whatToBring: "Wear comfortable clothes and grip socks",
 };
 const PILATES_SESSIONS = [
-  { id:"pilates_fri", label:"Friday",   day:"TBC — September 2026", time:"TBC", capacity:3, icsStart:null, icsEnd:null },
-  { id:"pilates_thu", label:"Thursday", day:"TBC — September 2026", time:"TBC", capacity:4, icsStart:null, icsEnd:null },
+  { id:"pilates_taster", day:"21–27 September 2026", time:"Exact time will be sent by email", capacity:20, icsStart:null, icsEnd:null },
 ];
 
 const MEMBERSHIP_TIERS = [
@@ -126,8 +128,7 @@ const TASTER_MODE = true;
 // Set to true to stop new taster bookings across every class (existing
 // bookings/cancellations are unaffected — this only blocks NEW bookings).
 // Flip back to false whenever you want to reopen taster bookings.
-const TASTERS_CLOSED = true;
-const PILATES_REDIRECT = "https://backoffice.bsport.io/login/customer?membership=4849&next=%2Fc%2F4849%2Fbooking%2F%26membership%3D4849";
+const TASTERS_CLOSED = false;
 
 /* ===================================================================== */
 
@@ -136,7 +137,7 @@ const TEAL = "#e46478";
 const GOLD = "#C99A4B";
 const BG   = "#f0e8cc";
 
-const ICONS = { music: Music2, flame: Flame, flower: Flower2, dumbbell: Dumbbell, paintbrush: Paintbrush };
+const ICONS = { music: Music2, flame: Flame, flower: Flower2, dumbbell: Dumbbell, paintbrush: Paintbrush, shield: ShieldCheck };
 // Logo points to your actual file: public/7 (1).png
 // The space and parentheses are URL-encoded below, since raw spaces/special
 // characters aren't valid in a URL/path as-is.
@@ -709,10 +710,11 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist }) {
   const spotsLeft = Math.max(cls.capacity - booked, 0);
   const isMember  = bookingType === "membership";
   const isPayg    = bookingType === "payg";
+  const isWaitlist = cls.bookingKind === "waitlist";
   const isBooked  = !!bookingType;
   const isClosed  = TASTER_MODE && TASTERS_CLOSED && !isBooked;
   const showRing  = !isBooked && spotsLeft <= 5;
-  const disabled  = full || isMember || (TASTER_MODE && isBooked) || isClosed;
+  const disabled  = isBooked || (!isWaitlist && (full || isMember || isClosed));
 
   return (
     <div className="bg-white rounded-2xl border border-stone-200 p-5 flex flex-col gap-4 shadow-sm">
@@ -742,17 +744,24 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist }) {
         </a>
       )}
 
+      {cls.details && (
+        <ul className="ff-body text-sm text-stone-600 space-y-1">
+          {cls.details.map(detail => <li key={detail}>• {detail}</li>)}
+        </ul>
+      )}
+
       <div className="flex items-center justify-end pt-2 border-t border-stone-100 mt-auto">
-        <button onClick={() => onBook(cls)} disabled={disabled}
+        <button onClick={() => isWaitlist ? onWaitlist(cls) : onBook(cls)} disabled={disabled}
           className="ff-body inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full transition disabled:cursor-not-allowed"
           style={{
-            backgroundColor: (TASTER_MODE && isBooked) ? "#D4EBD9" : (full || isClosed) ? "#E3DFD3" : TEAL,
-            color: (TASTER_MODE && isBooked) ? "#2D6B40" : (full || isClosed) ? "#8A8478" : "#FFF",
+            backgroundColor: isBooked ? "#D4EBD9" : (!isWaitlist && (full || isClosed)) ? "#E3DFD3" : TEAL,
+            color: isBooked ? "#2D6B40" : (!isWaitlist && (full || isClosed)) ? "#8A8478" : "#FFF",
             opacity: disabled ? 0.85 : 1
           }}>
-          {full ? "Full"
-            : (TASTER_MODE && isBooked) ? "Taster booked"
+          {isBooked ? (isWaitlist ? "On waiting list" : "Taster booked")
+            : (!isWaitlist && full) ? "Full"
             : isClosed ? "Tasters closed"
+            : isWaitlist ? "Join October waiting list"
             : TASTER_MODE ? "Book taster" : "Book"}
           {!disabled && <ArrowRight size={14}/>}
         </button>
@@ -824,24 +833,6 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
   const [bankRef, setBankRef]     = useState("");
   const [error, setError]         = useState("");
 
-  const isPilates = TASTER_MODE && (session.id || "").startsWith("pilates_");
-  const redirectedRef = useRef(false);
-
-  // Show the "you're about to be redirected" notice first (step 2 renders
-  // immediately), then open the Pilates registration page in a new tab a
-  // few seconds later — giving the user time to actually read the notice
-  // before the tab opens. Note: the longer this delay, the more likely some
-  // browsers are to block the new tab as a popup, since it's less tightly
-  // tied to the user's original click — 4s is a reasonable middle ground.
-  useEffect(() => {
-    if (step !== 2 || !isPilates || redirectedRef.current) return;
-    const t = setTimeout(() => {
-      redirectedRef.current = true;
-      window.open(PILATES_REDIRECT, "_blank", "noopener,noreferrer");
-    }, 4000);
-    return () => clearTimeout(t);
-  }, [step, isPilates]);
-
   function toggleClass(id) {
     if (id === session.id) return; // primary class always stays selected
     setSel(prev => prev.includes(id)
@@ -875,9 +866,6 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
           plan: "Taster", amount: 0,
           status: "confirmed", createdAt: new Date().toISOString(),
         });
-        // Open the Pilates registration page shortly after the confirmation
-        // screen appears (handled below in a useEffect) so the user sees the
-        // notice first, rather than the tab opening before they've read it.
         // Send confirmation email with calendar invite (non-blocking)
         callEdgeFunction("send-email", {
           type: "confirm_taster",
@@ -1086,29 +1074,7 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
                 <Check size={26} style={{ color:TEAL }}/>
               </div>
 
-              {isPilates ? (
-                /* ── Pilates: redirect to bsport to complete registration ── */
-                <>
-                  <div>
-                    <h4 className="ff-display text-xl font-semibold" style={{ color:INK }}>Taster booked!</h4>
-                    <p className="ff-body text-sm text-stone-500 mt-1">
-                      Your <strong>{session.name}</strong> taster is confirmed.
-                    </p>
-                  </div>
-                  <div className="w-full rounded-xl px-4 py-4 text-left" style={{ backgroundColor:"#FBF3E3", border:"1px solid #C99A4B" }}>
-                    <p className="ff-body text-sm font-semibold" style={{ color:"#7A5C20" }}>
-                      One more step — complete your registration
-                    </p>
-                    <p className="ff-body text-sm mt-1.5" style={{ color:"#9A7426" }}>
-                      We're about to open our Pilates booking portal in a new tab so you can
-                      sign up or log in there to finalise your place. If it doesn't open,
-                      check your browser's popup settings for this site.
-                    </p>
-                  </div>
-                </>
-              ) : (
-                /* ── Regular taster confirmation ── */
-                <>
+              <>
                   <div>
                     <h4 className="ff-display text-xl font-semibold" style={{ color:INK }}>Taster booked!</h4>
                     <p className="ff-body text-sm text-stone-500 mt-1">
@@ -1147,8 +1113,7 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
                     style={{ backgroundColor:TEAL, color:"#fff" }}>
                     Great, see you there!
                   </button>
-                </>
-              )}
+              </>
             </div>
           )}
 
@@ -1833,7 +1798,7 @@ function TermsPage() {
 }
 
 
-function PilatesCard({ bookedFri, bookedThu, bookingTypeFri, bookingTypeThu, onBook }) {
+function PilatesCard({ booked, bookingType, onBook }) {
   const color = PILATES_BASE.color;
 
   function SessionPanel({ session, booked, bookingType }) {
@@ -1867,9 +1832,8 @@ function PilatesCard({ bookedFri, bookedThu, bookingTypeFri, bookingTypeThu, onB
           <p className="ff-body text-sm text-stone-500">{PILATES_BASE.tagline}</p>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4 mb-3">
-        <SessionPanel session={PILATES_SESSIONS[0]} booked={bookedFri} bookingType={bookingTypeFri}/>
-        <SessionPanel session={PILATES_SESSIONS[1]} booked={bookedThu} bookingType={bookingTypeThu}/>
+      <div className="mb-3">
+        <SessionPanel session={PILATES_SESSIONS[0]} booked={booked} bookingType={bookingType}/>
       </div>
       {PILATES_BASE.venue && (
         <div className="flex justify-center">
@@ -2790,11 +2754,7 @@ export default function App() {
 function BookingApp() {
   const [currentUser, setCurrentUser]       = useState(null);
   const [authLoading, setAuthLoading]       = useState(true);
-  const [tab, setTab]                       = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    const t = params.get("tab");
-    return ["classes","workshops","retreats","studio-hire","bookings","account"].includes(t) ? t : "classes";
-  });
+  const [tab, setTab]                       = useState("classes");
   const [bookings, setBookings]             = useState([]);
   const [loading, setLoading]               = useState(true);
   const [modalSession, setModalSession]     = useState(null);
@@ -2812,6 +2772,7 @@ function BookingApp() {
             await storage.remove("snb_session"); // expired — force re-login
           } else {
             setCurrentUser(s);
+            setTab("classes");
           }
         }
       } catch {}
@@ -2855,6 +2816,7 @@ function BookingApp() {
       && (b.userId===currentUser.id || b.email===currentUser.email));
     if (!b) return null;
     const plan = (b.plan || "").toLowerCase();
+    if (plan.includes("waitlist")) return "waitlist";
     if (plan.includes("membership") || plan.includes("taster")) return "membership";
     return "payg";
   }
@@ -2887,7 +2849,7 @@ function BookingApp() {
   );
 
   // Not logged in — show registration / login
-  if (!currentUser) return <AuthScreen onAuth={s => { setCurrentUser(s); }}/>;
+  if (!currentUser) return <AuthScreen onAuth={s => { setCurrentUser(s); setTab("classes"); }}/>;
 
   return (
     <div className="min-h-screen w-full" style={{ backgroundColor:BG }}>
@@ -2940,27 +2902,17 @@ function BookingApp() {
                     </button>
                   </div>
                 )}
-                {TASTER_MODE && TASTERS_CLOSED && (
-                  <div className="rounded-xl px-4 py-3 mb-4 flex items-center gap-2.5" style={{ backgroundColor:"#F3E7E5", border:"1px solid #E3C4BE" }}>
-                    <Bell size={15} style={{ color:"#9B3A2E" }}/>
-                    <p className="ff-body text-sm" style={{ color:"#9B3A2E" }}>
-                      Taster sessions are currently closed for new bookings. Check back soon!
-                    </p>
-                  </div>
-                )}
                 <div className="grid sm:grid-cols-2 gap-4">
                   {DEFAULT_CLASSES.map(cls => (
                     <ClassCard key={cls.id} cls={cls} booked={bookedCount(cls.id)}
                       bookingType={getUserBookingType(cls.id)}
                       onBook={() => { setModalSession(cls); setModalType("class"); }}
-                      onWaitlist={TASTER_MODE ? null : joinWaitlist}/>
+                      onWaitlist={joinWaitlist}/>
                   ))}
                 </div>
                 <PilatesCard
-                  bookedFri={bookedCount("pilates_fri")}
-                  bookedThu={bookedCount("pilates_thu")}
-                  bookingTypeFri={getUserBookingType("pilates_fri")}
-                  bookingTypeThu={getUserBookingType("pilates_thu")}
+                  booked={bookedCount("pilates_taster")}
+                  bookingType={getUserBookingType("pilates_taster")}
                   onBook={session => { setModalSession(session); setModalType("class"); }}/>
               </>
             : tab==="workshops"
