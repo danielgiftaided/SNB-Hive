@@ -1800,53 +1800,112 @@ function TermsPage() {
 
 function PilatesCard({ booked, bookingType, onBook }) {
   const color = PILATES_BASE.color;
+  const session = PILATES_SESSIONS[0];
 
-  function SessionPanel({ session, booked, bookingType }) {
-    const isBooked = bookingType === "membership";
-    const full = booked >= session.capacity;
-    const isClosed = TASTER_MODE && TASTERS_CLOSED && !isBooked;
-    const disabled = full || isBooked || isClosed;
-    return (
-      <div className="border border-stone-100 rounded-xl p-4 flex flex-col items-center text-center gap-3">
-        <div className="flex flex-wrap justify-center gap-1.5">
-          <Pill icon={Calendar}>{session.day}</Pill>
-          <Pill icon={Clock}>{session.time}</Pill>
-        </div>
-        <button onClick={() => !disabled && onBook({...PILATES_BASE, ...session})} disabled={disabled}
-          className="ff-body w-full text-sm font-semibold py-2 rounded-full transition disabled:cursor-not-allowed mt-auto"
-          style={{ backgroundColor: isBooked ? "#D4EBD9" : (full || isClosed) ? "#E3DFD3" : TEAL, color: isBooked ? "#2D6B40" : (full || isClosed) ? "#8A8478" : "#FFF" }}>
-          {full ? "Full" : isBooked ? "Taster booked" : isClosed ? "Tasters closed" : "Book taster"}
-        </button>
-      </div>
-    );
-  }
+  const isBooked = bookingType === "membership";
+  const full = booked >= session.capacity;
+  const isClosed =
+    TASTER_MODE &&
+    TASTERS_CLOSED &&
+    !isBooked;
+
+  const disabled =
+    full ||
+    isBooked ||
+    isClosed;
 
   return (
-    <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm mt-4">
-      <div className="flex flex-col items-center text-center gap-2 mb-4">
-        <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ backgroundColor: color+"1A" }}>
-          <Sparkles size={20} style={{ color }}/>
+    <div className="bg-white rounded-2xl border border-stone-200 p-5 flex flex-col gap-4 shadow-sm">
+      <div className="flex items-start gap-3">
+        <div
+          className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
+          style={{
+            backgroundColor: color + "1A",
+          }}
+        >
+          <Sparkles
+            size={20}
+            style={{ color }}
+          />
         </div>
+
         <div>
-          <h3 className="ff-display text-lg font-semibold" style={{ color: INK }}>{PILATES_BASE.name}</h3>
-          <p className="ff-body text-sm text-stone-500">{PILATES_BASE.tagline}</p>
+          <h3
+            className="ff-display text-lg font-semibold"
+            style={{ color: INK }}
+          >
+            {PILATES_BASE.name}
+          </h3>
+
+          <p className="ff-body text-sm text-stone-500">
+            {PILATES_BASE.tagline}
+          </p>
         </div>
       </div>
-      <div className="mb-3">
-        <SessionPanel session={PILATES_SESSIONS[0]} booked={booked} bookingType={bookingType}/>
+
+      <div className="flex flex-wrap gap-2">
+        <Pill icon={Calendar}>
+          {session.day}
+        </Pill>
+
+        <Pill icon={Clock}>
+          {session.time}
+        </Pill>
       </div>
+
       {PILATES_BASE.venue && (
-        <div className="flex justify-center">
-          <a href={PILATES_BASE.venueMap} target="_blank" rel="noopener noreferrer"
-            className="ff-body inline-flex items-center gap-1.5 text-xs text-stone-400 hover:text-stone-600 transition mb-1">
-            <MapPin size={11}/> {PILATES_BASE.venue}
-          </a>
-        </div>
+        <a
+          href={PILATES_BASE.venueMap}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="ff-body inline-flex items-center gap-1.5 text-xs text-stone-400 hover:text-stone-600 transition -mt-1"
+        >
+          <MapPin size={11}/>
+          {PILATES_BASE.venue}
+        </a>
       )}
+
+      <div className="flex items-center justify-end pt-2 border-t border-stone-100 mt-auto">
+        <button
+          onClick={() => {
+            if (!disabled) {
+              onBook({
+                ...PILATES_BASE,
+                ...session,
+              });
+            }
+          }}
+          disabled={disabled}
+          className="ff-body inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full transition disabled:cursor-not-allowed"
+          style={{
+            backgroundColor: isBooked
+              ? "#D4EBD9"
+              : full || isClosed
+                ? "#E3DFD3"
+                : TEAL,
+            color: isBooked
+              ? "#2D6B40"
+              : full || isClosed
+                ? "#8A8478"
+                : "#FFF",
+          }}
+        >
+          {full
+            ? "Full"
+            : isBooked
+              ? "Taster booked"
+              : isClosed
+                ? "Tasters closed"
+                : "Book taster"}
+
+          {!disabled && (
+            <ArrowRight size={14}/>
+          )}
+        </button>
+      </div>
     </div>
   );
 }
-
 function ComingSoon() {
   return (
     <div className="max-w-lg mx-auto flex flex-col gap-5 py-4">
@@ -2903,17 +2962,50 @@ function BookingApp() {
                   </div>
                 )}
                 <div className="grid sm:grid-cols-2 gap-4">
-                  {DEFAULT_CLASSES.map(cls => (
-                    <ClassCard key={cls.id} cls={cls} booked={bookedCount(cls.id)}
-                      bookingType={getUserBookingType(cls.id)}
-                      onBook={() => { setModalSession(cls); setModalType("class"); }}
-                      onWaitlist={joinWaitlist}/>
-                  ))}
-                </div>
-                <PilatesCard
-                  booked={bookedCount("pilates_taster")}
-                  bookingType={getUserBookingType("pilates_taster")}
-                  onBook={session => { setModalSession(session); setModalType("class"); }}/>
+  {/* Show all ordinary classes first */}
+  {DEFAULT_CLASSES
+    .filter(cls => cls.id !== "self_defence")
+    .map(cls => (
+      <ClassCard
+        key={cls.id}
+        cls={cls}
+        booked={bookedCount(cls.id)}
+        bookingType={getUserBookingType(cls.id)}
+        onBook={() => {
+          setModalSession(cls);
+          setModalType("class");
+        }}
+        onWaitlist={joinWaitlist}
+      />
+    ))}
+
+  {/* Pilates comes immediately before Self Defence */}
+  <PilatesCard
+    booked={bookedCount("pilates_taster")}
+    bookingType={getUserBookingType("pilates_taster")}
+    onBook={session => {
+      setModalSession(session);
+      setModalType("class");
+    }}
+  />
+
+  {/* Self Defence comes immediately after Pilates */}
+  {DEFAULT_CLASSES
+    .filter(cls => cls.id === "self_defence")
+    .map(cls => (
+      <ClassCard
+        key={cls.id}
+        cls={cls}
+        booked={bookedCount(cls.id)}
+        bookingType={getUserBookingType(cls.id)}
+        onBook={() => {
+          setModalSession(cls);
+          setModalType("class");
+        }}
+        onWaitlist={joinWaitlist}
+      />
+    ))}
+</div>
               </>
             : tab==="workshops"
             ? <>
