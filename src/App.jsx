@@ -36,28 +36,7 @@ const OPEN_DAY = {
 // ── Workshops ────────────────────────────────────────────────────────────
 // Each workshop is a one-off event (not recurring like classes). Set
 // enabled to false once the event has passed, same pattern as OPEN_DAY.
-const WORKSHOPS = [
-  {
-    id: "tote-ally-social",
-    enabled: true,
-    name: "Tote-ally Social",
-    tagline: "Tote bag painting workshop",
-    description: "Get creative and paint your own unique tote bag in a fun, relaxed women-only setting. No artistic experience needed — just come along, socialise, and take home something you've made yourself.",
-    date: "Saturday 26th September 2026",
-    time: "14:00 – 16:00",
-    price: 29,
-    capacity: 20,
-    venue: "6 Dispensary Lane, London E8 1FT",
-    venueMap: "https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
-    whatToBring: "Wear something you don't mind getting a little paint on",
-    icsStart: "20260926T130000",
-    icsEnd: "20260926T150000",
-    color: "#B47D6D",
-    icon: "paintbrush",
-    allowGuests: true,
-    maxGuests: 3,
-  },
-];
+const WORKSHOPS = [];
 
 const DEFAULT_CLASSES = [
   { id:"zumba",    name:"Zumba",                  tagline:"High-energy dance cardio",  day:"Friday 25 September 2026", time:"12:00–12:45", capacity:20, icon:"music",   color:"#C99A4B",
