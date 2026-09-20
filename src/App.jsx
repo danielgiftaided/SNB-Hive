@@ -707,67 +707,143 @@ function AuthScreen({ onAuth }) {
 function ClassCard({ cls, booked, onBook, bookingType, onWaitlist }) {
   const Icon = ICONS[cls.icon] || Sparkles;
   const full = booked >= cls.capacity;
-  const isMember  = bookingType === "membership";
-  const isPayg    = bookingType === "payg";
+  const isMember = bookingType === "membership";
   const isWaitlist = cls.bookingKind === "waitlist";
-  const isBooked  = !!bookingType;
-  const isClosed  = TASTER_MODE && TASTERS_CLOSED && !isBooked;
-  const showRing  = !isBooked && spotsLeft <= 5;
-  const disabled  = isBooked || (!isWaitlist && (full || isMember || isClosed));
+  const isBooked = !!bookingType;
+  const isClosed =
+    TASTER_MODE &&
+    TASTERS_CLOSED &&
+    !isBooked;
+
+  const disabled =
+    isBooked ||
+    (
+      !isWaitlist &&
+      (
+        full ||
+        isMember ||
+        isClosed
+      )
+    );
 
   return (
     <div className="bg-white rounded-2xl border border-stone-200 p-5 flex flex-col gap-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor:cls.color+"1A" }}>
-            <Icon size={20} style={{ color:cls.color }}/>
+          <div
+            className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
+            style={{
+              backgroundColor: cls.color + "1A",
+            }}
+          >
+            <Icon
+              size={20}
+              style={{ color: cls.color }}
+            />
           </div>
+
           <div>
-            <h3 className="ff-display text-lg font-semibold" style={{ color:INK }}>{cls.name}</h3>
-            <p className="ff-body text-sm text-stone-500">{cls.tagline}</p>
+            <h3
+              className="ff-display text-lg font-semibold"
+              style={{ color: INK }}
+            >
+              {cls.name}
+            </h3>
+
+            <p className="ff-body text-sm text-stone-500">
+              {cls.tagline}
+            </p>
           </div>
         </div>
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Pill icon={Calendar}>{cls.day}</Pill>
-        <Pill icon={Clock}>{cls.time}</Pill>
-        {isMember && !TASTER_MODE && <Pill icon={Check}><span style={{ color:TEAL }}>Member</span></Pill>}
+        <Pill icon={Calendar}>
+          {cls.day}
+        </Pill>
+
+        <Pill icon={Clock}>
+          {cls.time}
+        </Pill>
+
+        {isMember && !TASTER_MODE && (
+          <Pill icon={Check}>
+            <span style={{ color: TEAL }}>
+              Member
+            </span>
+          </Pill>
+        )}
       </div>
 
       {cls.venue && (
-        <a href={cls.venueMap} target="_blank" rel="noopener noreferrer"
-          className="ff-body inline-flex items-center gap-1.5 text-xs text-stone-400 hover:text-stone-600 transition -mt-1">
-          <MapPin size={11}/> {cls.venue}
+        <a
+          href={cls.venueMap}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="ff-body inline-flex items-center gap-1.5 text-xs text-stone-400 hover:text-stone-600 transition -mt-1"
+        >
+          <MapPin size={11}/>
+          {cls.venue}
         </a>
       )}
 
       {cls.details && (
         <ul className="ff-body text-sm text-stone-600 space-y-1">
-          {cls.details.map(detail => <li key={detail}>• {detail}</li>)}
+          {cls.details.map(detail => (
+            <li key={detail}>
+              • {detail}
+            </li>
+          ))}
         </ul>
       )}
 
       <div className="flex items-center justify-end pt-2 border-t border-stone-100 mt-auto">
-        <button onClick={() => isWaitlist ? onWaitlist(cls) : onBook(cls)} disabled={disabled}
+        <button
+          onClick={() => {
+            if (isWaitlist) {
+              onWaitlist(cls);
+            } else {
+              onBook(cls);
+            }
+          }}
+          disabled={disabled}
           className="ff-body inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full transition disabled:cursor-not-allowed"
           style={{
-            backgroundColor: isBooked ? "#D4EBD9" : (!isWaitlist && (full || isClosed)) ? "#E3DFD3" : TEAL,
-            color: isBooked ? "#2D6B40" : (!isWaitlist && (full || isClosed)) ? "#8A8478" : "#FFF",
-            opacity: disabled ? 0.85 : 1
-          }}>
-          {isBooked ? (isWaitlist ? "On waiting list" : "Taster booked")
-            : (!isWaitlist && full) ? "Full"
-            : isClosed ? "Tasters closed"
-            : isWaitlist ? "Join October waiting list"
-            : TASTER_MODE ? "Book taster" : "Book"}
-          {!disabled && <ArrowRight size={14}/>}
+            backgroundColor: isBooked
+              ? "#D4EBD9"
+              : !isWaitlist && (full || isClosed)
+                ? "#E3DFD3"
+                : TEAL,
+            color: isBooked
+              ? "#2D6B40"
+              : !isWaitlist && (full || isClosed)
+                ? "#8A8478"
+                : "#FFF",
+            opacity: disabled ? 0.85 : 1,
+          }}
+        >
+          {isBooked
+            ? isWaitlist
+              ? "On waiting list"
+              : "Taster booked"
+            : !isWaitlist && full
+              ? "Full"
+              : isClosed
+                ? "Tasters closed"
+                : isWaitlist
+                  ? "Join October waiting list"
+                  : TASTER_MODE
+                    ? "Book taster"
+                    : "Book"}
+
+          {!disabled && (
+            <ArrowRight size={14}/>
+          )}
         </button>
       </div>
     </div>
   );
 }
-
 /* ---- RETREAT CARD — same capacity ring logic ---- */
 
 function RetreatCard({ retreat, booked, onBook, isSignedUp }) {
