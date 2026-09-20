@@ -86,7 +86,7 @@ const PILATES_BASE = {
   whatToBring: "Wear comfortable clothes and grip socks",
 };
 const PILATES_SESSIONS = [
-  { id:"pilates_taster", day:"21–27 September 2026", time:"Exact time will be sent by email", capacity:20, icsStart:null, icsEnd:null },
+  { id:"pilates_taster", day:"21–27 September 2026", time:"Exact time will be sent by email", capacity:20, fullyBooked:true, icsStart:null, icsEnd:null },
 ];
 
 const MEMBERSHIP_TIERS = [
@@ -1803,7 +1803,7 @@ function PilatesCard({ booked, bookingType, onBook }) {
   const session = PILATES_SESSIONS[0];
 
   const isBooked = bookingType === "membership";
-  const full = booked >= session.capacity;
+  const full = session.fullyBooked || booked >= session.capacity;
   const isClosed =
     TASTER_MODE &&
     TASTERS_CLOSED &&
@@ -1891,7 +1891,7 @@ function PilatesCard({ booked, bookingType, onBook }) {
           }}
         >
           {full
-            ? "Full"
+            ? "Fully Booked"
             : isBooked
               ? "Taster booked"
               : isClosed
