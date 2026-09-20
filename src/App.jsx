@@ -707,7 +707,6 @@ function AuthScreen({ onAuth }) {
 function ClassCard({ cls, booked, onBook, bookingType, onWaitlist }) {
   const Icon = ICONS[cls.icon] || Sparkles;
   const full = booked >= cls.capacity;
-  const spotsLeft = Math.max(cls.capacity - booked, 0);
   const isMember  = bookingType === "membership";
   const isPayg    = bookingType === "payg";
   const isWaitlist = cls.bookingKind === "waitlist";
@@ -728,7 +727,6 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist }) {
             <p className="ff-body text-sm text-stone-500">{cls.tagline}</p>
           </div>
         </div>
-        {showRing && <CapacityRing booked={booked} capacity={cls.capacity} color={cls.color}/>}
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -1176,7 +1174,6 @@ function WorkshopCard({ workshop, booked, isBooked, onBook }) {
   const Icon = ICONS[workshop.icon] || Paintbrush;
   const full = booked >= workshop.capacity;
   const spotsLeft = Math.max(workshop.capacity - booked, 0);
-  const showRing = !isBooked && spotsLeft <= 5;
   const disabled = full || isBooked;
 
   return (
