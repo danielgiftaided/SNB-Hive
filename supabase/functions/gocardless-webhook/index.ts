@@ -1,6 +1,21 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
 const GC_API = Deno.env.get("GOCARDLESS_API_URL") || "https://api.gocardless.com";
+
+async function confirmBooking(id: string) {
+  const url = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !serviceKey) throw new Error("Supabase function environment is not configured");
+  const response = await fetch(`${url}/rest/v1/bookings?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: {
+      apikey: serviceKey,
+      Authorization: `Bearer ${serviceKey}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify({ status: "confirmed" }),
+  });
+  if (!response.ok) throw new Error("Booking status update failed");
+}
 
 function hex(bytes: ArrayBuffer) {
   return [...new Uint8Array(bytes)].map(value => value.toString(16).padStart(2, "0")).join("");
@@ -47,11 +62,6 @@ Deno.serve(async request => {
 
   try {
     const payload = JSON.parse(rawBody);
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-
     for (const event of payload.events || []) {
       if (event.resource_type !== "billing_requests" || event.action !== "fulfilled") continue;
       const billingRequestId = event.links?.billing_request;
@@ -79,8 +89,7 @@ Deno.serve(async request => {
         });
       }
 
-      const { error } = await supabase.from("bookings").update({ status: "confirmed" }).eq("id", bookingId);
-      if (error) throw error;
+      await confirmBooking(bookingId);
     }
     return new Response("ok", { status: 200 });
   } catch (error) {

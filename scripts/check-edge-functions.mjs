@@ -8,7 +8,9 @@ const functions = [
 let failed = false;
 for (const file of functions) {
   const source = await readFile(file, "utf8");
-  const remoteImport = source.match(/(?:from\s+|import\s*)["']https?:\/\//);
+  const remoteImport = source.match(
+    /(?:\b(?:from|import)\s*|\bimport\s*\(\s*)["']https?:\/\//,
+  );
   if (remoteImport) {
     console.error(`FAIL ${file}: remote URL import found; Supabase may need DNS access to bundle it.`);
     failed = true;
