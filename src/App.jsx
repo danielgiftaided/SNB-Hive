@@ -1524,7 +1524,7 @@ function MyBookings({ bookings, currentUser, onCancel }) {
                   <span className="font-semibold text-sm" style={{ color: INK }}>{b.sessionName}</span>
                   <StatusBadge status={b.status}/>
                 </div>
-                {cls && <p className="text-xs text-stone-500 mt-1">{cls.day} · {cls.time}</p>}
+                {cls?.day && cls?.time && <p className="text-xs text-stone-500 mt-1">{cls.day} · {cls.time}</p>}
                 {cls?.venue && (
                   <a href={cls.venueMap} target="_blank" rel="noopener noreferrer"
                     className="ff-body flex w-fit items-center gap-1 text-xs text-stone-400 hover:text-stone-600 hover:underline mt-1 transition">
@@ -2631,7 +2631,7 @@ function AdminPage() {
         <div className="flex gap-1 bg-stone-100 rounded-full p-1 w-fit">
           {[["bookings","Bookings"],["members","Members"],["classes","Classes"],["studio-hire","Studio Hire"]].map(([key, label]) => {
             const count = key==="members" ? members.length
-              : key==="classes" ? DEFAULT_CLASSES.length + PILATES_SESSIONS.length
+              : key==="classes" ? DEFAULT_CLASSES.length
               : key==="studio-hire" ? enquiries.length
               : bookings.filter(b=>b.status!=="cancelled").length;
             return (
@@ -2812,12 +2812,6 @@ function AdminPage() {
         {adminTab === "classes" && (
           <div className="grid sm:grid-cols-2 gap-4">
             {DEFAULT_CLASSES.map(cls => <AdminClassCard key={cls.id} cls={cls} bookings={bookings}/>)}
-            {PILATES_SESSIONS.map(s => (
-              <AdminClassCard key={s.id} bookings={bookings} cls={{
-                id: s.id, name: `Pilates — ${s.label}`, day: s.day, time: s.time,
-                capacity: s.capacity, icon: "sparkles", color: PILATES_BASE.color,
-              }}/>
-            ))}
           </div>
         )}
 
