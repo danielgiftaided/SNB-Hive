@@ -50,12 +50,39 @@ async function gc(path: string, body: unknown) {
   return result;
 }
 
-function allowedRedirect(value: string, requestOrigin: string | null) {
-  const url = new URL(value);
-  const configuredOrigin = Deno.env.get("APP_URL");
-  const origins = configuredOrigin ? [configuredOrigin] : [requestOrigin].filter(Boolean);
-  if (url.protocol !== "https:" && url.hostname !== "localhost") throw new Error("Invalid redirect URL");
-  if (origins.length && !origins.includes(url.origin)) throw new Error("Invalid redirect origin");
+function configuredAppOrigin() {
+  const configuredUrl = Deno.env.get("APP_URL")?.trim();
+  if (!configuredUrl) {
+    throw new Error("Invalid APP_URL: set it to the customer-facing production origin");
+  }
+
+  try {
+    const url = new URL(configuredUrl);
+    if (url.protocol !== "https:" && url.hostname !== "localhost") throw new Error();
+    return url.origin;
+  } catch {
+    throw new Error("Invalid APP_URL: set it to a valid https origin");
+  }
+}
+
+function allowedRedirect(value: unknown, expectedOrigin: string, requestOrigin: string | null) {
+  let url: URL;
+  try {
+    if (typeof value !== "string") throw new Error();
+    url = new URL(value);
+    if (url.protocol !== "https:" && url.hostname !== "localhost") throw new Error();
+  } catch {
+    throw new Error("Invalid redirect URL");
+  }
+
+  if (url.origin !== expectedOrigin) {
+    console.warn("Redirect origin mismatch", {
+      expected_origin: expectedOrigin,
+      received_origin: url.origin,
+      request_origin: requestOrigin,
+    });
+    throw new Error(`Invalid redirect origin: expected ${expectedOrigin}, received ${url.origin}`);
+  }
   return url.toString();
 }
 
@@ -76,6 +103,14 @@ Deno.serve(async request => {
       return json({ error: "Booking could not be verified" }, 400);
     }
 
+    // Validate both browser-provided redirects against the configured public
+    // origin before creating anything in GoCardless. The request Origin header
+    // is diagnostic only and is never trusted as an allow-list entry.
+    const expectedOrigin = configuredAppOrigin();
+    const requestOrigin = request.headers.get("origin");
+    const redirectUri = allowedRedirect(return_url, expectedOrigin, requestOrigin);
+    const exitUri = allowedRedirect(exit_url, expectedOrigin, requestOrigin);
+
     const metadata = { booking_id, payment_plan: plan, session_id: "zumba" };
     const requestBody = plan === "payg"
       ? {
@@ -90,11 +125,10 @@ Deno.serve(async request => {
       : { mandate_request: { scheme: "bacs" }, metadata };
 
     const billingRequest = await gc("/billing_requests", { billing_requests: requestBody });
-    const origin = request.headers.get("origin");
     const flow = await gc("/billing_request_flows", {
       billing_request_flows: {
-        redirect_uri: allowedRedirect(return_url, origin),
-        exit_uri: allowedRedirect(exit_url, origin),
+        redirect_uri: redirectUri,
+        exit_uri: exitUri,
         links: { billing_request: billingRequest.billing_requests.id },
       },
     });
