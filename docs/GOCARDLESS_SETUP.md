@@ -37,7 +37,7 @@ Have these ready before running any commands:
 | Value | Where it comes from | Example |
 |---|---|---|
 | Supabase project reference | Supabase dashboard URL or **Project Settings → General** | `abcdefghijklmnop` |
-| Public app origin | The deployed Vercel/custom-domain URL, without a trailing slash | `https://book.snbhive.com` |
+| Public app origin | The production/custom-domain origin customers actually visit | `https://book.snbhive.com` |
 | GoCardless access token | GoCardless sandbox dashboard, under **Developers → Access tokens** | Keep secret |
 | GoCardless webhook secret | Created in step 4 below | Keep secret |
 
@@ -125,8 +125,11 @@ npx supabase secrets set \
   APP_URL='https://YOUR-LIVE-DOMAIN'
 ```
 
-`APP_URL` must be only the origin: include `https://`, do not add a path, and
-do not add a trailing slash.
+`APP_URL` must be the exact customer-facing production/custom-domain origin:
+include `https://`, do not add a page path or query string, and match the
+hostname exactly (including `www` versus non-`www`). Do not use a temporary
+Vercel preview URL. A trailing slash or harmless surrounding whitespace is
+normalized by the function.
 
 ## 4. Deploy the functions and register the webhook
 
@@ -252,8 +255,10 @@ create a second subscription for the same booking.
 ### Checkout does not open and the booking popup shows an error
 
 The popup now shows the safe reason returned by `gocardless-checkout`. Copy
-that reason (for example, `Invalid redirect origin`, `Booking lookup failed`,
-or `GoCardless is not configured`) when asking for help.
+that reason (for example, `Invalid redirect origin: expected
+https://book.snbhive.com, received https://www.snbhive.com`, `Booking lookup
+failed`, or `GoCardless is not configured`) when asking for help. The origins
+are public URLs; the message does not contain credentials.
 
 To find the matching server-side diagnostic:
 
@@ -261,6 +266,8 @@ To find the matching server-side diagnostic:
 2. Retry **Continue to payment** once, then refresh the logs.
 3. Open the newest entry at the same time as the retry. A failed database
    lookup includes the booking reference, HTTP status, and Supabase response.
+   An origin mismatch includes `expected_origin`, `received_origin`, and
+   `request_origin`; it does not include request authorization headers.
 4. Share only the popup reason and that log entry after removing personal
    information. Never share access tokens, webhook secrets, service-role keys,
    database passwords, or `Authorization` headers.
@@ -277,7 +284,9 @@ Common causes are:
 | Symptom | Check |
 |---|---|
 | `GoCardless is not configured` | `GOCARDLESS_ACCESS_TOKEN` is missing from Supabase secrets. |
-| `Invalid redirect origin` | `APP_URL` does not exactly match the address in the browser. Check `https`, `www`, and trailing slash. |
+| `Invalid redirect origin: expected …, received …` | Compare the two public origins. Set `APP_URL` to the received origin only when it is the intended production/customer-facing domain. Check `https` and `www`; never allow-list a random preview domain just to bypass the check. |
+| `Invalid redirect URL` | The app sent a missing or malformed return/exit URL. Confirm Vercel deployed the latest merged frontend commit and hard-refresh the production site. |
+| `Invalid APP_URL: …` | Set `APP_URL` to the valid `https://` production/customer-facing origin, then redeploy checkout. |
 | `Booking could not be verified` | The saved booking is not Zumba, is no longer pending, or its amount does not match £10/£35. |
 | Webhook shows `Invalid signature` | The secret belongs to a different endpoint/environment or was copied incorrectly. |
 | Booking stays at **Awaiting payment** | Check the webhook endpoint delivery in GoCardless, then inspect `gocardless-webhook` logs. |
