@@ -1,1222 +1,3122 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>SNB Hive — Women's Fitness & Wellness</title>
-<meta property="og:title" content="SNB Hive — Women's Fitness &amp; Wellness" />
-<meta property="og:description" content="A women-only wellness community in Hackney. Fitness classes, retreats, and studio hire." />
-<meta property="og:image" content="https://snbhive.com/hero-photo-candidate.jpg" />
-<meta property="og:type" content="website" />
-<meta property="og:url" content="https://snbhive.com/" />
-<meta name="twitter:card" content="summary_large_image" />
-<meta name="description" content="A women-only wellness community in Hackney. Fitness classes, retreats, and studio hire." />
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+import { useState, useEffect, useCallback, useRef } from "react";
+import {
+  Calendar, MapPin, Clock, Check, X, ArrowRight, ChevronLeft,
+  Loader2, Sparkles, RotateCcw, Music2, Flame, Dumbbell, Flower2,
+  ShieldCheck, Search, ArrowUpRight, Lock, Download, Eye, EyeOff, LogOut,
+  Banknote, Hourglass, Ban, Undo2, LayoutDashboard, Mail, Send, Bell,
+  Paintbrush, UserPlus, Trash2
+} from "lucide-react";
+import storage, { supabase } from "./storage.js";
 
-<style>
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+/* =====================================================================
+   CONFIG — edit these to customise the app.
+   Swap STRIPE_LINKS values for your real Stripe Payment Link URLs.
+   Admin login now uses real email+password+MFA (see AdminPage) rather
+   than a hardcoded passcode — set up your admin account via
+   generate-admin-hash.mjs, see the accompanying setup notes.
+   ===================================================================== */
+
+const BRAND = {
+  name: "SNB Hive",
+  tagline: "Women's Fitness and Wellness Classes & Retreats",
+};
+
+// ── Studio Open Day ──────────────────────────────────────────────
+// Shown as a one-time popup after login (once per browser session) and as
+// a persistent banner on the dashboard, both linking through to the
+// existing Studio Hire enquiry form. Set ENABLED to false to turn off
+// both the popup and the banner once the event has passed.
+const OPEN_DAY = {
+  enabled: false, // event has passed — flip back to true and update details for a future one
+  title: "Studio Open Day",
+  dates: "15th August 2026, 13:00–16:00",
+  blurb: "Thinking about hiring our studio? Come see the space for yourself — we're opening our doors to instructors and practitioners.",
+};
+
+// ── Workshops ────────────────────────────────────────────────────────────
+// Each workshop is a one-off event (not recurring like classes). Set
+// enabled to false once the event has passed, same pattern as OPEN_DAY.
+const WORKSHOPS = [];
+
+const DEFAULT_CLASSES = [
+  { id:"zumba",    name:"Zumba",                  tagline:"High-energy dance cardio",  day:"Friday 25 September 2026", time:"12:00–12:45", capacity:20, icon:"music",   color:"#C99A4B", tasterStatus:"tbc",
+    venue:"6 Dispensary Lane, London E8 1FT",              venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
+    whatToBring:"Wear comfortable clothes and grip socks", icsStart:"20260925T110000", icsEnd:"20260925T114500", description:"Zumba is about much more than fitness. It's about community, confidence, and feeling good. Dance has been shown to support memory, coordination, and emotional wellbeing, and music and dance can help get through some of the most challenging times in life.\n\nIt has the power to bring people together, lift spirits, and remind us that exercise doesn't have to feel like a chore — it can be something you genuinely look forward to.\n\nZumba is based on repetitive movements throughout each song, so you don't need to be an experienced dancer or technically advanced to join in. It's all about having fun while getting fit.\n\nThe routines are repeated for about 6 weeks, which allows people to learn the moves and build their confidence and then new routines are introduced gradually over time. That repetition helps build confidence because your body begins to associate the movements with the music, allowing you to learn naturally without pressure. It's a welcoming, supportive environment." },
+  { id:"boxing",   name:"Boxing",                  tagline:"Pad work, Co-ordination",   day:"Monday 21 September 2026", time:"13:30–14:15", capacity:20, icon:"flame",   color:"#9B5B45", tasterStatus:"tbc",
+    venue:"SCK Fitness, 439 High Road, Leyton, London E10 5EL", venueMap:"https://www.google.com/maps/search/?api=1&query=SCK+Fitness+439+High+Road+Leyton+London+E10+5EL",
+    whatToBring:"Wear comfortable workout clothes and trainers. Bring a water bottle", icsStart:"20260921T123000", icsEnd:"20260921T131500", description:"Boxing is one of the most effective full-body workouts, combining cardiovascular fitness, strength, coordination and stress relief in a fun and empowering way.\n\nThis class is not about fighting or competition. Instead, it uses boxing drills, pad work and fitness exercises to help women improve their health, build confidence and enjoy movement in a supportive environment.\n\nBenefits include:\n• Increased calorie burn and support with weight loss goals\n• Improved cardiovascular fitness and stamina\n• Increased confidence and self-belief\n• A healthy outlet for stress and frustration\n• Improved coordination and balance\n• Stronger core and full-body conditioning\n• Improved mood and mental wellbeing\n\nMany women find boxing incredibly empowering because it allows them to release stress, develop resilience and discover strengths they never knew they had.\n\nSuitable for beginners and all fitness levels." },
+  { id:"somatic",  name:"Somatic",                 tagline:"Move, breathe, reconnect",  day:"Tuesday 22 September 2026", time:"12:00–12:45", capacity:20, icon:"flower",  color:"#7C9885", tasterStatus:"tbc",
+    venue:"6 Dispensary Lane, London E8 1FT",              venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
+    whatToBring:"Loose comfortable clothing and grip socks. Bring a water bottle.", icsStart:"20260922T110000", icsEnd:"20260922T114500", description:"Modern life places enormous demands on women. Many spend their days caring for others, managing households, working, raising children and carrying responsibilities that leave little time for themselves.\n\nThis class offers a gentle opportunity to slow down, reconnect with the body and create space for rest, reflection and renewal.\n\nThrough gentle movement, stretching, breathing exercises and guided relaxation, participants are supported in releasing physical tension and calming the nervous system.\n\nBenefits include:\n• Reduced stress and feelings of overwhelm\n• Improved sleep quality\n• Relief from physical tension and tightness\n• Improved body awareness\n• Support for emotional wellbeing\n• A greater sense of calm and balance\n• Time to pause and reconnect with oneself\n• Improved ability to manage the demands of everyday life\n\nSessions may also include gentle reminders around gratitude, self-care, reflection and caring for the body.\n\nFor many women, this class becomes a rare opportunity to simply pause, breathe and be present without expectation or pressure.\n\nSuitable for all ages, abilities and fitness levels.\n\nBecause when women are supported, strengthened and given space to care for themselves, they are better able to care for those around them." },
+  { id:"strength", name:"Strength & Conditioning", tagline:"Build strength, build power", day:"Thursday 24 September 2026", time:"12:00–12:45", capacity:20, icon:"dumbbell",color:"#1F4A42", tasterStatus:"tbc", 
+    venue:"6 Dispensary Lane, London E8 1FT", venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
+    whatToBring:"Gym clothes and trainers and bring a water bottle.", icsStart:"20260924T110000", icsEnd:"20260924T114500", description:"Strength training is one of the most beneficial forms of exercise for women, particularly as we navigate the demands of motherhood, work and daily life.\n\nThis class focuses on building functional strength, improving mobility and helping women feel stronger and more capable in their everyday activities.\n\nUsing bodyweight exercises, resistance bands and light equipment, sessions are designed to be accessible while still providing an effective workout.\n\nBenefits include:\n• Increased muscle tone and strength\n• Support with sustainable fat loss and body composition goals\n• Improved posture and reduced aches and pains\n• Better balance and stability\n• Increased energy levels\n• Stronger bones and joints\n• Improved confidence in daily movement\n• Support for healthy ageing and long-term wellbeing\n\nRather than focusing on appearance alone, this class encourages women to appreciate what their bodies can do and develop strength that carries into everyday life.\n\nSuitable for all fitness levels and can be adapted to individual needs." },
+  { id: "boxfit", name: "BoxFit", tagline: "Boxing-inspired fitness", day: "Thursday 1 October 2026", time: "13:00–14:00", capacity: 12, icon: "flame", color: "#D06B4F",
+    venue: "6 Dispensary Lane, London E8 1FT", venueMap: "https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT", whatToBring: "Bring boxing gloves and pads if you have them. Wear comfortable workout clothes and trainers. Bring a water bottle", icsStart: "20261001T120000",
+    icsEnd: "20261001T130000", description: "A high-energy boxing-inspired fitness taster combining cardio, conditioning and boxing drills. Suitable for beginners and all fitness levels."},
+  { id:"self_defence", name:"Self Defence", tagline:"Intensive 3-week course", day:"October 2026 start", time:"Wednesdays, 12:00–14:00", capacity:20, icon:"shield", color:"#6F596E", bookingKind:"waitlist",
+    venue:"6 Dispensary Lane, London E8 1FT", venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
+    details:["2-hour session each week for 3 weeks", "£90 per person", "Limited spaces available"], description:"Join the waiting list for our intensive three-week self defence course, starting in October." },
+];
+
+// 2 membership tiers only
+const PILATES_BASE = {
+  name: "Pilates", tagline: "Strength, Core, Balance",
+  color: "#9b7ecb",
+  venue: "6 Dispensary Lane, London E8 1FT",
+  venueMap: "https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
+  whatToBring: "Wear comfortable clothes and grip socks",
+};
+const PILATES_SESSIONS = [
+  { id:"pilates_taster", day:"21–27 September 2026", time:"Exact time will be sent by email", capacity:20, fullyBooked:true, icsStart:null, icsEnd:null },
+];
+
+const MEMBERSHIP_TIERS = [
+  { activities: 1, price: 26 },
+  { activities: 2, price: 45 },
+];
+
+const PAYG_PRICE = 7.50;
+
+const DEFAULT_RETREATS = [
+  { id: "retreat-1", name: "Women's Wellness Retreat", location: "Surrey Hills", dates: "Fri 18 – Sun 20 Sept", price: 950, deposit: 300, capacity: 15 },
+];
+
+const STRIPE_LINKS = {
+  payg: "https://buy.stripe.com/REPLACE_PAYG",
+  membership: { 1: "https://buy.stripe.com/REPLACE_MEMBERSHIP_1", 2: "https://buy.stripe.com/REPLACE_MEMBERSHIP_2" },
+};
+
+// Retreat payments go via bank transfer rather than Stripe. Replace these
+// with your real account details before going live — knowing an account
+// number/sort code only lets someone SEND you money, not take it, so
+// there's no security risk in these being visible in the app's source.
+const BANK_TRANSFER_DETAILS = {
+  accountName: "REPLACE_WITH_ACCOUNT_NAME",
+  sortCode:    "00-00-00",
+  accountNumber: "00000000",
+};
+
+// Admin login is now real email+password+MFA, verified server-side by the
+// admin-auth Edge Function — see AdminPage below. Nothing admin-related is
+// ever stored as a client-exposed VITE_ env var, since those are readable by
+// anyone viewing the site's JavaScript.
+
+// ── TASTER MODE ───────────────────────────────────────────────────────
+// true  = simple "Book taster" flow, no pricing or payments shown
+// false = full booking with PAYG / membership / Stripe payment
+// Change this one line to switch between the two modes.
+const TASTER_MODE = true;
+// Set to true to stop new taster bookings across every class (existing
+// bookings/cancellations are unaffected — this only blocks NEW bookings).
+// Flip back to false whenever you want to reopen taster bookings.
+const TASTERS_CLOSED = false;
+
+/* ===================================================================== */
+
+const INK  = "#1B2B26";
+const TEAL = "#e46478";
+const GOLD = "#C99A4B";
+const BG   = "#f0e8cc";
+
+const ICONS = { music: Music2, flame: Flame, flower: Flower2, dumbbell: Dumbbell, paintbrush: Paintbrush, shield: ShieldCheck };
+// Logo points to your actual file: public/7 (1).png
+// The space and parentheses are URL-encoded below, since raw spaces/special
+// characters aren't valid in a URL/path as-is.
+const LOGO  = "/7%20(1).png";
+// Retreats section poster — upload retreat-poster.png to your public folder.
+const RETREAT_POSTER = "/retreat-poster.png";
+const RETREAT_POSTER_2 = "/retreat-poster-2.png";
+
+function uid() {
+  return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
-body {
-  font-family: 'Inter', sans-serif;
-  color: #2B2E2C;
-  background-color: #EDE7DD;
-  background-image:
-    radial-gradient(ellipse 120% 80% at 30% 0%, rgba(255,252,244,0.4), transparent 60%),
-    radial-gradient(ellipse 120% 90% at 80% 100%, rgba(60,64,58,0.05), transparent 60%),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E");
-  background-attachment: fixed;
+// ── Supabase Edge Function caller ─────────────────────────────────────────────
+// Calls the send-email function deployed on Supabase.
+// Requires VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in Vercel env vars.
+async function callEdgeFunction(name, data) {
+  let url = "", key = "";
+  try {
+    url = import.meta.env.VITE_SUPABASE_URL || "";
+    key = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+  } catch {}
+  if (!url) throw new Error("EDGE_NOT_CONFIGURED");
+  const res = await fetch(url + "/functions/v1/" + name, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + key,
+    },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(name + " returned " + res.status + ": " + errText);
+  }
+  return res.json();
 }
 
-.serif {
-  font-family: 'Cormorant Garamond', serif;
+function genCode() { return Math.floor(100000 + Math.random() * 900000).toString(); }
+
+// ── Salted password hashing ───────────────────────────────────────────────
+function generateSalt() {
+  const a = new Uint8Array(16); crypto.getRandomValues(a);
+  return Array.from(a).map(b => b.toString(16).padStart(2,"0")).join("");
+}
+async function hashPassword(pw, salt = "") {
+  try {
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(salt + pw));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,"0")).join("");
+  } catch { return btoa(salt + pw); }
 }
 
-/* Box Fit taster-session banner */
-.taster-banner {
-  position: relative;
-  z-index: 40;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 24px;
-  padding: 13px 24px;
-  background: #4B5D4E;
-  color: #FBF6EA;
-  text-align: center;
+// ── Password strength ──────────────────────────────────────────────────────
+// Requires 10+ characters with at least one letter and one number — enough
+// to rule out the weakest passwords without being so strict people give up
+// or resort to writing it down somewhere insecure.
+function isStrongPassword(pw) {
+  return pw.length >= 10 && /[a-zA-Z]/.test(pw) && /[0-9]/.test(pw);
+}
+const PASSWORD_RULE_MSG = "Password must be at least 10 characters and include both letters and numbers.";
+
+// ── Session length ──────────────────────────────────────────────────────────
+// How long a "remember me" login stays valid before requiring a fresh sign
+// in, independent of the 30-minute inactivity auto-logout above. Shortened
+// from 30 days to 7 for better security while still avoiding daily logins.
+const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+
+// ── Login lockout (5 failures = 10 min lock, stored in localStorage) ─────
+function getAttempts(email) {
+  try { return JSON.parse(localStorage.getItem("la_"+email) || '{"n":0,"until":0}'); }
+  catch { return {n:0,until:0}; }
+}
+function recordFailure(email) {
+  const a = getAttempts(email); a.n++;
+  if (a.n >= 5) { a.until = Date.now() + 600000; a.n = 0; }
+  localStorage.setItem("la_"+email, JSON.stringify(a));
+}
+function clearAttempts(email) { localStorage.removeItem("la_"+email); }
+function lockMsg(email) {
+  const a = getAttempts(email);
+  if (a.until <= Date.now()) return null;
+  const m = Math.ceil((a.until - Date.now())/60000);
+  return `Too many failed attempts. Try again in ${m} minute${m!==1?"s":""}.`;
 }
 
-.taster-banner p {
-  font-size: 13px;
-  line-height: 1.5;
-  letter-spacing: 0.02em;
+// ── Inactivity auto-logout ─────────────────────────────────────────────────
+// Signs the user out after `minutes` of no mouse/keyboard/touch/scroll
+// activity. Used for both the regular member session and the admin
+// dashboard — `active` should be true only while there's a live session to
+// protect, so the timers don't run (and get cleaned up) once signed out.
+function useIdleLogout(active, onTimeout, minutes = 30) {
+  const timerRef = useRef(null);
+  const onTimeoutRef = useRef(onTimeout);
+  useEffect(() => { onTimeoutRef.current = onTimeout; }, [onTimeout]);
+
+  useEffect(() => {
+    if (!active) return;
+    function reset() {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => onTimeoutRef.current(), minutes * 60 * 1000);
+    }
+    const events = ["mousedown", "keydown", "scroll", "touchstart"];
+    events.forEach(ev => window.addEventListener(ev, reset));
+    reset();
+    return () => {
+      events.forEach(ev => window.removeEventListener(ev, reset));
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [active, minutes]);
 }
 
-.taster-banner strong {
-  font-weight: 600;
+function exportCSV(bookings) {
+  const headers = ["Name","Email","Phone","Session","Type","Plan","Amount (£)","Status","Booked at"];
+  const esc = v => `"${String(v ?? "").replace(/"/g,'""')}"`;
+  const rows = bookings.map(b => [b.name,b.email,b.phone,b.sessionName,b.type,b.plan,b.amount,b.status,b.createdAt]);
+  const csv = [headers,...rows].map(r => r.map(esc).join(",")).join("\n");
+  const url = URL.createObjectURL(new Blob([csv], { type:"text/csv;charset=utf-8;" }));
+  const a = Object.assign(document.createElement("a"), { href:url, download:`snb-bookings-${new Date().toISOString().slice(0,10)}.csv` });
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
-.taster-banner a {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 9px 18px;
-  border: 1px solid rgba(251,246,234,0.7);
-  border-radius: 100px;
-  color: #FBF6EA;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  text-decoration: none;
-  transition: background 0.2s ease, color 0.2s ease;
+const STATUS_META = {
+  paid:            { label: "Paid",             bg: "#e46478", fg: "#f0e8cc", icon: Banknote },
+  confirmed:       { label: "Booked",           bg: "#e46478", fg: "#f0e8cc", icon: Check },
+  waitlisted:      { label: "Waitlisted",       bg: "#FBF3E3", fg: "#9A7426", icon: Hourglass },
+  pending_payment: { label: "Awaiting payment", bg: "#FBF3E3", fg: "#9A7426", icon: Hourglass },
+  cancelled:       { label: "Cancelled",        bg: "#F3E7E5", fg: "#9B3A2E", icon: Ban },
+};
+
+/* ---- shared UI primitives ---- */
+
+function Fonts() {
+  return <style>{`
+    @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap');
+    .ff-display { font-family:'Fraunces',serif; }
+    .ff-body    { font-family:'Inter',sans-serif; }
+  `}</style>;
 }
 
-.taster-banner a:hover,
-.taster-banner a:focus-visible {
-  background: #FBF6EA;
-  color: #344339;
-}
-
-/* Hero */
-.hero {
-  position: relative;
-  min-height: 88vh;
-  overflow: hidden;
-  background-color: #CDC6B2;
-  background-image:
-    radial-gradient(ellipse 70% 60% at 22% 15%, rgba(139,132,116,0.55), transparent 60%),
-    radial-gradient(ellipse 60% 70% at 78% 30%, rgba(242,237,221,0.6), transparent 65%),
-    radial-gradient(ellipse 90% 70% at 50% 100%, rgba(120,114,98,0.4), transparent 70%),
-    radial-gradient(ellipse 100% 60% at 50% 0%, rgba(168,160,141,0.3), transparent 60%),
-    linear-gradient(180deg, #D3CCB9 0%, #C7BFAA 45%, #DAD3C1 100%);
-}
-
-.hero::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  opacity: 0.34;
-  mix-blend-mode: multiply;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
-.hero::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(
-    ellipse 90% 90% at 50% 45%,
-    transparent 45%,
-    rgba(60,56,44,0.16) 100%
+function Pill({ children, icon: Icon }) {
+  return (
+    <span className="ff-body inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-stone-100 text-stone-600">
+      {Icon && <Icon size={12} />}{children}
+    </span>
   );
 }
 
-/* Navigation */
-.hero-nav {
-  position: relative;
-  z-index: 30;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 34px 56px;
-}
-
-.hero-nav .mark {
-  display: flex;
-  align-items: center;
-  text-decoration: none;
-}
-
-.hero-nav .mark img {
-  display: block;
-  width: auto;
-  height: 44px;
-}
-
-.hero-nav ul {
-  display: flex;
-  gap: 38px;
-  list-style: none;
-}
-
-.hero-nav a {
-  color: #2B2E2C;
-  font-size: 12px;
-  letter-spacing: 0.14em;
-  text-decoration: none;
-  text-transform: uppercase;
-  opacity: 0.75;
-}
-
-.nav-dropdown {
-  position: relative;
-}
-
-.nav-dropdown > a {
-  cursor: pointer;
-}
-
-.nav-dropdown .caret {
-  margin-left: 5px;
-  font-size: 9px;
-  opacity: 0.7;
-}
-
-.dropdown-menu {
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  z-index: 20;
-  min-width: 200px;
-  margin-top: 14px;
-  padding: 8px;
-  background: #fff;
-  border-radius: 10px;
-  box-shadow: 0 14px 34px rgba(60,50,30,0.16);
-  opacity: 0;
-  visibility: hidden;
-  transform: translateX(-50%) translateY(-6px);
-  transition:
-    opacity 0.2s ease,
-    transform 0.2s ease,
-    visibility 0.2s;
-}
-
-.nav-dropdown:hover .dropdown-menu {
-  opacity: 1;
-  visibility: visible;
-  transform: translateX(-50%) translateY(0);
-}
-
-.dropdown-menu a {
-  display: block;
-  padding: 9px 14px;
-  border-radius: 6px;
-  color: #2B2E2C;
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  opacity: 1;
-}
-
-.dropdown-menu a:hover {
-  background: #F3EFE4;
-  color: #4B5D4E;
-}
-
-.nav-cta {
-  padding: 9px 22px;
-  background: #211A16 !important;
-  border-radius: 100px;
-  color: #FBF6EA !important;
-  letter-spacing: 0.03em !important;
-  opacity: 1 !important;
-}
-
-/* Hero content */
-.hero-copy {
-  position: relative;
-  z-index: 4;
-  max-width: 640px;
-  padding: 70px 56px 0;
-}
-
-.hero-copy h1 {
-  color: #211F1A;
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 76px;
-  font-weight: 400;
-  line-height: 1.05;
-}
-
-.hero-copy h1 i {
-  color: #4B5D4E;
-  font-style: italic;
-}
-
-.photo-slot {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 2;
-  width: 52%;
-  background-image: url('hero-photo-candidate.jpg');
-  background-position: 75% 35%;
-  background-size: cover;
-  -webkit-mask-image: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(0,0,0,0.5) 22%,
-    rgba(0,0,0,0.95) 45%,
-    black 60%
-  );
-  mask-image: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(0,0,0,0.5) 22%,
-    rgba(0,0,0,0.95) 45%,
-    black 60%
+function StatusBadge({ status }) {
+  const m = STATUS_META[status] || STATUS_META.pending_payment;
+  return (
+    <span className="ff-body inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor:m.bg, color:m.fg }}>
+      <m.icon size={11} /> {m.label}
+    </span>
   );
 }
 
-.photo-slot::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(0deg, rgba(40,36,26,0.28) 0%, transparent 30%),
-    radial-gradient(
-      ellipse 90% 70% at 60% 40%,
-      transparent 45%,
-      rgba(40,36,26,0.18) 100%
-    );
-}
-
-/* Main cards */
-.menu-wrap {
-  position: relative;
-  max-width: 1180px;
-  height: 860px;
-  margin: 90px auto 10px;
-}
-
-.menu-center {
-  position: absolute;
-  top: 360px;
-  left: 50%;
-  z-index: 3;
-  width: 280px;
-  text-align: center;
-  transform: translateX(-50%);
-}
-
-.menu-center h2 {
-  color: #2B2E2C;
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 38px;
-  font-weight: 400;
-  line-height: 1.2;
-}
-
-.menu-center h2 i {
-  color: #4B5D4E;
-  font-style: italic;
-}
-
-.mcard {
-  position: absolute;
-  z-index: 2;
-  display: flex;
-  align-items: stretch;
-  width: 300px;
-  background: #EFE9D9;
-  border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(60,50,30,0.10);
-  color: inherit;
-  text-decoration: none;
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
-}
-
-.mcard:hover {
-  box-shadow: 0 14px 30px rgba(60,50,30,0.16);
-  transform: translateY(-4px);
-}
-
-.mcard .mphoto {
-  position: relative;
-  flex-shrink: 0;
-  width: 120px;
-  overflow: hidden;
-  border-radius: 6px 0 0 6px;
-}
-
-.mcard .mphoto::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.014' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  mix-blend-mode: overlay;
-  opacity: 0.14;
-}
-
-.mcard .mbody {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: 16px 18px;
-  overflow: hidden;
-  border-radius: 0 6px 6px 0;
-}
-
-.mcard .title {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 17px;
-  line-height: 1.3;
-}
-
-.mcard .title .plus {
-  margin-right: 4px;
-  color: #4B5D4E;
-}
-
-.mcard .who {
-  margin-top: 8px;
-  color: #8A8677;
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.mcard.card-1 {
-  top: 48px;
-  left: 440px;
-}
-
-.mcard.card-2 {
-  top: 160px;
-  left: 768px;
-}
-
-.mcard.card-3 {
-  top: 160px;
-  left: 112px;
-}
-
-.mcard.card-4 {
-  top: 414px;
-  left: 849px;
-}
-
-.mcard.card-5 {
-  top: 414px;
-  left: 31px;
-}
-
-.mcard.card-6 {
-  top: 618px;
-  left: 622px;
-}
-
-.mcard.card-7 {
-  top: 618px;
-  left: 258px;
-}
-
-.t1 {
-  background-image: url('menu-zumba.jpg');
-  background-position: center 45%;
-  background-size: cover;
-}
-
-.t2 {
-  background-image: url('menu-boxing.jpg');
-  background-position: center 30%;
-  background-size: cover;
-}
-
-.t3 {
-  background-image: url('menu-classes.jpg');
-  background-position: center 55%;
-  background-size: cover;
-}
-
-.t4 {
-  background-image: url('menu-strength.jpg');
-  background-position: center 35%;
-  background-size: cover;
-}
-
-.t5 {
-  background-image: url('menu-pilates.jpg');
-  background-position: center 45%;
-  background-size: cover;
-}
-
-.t6 {
-  background-image: url('menu-retreat.jpg');
-  background-position: center;
-  background-size: cover;
-}
-
-.t7 {
-  background-image: url('menu-studio.jpg');
-  background-position: center;
-  background-size: cover;
-}
-
-.menu-footnote {
-  margin-top: 0;
-  padding-bottom: 40px;
-  color: #5C5844;
-  font-size: 13px;
-  text-align: center;
-}
-
-.divider {
-  height: 1px;
-  margin: 0 72px;
-  background: rgba(43,46,44,0.16);
-}
-
-.quote-band {
-  padding: 80px 72px;
-  text-align: center;
-}
-
-.quote-band p {
-  max-width: 620px;
-  margin: 0 auto;
-  color: #3A3D3B;
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 28px;
-  font-style: italic;
-  font-weight: 400;
-  line-height: 1.5;
-}
-
-.quote-band .who {
-  margin-top: 22px;
-  color: #6E7A6F;
-  font-size: 12px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-/* Footer */
-.site-footer {
-  border-top: 1px solid rgba(43,46,44,0.14);
-}
-
-.footer-main {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 40px;
-  padding: 56px 72px 36px;
-}
-
-.footer-brand img {
-  display: block;
-  width: auto;
-  height: 36px;
-  margin-bottom: 14px;
-}
-
-.footer-brand p {
-  color: #6E7A6F;
-  font-size: 12.5px;
-  line-height: 1.7;
-}
-
-.footer-social a {
-  color: #4B5D4E;
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-decoration: underline;
-  text-transform: uppercase;
-  text-underline-offset: 3px;
-}
-
-.footer-bottom {
-  padding: 20px 72px 32px;
-  border-top: 1px solid rgba(43,46,44,0.08);
-}
-
-.footer-bottom .footer-social {
-  margin-bottom: 14px;
-  text-align: left;
-}
-
-.footer-legal {
-  display: flex;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.footer-legal p {
-  color: #8A8677;
-  font-size: 11.5px;
-  letter-spacing: 0.02em;
-}
-
-/* Mobile navigation */
-.mobile-toggle {
-  position: relative;
-  z-index: 30;
-  display: none;
-  padding: 6px;
-  background: none;
-  border: none;
-  cursor: pointer;
-}
-
-.mobile-toggle span {
-  display: block;
-  width: 22px;
-  height: 2px;
-  margin: 5px 0;
-  background: #2B2E2C;
-  transition: transform 0.25s ease, opacity 0.25s ease;
-}
-
-.mobile-toggle.open span:nth-child(1) {
-  transform: translateY(7px) rotate(45deg);
-}
-
-.mobile-toggle.open span:nth-child(2) {
-  opacity: 0;
-}
-
-.mobile-toggle.open span:nth-child(3) {
-  transform: translateY(-7px) rotate(-45deg);
-}
-
-.nav-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 15;
-  background: rgba(20,18,14,0.4);
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.25s ease, visibility 0.25s ease;
-}
-
-.nav-overlay.show {
-  opacity: 1;
-  visibility: visible;
-}
-
-/* Box Fit popup */
-.taster-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  background: rgba(20,18,14,0.62);
-}
-
-.taster-overlay.show {
-  display: flex;
-}
-
-.taster-modal {
-  position: relative;
-  width: 100%;
-  max-width: 440px;
-  padding: 36px 32px;
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 24px 60px rgba(0,0,0,0.25);
-  text-align: center;
-}
-
-.taster-modal .close-btn {
-  position: absolute;
-  top: 12px;
-  right: 14px;
-  width: 36px;
-  height: 36px;
-  background: none;
-  border: none;
-  border-radius: 50%;
-  color: #716D61;
-  font-size: 24px;
-  cursor: pointer;
-}
-
-.taster-modal .close-btn:hover,
-.taster-modal .close-btn:focus-visible {
-  background: #F3EFE4;
-}
-
-.taster-modal .taster-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 52px;
-  height: 52px;
-  margin: 0 auto 18px;
-  background: #E7EEE8;
-  border-radius: 50%;
-  color: #4B5D4E;
-  font-size: 22px;
-}
-
-.taster-modal .taster-tag {
-  margin-bottom: 6px;
-  color: #6E7A6F;
-  font-size: 11px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-.taster-modal h3 {
-  color: #2B2E2C;
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 30px;
-  font-weight: 500;
-}
-
-.taster-modal .dates {
-  margin-top: 8px;
-  color: #4B5D4E;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.taster-modal p.body-copy {
-  margin: 17px 0 24px;
-  color: #5A5744;
-  font-size: 14px;
-  line-height: 1.65;
-}
-
-.taster-modal .btn-primary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  padding: 13px;
-  background: #211A16;
-  border-radius: 100px;
-  color: #FBF6EA;
-  font-size: 14px;
-  font-weight: 500;
-  text-decoration: none;
-}
-
-.taster-modal .btn-later {
-  display: block;
-  margin: 14px auto 0;
-  background: none;
-  border: none;
-  color: #716D61;
-  font-size: 12px;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-@media (max-width: 1220px) {
-  .menu-wrap {
-    height: auto;
-    margin-top: 60px;
-    padding: 0 24px;
-  }
-
-  .menu-center {
-    position: static;
-    width: auto;
-    margin: 0 auto 32px;
-    transform: none;
-  }
-
-  .mcard {
-    position: static;
-    width: 100%;
-    max-width: 420px;
-    margin: 0 auto 16px;
-  }
-}
-
-@media (max-width: 900px) {
-  .hero-copy h1 {
-    font-size: 48px;
-  }
-
-  .photo-slot {
-    position: static;
-    width: auto;
-    height: 280px;
-    margin: 32px 56px 0;
-  }
-}
-
-@media (max-width: 880px) {
-  .mobile-toggle {
-    display: block;
-  }
-
-  .hero-nav ul {
-    position: fixed;
-    top: 0;
-    right: 0;
-    z-index: 20;
-    display: flex;
-    align-items: flex-start;
-    justify-content: flex-start;
-    flex-direction: column;
-    gap: 6px;
-    width: 80%;
-    max-width: 320px;
-    height: 100vh;
-    padding: 100px 32px 40px;
-    overflow-y: auto;
-    background: #FBF6EA;
-    box-shadow: -10px 0 34px rgba(0,0,0,0.16);
-    transform: translateX(100%);
-    transition: transform 0.3s ease;
-  }
-
-  .hero-nav ul.open {
-    transform: translateX(0);
-  }
-
-  .hero-nav ul li {
-    width: 100%;
-  }
-
-  .hero-nav ul a {
-    display: block;
-    padding: 12px 0;
-    font-size: 13px;
-    opacity: 0.85;
-  }
-
-  .hero-nav .nav-cta {
-    display: inline-flex !important;
-    align-items: center;
-    justify-content: center;
-    width: auto;
-    margin-top: 14px;
-    padding: 13px 28px !important;
-    font-size: 13px !important;
-  }
-
-  .nav-dropdown .dropdown-menu {
-    position: static !important;
-    top: auto !important;
-    left: auto !important;
-    width: 100% !important;
-    min-width: 0 !important;
-    max-height: 0;
-    margin: 0 !important;
-    padding: 0 !important;
-    overflow: hidden;
-    background: transparent !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    opacity: 1 !important;
-    visibility: visible !important;
-    transform: none !important;
-    transition: max-height 0.25s ease;
-  }
-
-  .nav-dropdown.mobile-open .dropdown-menu {
-    max-height: 300px !important;
-    margin-top: 2px !important;
-    padding: 4px 0 6px 14px !important;
-  }
-
-  .nav-dropdown .caret {
-    transition: transform 0.2s ease;
-  }
-
-  .nav-dropdown.mobile-open .caret {
-    transform: rotate(180deg);
-  }
-}
-
-@media (max-width: 700px) {
-  .footer-main,
-  .footer-bottom {
-    padding-right: 24px;
-    padding-left: 24px;
-  }
-}
-
-@media (max-width: 600px) {
-  .taster-banner {
-    flex-direction: column;
-    gap: 9px;
-    padding: 12px 18px;
-  }
-
-  .taster-banner a {
-    padding: 7px 16px;
-  }
-
-  .taster-modal {
-    padding: 34px 24px 28px;
-  }
-}
-</style>
-</head>
-
-<body>
-
-<!-- Box Fit taster-session banner -->
-<aside class="taster-banner" aria-label="Box Fit taster session">
-  <p>
-    <strong>Box Fit Taster Session:</strong>
-    Join us on 01 Oct 2026.
-  </p>
-
-  <a href="https://app.snbhive.com">
-    Book Box Fit
-    <span aria-hidden="true">&rarr;</span>
-  </a>
-</aside>
-
-<!-- Hero -->
-<section class="hero">
-  <nav class="hero-nav">
-    <a class="mark" href="index.html">
-      <img src="logo-nav.png" alt="SNB Hive" />
-    </a>
-
-    <ul>
-      <li class="nav-dropdown">
-        <a>
-          Classes
-          <span class="caret" aria-hidden="true">&#9662;</span>
-        </a>
-
-        <div class="dropdown-menu">
-          <a href="page-class-boxing.html">Boxing</a>
-          <a href="page-class-pilates.html">Reformer Pilates</a>
-          <a href="page-class-somatic.html">Somatic</a>
-          <a href="page-class-strength.html">Strength &amp; Conditioning</a>
-          <a href="page-class-zumba.html">Zumba</a>
-        </div>
-      </li>
-
-      <li><a href="page-retreats.html">Retreats</a></li>
-      <li><a href="page-studio-hire.html">Studio hire</a></li>
-      <li><a href="page-about.html">About us</a></li>
-      <li><a href="page-contact.html">Contact us</a></li>
-      <li><a href="https://app.snbhive.com" class="nav-cta">Book Now</a></li>
-    </ul>
-
-    <div class="nav-overlay" id="navOverlay"></div>
-
-    <button
-      class="mobile-toggle"
-      id="mobileToggle"
-      type="button"
-      aria-label="Menu"
-    >
-      <span></span>
-      <span></span>
-      <span></span>
-    </button>
-  </nav>
-
-  <div class="hero-copy">
-    <h1>
-      Move the body.<br />
-      <i>Return to yourself.</i>
-    </h1>
-  </div>
-
-  <div class="photo-slot"></div>
-</section>
-
-<!-- Class, retreat, and studio menu -->
-<div class="menu-wrap">
-  <div class="menu-center">
-    <h2>
-      Where would you<br />
-      like to <i>begin?</i>
-    </h2>
-  </div>
-
-  <a class="mcard card-1" href="page-class-zumba.html">
-    <div class="mphoto t1"></div>
-
-    <div class="mbody">
-      <div class="title">
-        <span class="plus">+</span>
-        Community, joy, and a reason to move
+function CapacityRing({ booked, capacity, color }) {
+  const pct = Math.min(1, capacity ? booked / capacity : 0);
+  const r = 22, c = 2 * Math.PI * r;
+  const full = pct >= 1;
+  return (
+    <div className="relative w-14 h-14 flex items-center justify-center shrink-0">
+      <svg viewBox="0 0 56 56" className="w-14 h-14 -rotate-90">
+        <circle cx="28" cy="28" r={r} fill="none" stroke="#E3DFD3" strokeWidth="5" />
+        <circle cx="28" cy="28" r={r} fill="none" stroke={full?"#B3261E":color}
+          strokeWidth="5" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c*(1-pct)}
+          style={{ transition:"stroke-dashoffset 0.4s ease" }} />
+      </svg>
+      <div className="absolute text-center leading-none">
+        <div className="ff-body font-semibold text-xs" style={{ color:full?"#B3261E":INK }}>{Math.max(capacity-booked,0)}</div>
+        <div className="ff-body text-[9px] text-stone-500">left</div>
       </div>
-
-      <div class="who">Zumba</div>
     </div>
-  </a>
+  );
+}
 
-  <a class="mcard card-2" href="page-class-boxing.html">
-    <div class="mphoto t2"></div>
+/* ---- AUTH SCREEN ---- */
 
-    <div class="mbody">
-      <div class="title">
-        <span class="plus">+</span>
-        Strength, release, and a bit of fight
-      </div>
+function AuthScreen({ onAuth }) {
+  const [mode, setMode]           = useState("register"); // register | login | forgot | verify | new_password
+  const [resetMode, setResetMode] = useState(false);      // true = verify is for password reset
+  const [loginMfaMode, setLoginMfaMode] = useState(false); // true = verify is a post-password login MFA step, not signup
+  const [verifyEmail, setVEmail]  = useState("");
+  const [code, setCode]           = useState("");
+  const [form, setForm]           = useState({ name:"", email:"", phone:"", password:"", confirm:"" });
+  const [showPw, setShowPw]       = useState(false);
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState("");
+  const [success, setSuccess]     = useState("");
+  const [agreed, setAgreed]       = useState(false);
 
-      <div class="who">Boxing</div>
-    </div>
-  </a>
+  function f(k, v) { setForm(p => ({...p, [k]:v})); setError(""); setSuccess(""); }
+  function switchMode(m) { setMode(m); setError(""); setSuccess(""); setCode(""); setAgreed(false); }
 
-  <a class="mcard card-3" href="page-class-somatic.html">
-    <div class="mphoto t3"></div>
+  async function getUsers() { return (await storage.get("snb_users")) || []; }
 
-    <div class="mbody">
-      <div class="title">
-        <span class="plus">+</span>
-        Calm, breath, and coming back to yourself
-      </div>
-
-      <div class="who">Somatic</div>
-    </div>
-  </a>
-
-  <a class="mcard card-4" href="page-class-strength.html">
-    <div class="mphoto t4"></div>
-
-    <div class="mbody">
-      <div class="title">
-        <span class="plus">+</span>
-        Quiet power, built rep by rep
-      </div>
-
-      <div class="who">Strength &amp; Conditioning</div>
-    </div>
-  </a>
-
-  <a class="mcard card-5" href="page-class-pilates.html">
-    <div class="mphoto t5"></div>
-
-    <div class="mbody">
-      <div class="title">
-        <span class="plus">+</span>
-        Control, balance, and a stronger core
-      </div>
-
-      <div class="who">Reformer Pilates</div>
-    </div>
-  </a>
-
-  <a class="mcard card-6" href="page-retreats.html">
-    <div class="mphoto t6"></div>
-
-    <div class="mbody">
-      <div class="title">
-        <span class="plus">+</span>
-        Exclusive retreats to pause, breathe, and reconnect
-      </div>
-
-      <div class="who">SNB Hive Wellness Series</div>
-    </div>
-  </a>
-
-  <a class="mcard card-7" href="page-studio-hire.html">
-    <div class="mphoto t7"></div>
-
-    <div class="mbody">
-      <div class="title">
-        <span class="plus">+</span>
-        A boutique women-only space, ready for your event
-      </div>
-
-      <div class="who">Studio hire</div>
-    </div>
-  </a>
-</div>
-
-<div class="menu-footnote">
-  Not sure where to start? Every class opens with a free taster.
-</div>
-
-<div class="divider"></div>
-
-<section class="quote-band">
-  <p>
-    &ldquo;This isn't a class you attend. It's a room you return to.&rdquo;
-  </p>
-
-  <div class="who">A member, three months in</div>
-</section>
-
-<!-- Footer -->
-<footer class="site-footer">
-  <div class="footer-main">
-    <div class="footer-brand">
-      <img src="logo-nav.png" alt="SNB Hive" />
-
-      <p>
-        Women's Fitness and Wellness Classes &amp; Retreats<br />
-        6 Dispensary Lane, London E8 1FT
-      </p>
-    </div>
-  </div>
-
-  <div class="footer-bottom">
-    <div class="footer-social">
-      <a
-        href="https://www.instagram.com/snbhive?igsh=ODBrM2l6dDdyZnp0&utm_source=qr"
-        target="_blank"
-        rel="noopener"
-      >
-        Follow us on Instagram
-      </a>
-    </div>
-
-    <div class="footer-legal">
-      <p>&copy; 2026 SNB Hive Ltd. All rights reserved.</p>
-
-      <p>
-        SNB Hive Ltd. Registered in England &amp; Wales,
-        Company No. 16533320
-      </p>
-    </div>
-  </div>
-</footer>
-
-<!-- Box Fit taster-session popup -->
-<div
-  class="taster-overlay"
-  id="tasterOverlay"
-  aria-hidden="true"
->
-  <div
-    class="taster-modal"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="tasterTitle"
-    aria-describedby="tasterDescription"
-  >
-    <button
-      class="close-btn"
-      id="tasterClose"
-      type="button"
-      aria-label="Close Box Fit taster session popup"
-    >
-      &times;
-    </button>
-
-    <div class="taster-icon" aria-hidden="true">
-      &#10024;
-    </div>
-
-    <div class="taster-tag">You're invited</div>
-
-    <h3 id="tasterTitle">Box Fit Taster Session</h3>
-
-    <div class="dates">01 Oct 2026</div>
-
-    <p class="body-copy" id="tasterDescription">
-      Discover Box Fit at SNB Hive. Join our women-only taster session
-      for an energising workout combining boxing technique, fitness,
-      and fun.
-    </p>
-
-    <a class="btn-primary" href="https://app.snbhive.com">
-      Book your Box Fit taster
-      <span aria-hidden="true">&rarr;</span>
-    </a>
-
-    <button class="btn-later" id="tasterLater" type="button">
-      Maybe later
-    </button>
-  </div>
-</div>
-
-<script>
-(function () {
-  var overlay = document.getElementById('tasterOverlay');
-  var closeButton = document.getElementById('tasterClose');
-  var laterButton = document.getElementById('tasterLater');
-  var storageKey = 'box_fit_taster_2026_10_01_seen';
-
-  function closePopup() {
-    overlay.classList.remove('show');
-    overlay.setAttribute('aria-hidden', 'true');
-  }
-
-  if (!sessionStorage.getItem(storageKey)) {
-    setTimeout(function () {
-      overlay.classList.add('show');
-      overlay.setAttribute('aria-hidden', 'false');
-      closeButton.focus();
-    }, 600);
-
-    sessionStorage.setItem(storageKey, '1');
-  }
-
-  closeButton.addEventListener('click', closePopup);
-  laterButton.addEventListener('click', closePopup);
-
-  overlay.addEventListener('click', function (event) {
-    if (event.target === overlay) {
-      closePopup();
-    }
-  });
-
-  document.addEventListener('keydown', function (event) {
-    if (
-      event.key === 'Escape' &&
-      overlay.classList.contains('show')
-    ) {
-      closePopup();
-    }
-  });
-})();
-</script>
-
-<script>
-(function () {
-  var toggle = document.getElementById('mobileToggle');
-  var menu = document.querySelector('.hero-nav ul');
-  var overlay = document.getElementById('navOverlay');
-
-  if (!toggle || !menu) {
-    return;
-  }
-
-  function closeMenu() {
-    toggle.classList.remove('open');
-    menu.classList.remove('open');
-
-    if (overlay) {
-      overlay.classList.remove('show');
-    }
-  }
-
-  function openMenu() {
-    toggle.classList.add('open');
-    menu.classList.add('open');
-
-    if (overlay) {
-      overlay.classList.add('show');
-    }
-  }
-
-  toggle.addEventListener('click', function () {
-    if (menu.classList.contains('open')) {
-      closeMenu();
-    } else {
-      openMenu();
-    }
-  });
-
-  if (overlay) {
-    overlay.addEventListener('click', closeMenu);
-  }
-
-  var dropdownLink = document.querySelector('.nav-dropdown > a');
-  var dropdownParent = document.querySelector('.nav-dropdown');
-
-  if (dropdownLink && dropdownParent) {
-    dropdownLink.addEventListener('click', function (event) {
-      if (window.innerWidth <= 880) {
-        event.preventDefault();
-        dropdownParent.classList.toggle('mobile-open');
+  async function handleRegister() {
+    if (!form.name.trim()) return setError("Please enter your full name.");
+    if (!/\S+@\S+\.\S+/.test(form.email)) return setError("Please enter a valid email address.");
+    if (form.phone.replace(/\D/g,"").length < 10) return setError("Please enter a valid mobile number.");
+    if (!isStrongPassword(form.password)) return setError(PASSWORD_RULE_MSG);
+    if (form.password !== form.confirm) return setError("Passwords do not match.");
+    if (!agreed) return setError("Please agree to the Privacy Policy and Terms & Conditions to continue.");
+    setLoading(true);
+    try {
+      const users = await getUsers();
+      if (users.find(u => u.email.toLowerCase() === form.email.trim().toLowerCase()))
+        return setError("An account with that email already exists — please sign in.");
+      const salt = generateSalt();
+      const passwordHash = await hashPassword(form.password, salt);
+      const user = { id:uid(), name:form.name.trim(), email:form.email.trim().toLowerCase(), phone:form.phone.trim(), passwordHash, salt, createdAt:new Date().toISOString() };
+      await storage.set("snb_users", [...users, user]);
+      const session = { id:user.id, name:user.name, email:user.email, phone:user.phone };
+      // Send verification code — required before login is granted
+      try {
+        const code = genCode();
+        await storage.set("vc_" + user.email, { code, exp: Date.now() + 900000 }); // 15 min expiry
+        await callEdgeFunction("send-email", { type:"verify", to_email:user.email, to_name:user.name, code });
+        // Notify admin (non-blocking — failure here doesn't prevent signup)
+        callEdgeFunction("send-email", { type:"admin", user_name:user.name, user_email:user.email, user_phone:user.phone, signup_time:new Date().toLocaleString("en-GB") })
+          .then(() => console.log("[SNB] Admin notified of new signup"))
+          .catch(e => console.error("[SNB admin notify FAILED]:", e.message));
+        await storage.set("snb_session", session);
+        setVEmail(user.email);
+        setResetMode(false);
+        switchMode("verify");
+      } catch(e) {
+        // Email send failed — show a clear message, do NOT log user in without verification
+        const isConfig = e.message.includes("EDGE_NOT_CONFIGURED") || e.message.includes("404");
+        setError(isConfig
+          ? "Email service not set up yet. Please contact shams@snbhive.com to complete your registration."
+          : "Couldn't send your verification email — please try again in a moment.");
       }
-    });
+    } catch(e) { if (!error) setError("Something went wrong — please try again."); }
+    finally { setLoading(false); }
   }
-})();
-</script>
 
-</body>
-</html>
+  async function handleLogin() {
+    if (!/\S+@\S+\.\S+/.test(form.email)) return setError("Please enter a valid email address.");
+    if (!form.password) return setError("Please enter your password.");
+    const email = form.email.trim().toLowerCase();
+    const lock = lockMsg(email);
+    if (lock) return setError(lock);
+    setLoading(true);
+    try {
+      const users = await getUsers();
+      const user = users.find(u => u.email.toLowerCase() === email);
+      if (!user) { recordFailure(email); return setError("No account found with that email address."); }
+      const hash = await hashPassword(form.password, user.salt || "");
+      if (user.passwordHash !== hash) { recordFailure(email); return setError("Incorrect password — please try again."); }
+      clearAttempts(email);
+      // Silently upgrade to salted hash on first login if old account
+      if (!user.salt) {
+        const ns = generateSalt(); const nh = await hashPassword(form.password, ns);
+        await storage.set("snb_users", users.map(u => u.email===email ? {...u, salt:ns, passwordHash:nh} : u)).catch(()=>{});
+      }
+      // Password correct — require a fresh emailed code before granting
+      // access, every time, for every account (not just new signups).
+      const mfaCode = genCode();
+      await storage.set("vc_" + user.email, { code: mfaCode, exp: Date.now() + 900000 });
+      await callEdgeFunction("send-email", { type:"login_mfa", to_email:user.email, to_name:user.name, code:mfaCode });
+      setVEmail(user.email);
+      setResetMode(false);
+      setLoginMfaMode(true);
+      switchMode("verify");
+    } catch { setError("Something went wrong — please try again."); }
+    finally { setLoading(false); }
+  }
+
+  async function handleForgot() {
+    if (!/\S+@\S+\.\S+/.test(form.email)) return setError("Please enter a valid email address.");
+    setLoading(true);
+    try {
+      const email = form.email.trim().toLowerCase();
+      const code = genCode();
+      await storage.set("vc_" + email, { code, exp: Date.now() + 900000 });
+      // Send reset code to the entered email.
+      // Security is enforced by the verification step — only the person
+      // who receives the email can enter the correct code.
+      await callEdgeFunction("send-email", { type:"reset", to_email:email, code });
+      setVEmail(email);
+      setResetMode(true);
+      switchMode("verify");
+    } catch(e) {
+      const isConfig = e.message.includes("EDGE_NOT_CONFIGURED") || e.message.includes("404");
+      setError(isConfig
+        ? "Password reset emails are not set up yet. Contact shams@snbhive.com for help."
+        : "Couldn't send reset email — please try again.");
+    }
+    finally { setLoading(false); }
+  }
+
+  async function handleVerify() {
+    if (!code || code.length !== 6) return setError("Please enter the 6-digit code from your email.");
+    setLoading(true);
+    try {
+      const stored = await storage.get("vc_" + verifyEmail);
+      if (!stored || !stored.code) return setError("Code not found — please request a new one.");
+      if (stored.exp < Date.now()) return setError("Code expired — please request a new one.");
+      if (stored.code !== code) return setError("Incorrect code. Please try again.");
+      await storage.remove("vc_" + verifyEmail);
+      if (resetMode) {
+        setResetMode(false);
+        switchMode("new_password");
+      } else if (loginMfaMode) {
+        setLoginMfaMode(false);
+        const users = await getUsers();
+        const user = users.find(u => u.email === verifyEmail);
+        if (user) {
+          const s = { id:user.id, name:user.name, email:user.email, phone:user.phone, expiresAt: Date.now() + SESSION_DURATION_MS };
+          await storage.set("snb_session", s); onAuth(s);
+        }
+      } else {
+        const users = await getUsers();
+        const user = users.find(u => u.email === verifyEmail);
+        if (user) {
+          const s = { id:user.id, name:user.name, email:user.email, phone:user.phone, expiresAt: Date.now() + SESSION_DURATION_MS };
+          await storage.set("snb_session", s); onAuth(s);
+        }
+      }
+    } catch(e) { if (!e.message.includes("code")) setError("Something went wrong — please try again."); }
+    finally { setLoading(false); }
+  }
+
+  async function handleNewPassword() {
+    if (!form.password || !isStrongPassword(form.password)) return setError(PASSWORD_RULE_MSG);
+    if (form.password !== form.confirm) return setError("Passwords don\'t match.");
+    setLoading(true);
+    try {
+      const users = await getUsers();
+      const ns = generateSalt();
+      const hash = await hashPassword(form.password, ns);
+      await storage.set("snb_users", users.map(u => u.email===verifyEmail ? {...u, passwordHash:hash, salt:ns} : u));
+      setSuccess("Password updated! Please sign in.");
+      setForm(p => ({...p, email:verifyEmail, password:"", confirm:""}));
+      switchMode("login");
+    } catch { setError("Something went wrong — please try again."); }
+    finally { setLoading(false); }
+  }
+
+  async function handleResendCode() {
+    setLoading(true); setError("");
+    try {
+      const newCode = genCode();
+      await storage.set("vc_" + verifyEmail, { code: newCode, exp: Date.now() + 900000 });
+      const users = await getUsers();
+      const user  = users.find(u => u.email === verifyEmail);
+      if (resetMode) {
+        await callEdgeFunction("send-email", { type:"reset", to_email:verifyEmail, code:newCode });
+      } else if (loginMfaMode) {
+        await callEdgeFunction("send-email", { type:"login_mfa", to_email:verifyEmail, to_name:user?.name||"", code:newCode });
+      } else {
+        await callEdgeFunction("send-email", { type:"verify", to_email:verifyEmail, to_name:user?.name||"", code:newCode });
+      }
+      setSuccess("New code sent — check your email.");
+    } catch { setError("Could not resend. Make sure EmailJS is configured."); }
+    finally { setLoading(false); }
+  }
+
+  return (
+    <div className="min-h-screen w-full flex flex-col items-center justify-center px-4 py-10" style={{ backgroundColor:BG }}>
+      <Fonts/>
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center rounded-2xl px-6 py-4 mb-3" style={{ backgroundColor:BG }}>
+            <img src={LOGO} alt="SNB Hive" style={{ height:"160px" }} onError={e => { e.target.style.display = "none"; }}/>
+          </div>
+          <p className="ff-body text-sm text-stone-500">{BRAND.tagline}</p>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-6">
+
+          {/* register / login */}
+          {(mode==="register" || mode==="login") && (<>
+            <div className="flex gap-1 bg-stone-100 rounded-full p-1 mb-6">
+              {[["register","Create account"],["login","Sign in"]].map(([k,label]) => (
+                <button key={k} onClick={() => switchMode(k)}
+                  className="ff-body flex-1 text-sm font-medium py-1.5 rounded-full transition"
+                  style={{ backgroundColor:mode===k?"#fff":"transparent", color:mode===k?INK:"#8A8478", boxShadow:mode===k?"0 1px 2px rgba(0,0,0,0.08)":"none" }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-col gap-4">
+              {mode==="register" && (
+                <div>
+                  <label className="ff-body text-sm font-medium text-stone-700">Full name <span style={{color:"#B3261E",marginLeft:"2px"}}>*</span></label>
+                  <input value={form.name} onChange={e=>f("name",e.target.value)} required
+                    className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
+                    placeholder="Your full name" autoComplete="name"/>
+                </div>
+              )}
+              <div>
+                <label className="ff-body text-sm font-medium text-stone-700">
+                  Email address{mode==="register" ? " — this is your username" : ""}<span style={{color:"#B3261E",marginLeft:"2px"}}>*</span>
+                </label>
+                <input value={form.email} onChange={e=>f("email",e.target.value)} type="email"
+                  className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
+                  placeholder="you@example.com" autoComplete="email"/>
+              </div>
+              {mode==="register" && (
+                <div>
+                  <label className="ff-body text-sm font-medium text-stone-700">Mobile number <span style={{color:"#B3261E",marginLeft:"2px"}}>*</span></label>
+                  <input value={form.phone} onChange={e=>f("phone",e.target.value)} type="tel" required
+                    className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
+                    placeholder="07…" autoComplete="tel"/>
+                </div>
+              )}
+              <div>
+                <label className="ff-body text-sm font-medium text-stone-700">Password <span style={{color:"#B3261E",marginLeft:"2px"}}>*</span></label>
+                <div className="relative mt-1">
+                  <input value={form.password} onChange={e=>f("password",e.target.value)} type={showPw?"text":"password"}
+                    className="ff-body w-full rounded-xl border border-stone-200 px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2"
+                    placeholder={mode==="register"?"At least 10 characters, incl. a letter and a number":"Your password"}
+                    autoComplete={mode==="register"?"new-password":"current-password"}
+                    onKeyDown={e=>{if(e.key==="Enter"&&mode==="login")handleLogin();}}/>
+                  <button onClick={()=>setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400">
+                    {showPw?<EyeOff size={16}/>:<Eye size={16}/>}
+                  </button>
+                </div>
+              </div>
+              {mode==="register" && (
+                <div>
+                  <label className="ff-body text-sm font-medium text-stone-700">Confirm password <span style={{color:"#B3261E",marginLeft:"2px"}}>*</span></label>
+                  <input value={form.confirm} onChange={e=>f("confirm",e.target.value)} type={showPw?"text":"password"} required
+                    className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
+                    placeholder="Repeat password" autoComplete="new-password"/>
+                </div>
+              )}
+              {mode==="register" && (
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)}
+                    className="mt-0.5 rounded shrink-0"/>
+                  <span className="ff-body text-xs text-stone-600 leading-relaxed">
+                    I agree to the{" "}
+                    <a href="/terms" target="_blank" className="underline hover:text-stone-800">Terms & Conditions</a>
+                    {" "}and{" "}
+                    <a href="/privacy" target="_blank" className="underline hover:text-stone-800">Privacy Policy</a>.
+                    {" "}<span style={{color:"#B3261E"}}>*</span>
+                  </span>
+                </label>
+              )}
+              {error   && <div className="ff-body text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>}
+              {success && <div className="ff-body text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2">{success}</div>}
+              <button onClick={mode==="register"?handleRegister:handleLogin} disabled={loading}
+                className="ff-body inline-flex items-center justify-center gap-2 font-semibold text-sm py-3 rounded-full transition disabled:opacity-50"
+                style={{ backgroundColor:TEAL, color:"#fff" }}>
+                {loading?<Loader2 size={15} className="animate-spin"/>:mode==="register"?"Create my account":"Sign in"}
+                {!loading&&<ArrowRight size={15}/>}
+              </button>
+              {mode==="login" && (
+                <button onClick={()=>switchMode("forgot")} className="ff-body text-xs text-stone-400 hover:text-stone-600 text-center mt-1">
+                  Forgot your password?
+                </button>
+              )}
+            </div>
+          </>)}
+
+          {/* forgot password */}
+          {mode==="forgot" && (
+            <div className="flex flex-col gap-4">
+              <div className="text-center mb-1">
+                <h3 className="ff-display font-semibold" style={{color:INK}}>Reset your password</h3>
+                <p className="ff-body text-xs text-stone-500 mt-1">Enter your email and we'll send a reset code</p>
+              </div>
+              <div>
+                <label className="ff-body text-sm font-medium text-stone-700">Email address</label>
+                <input value={form.email} onChange={e=>f("email",e.target.value)} type="email"
+                  className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
+                  placeholder="you@example.com" autoComplete="email"/>
+              </div>
+              {error   && <div className="ff-body text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>}
+              {success && <div className="ff-body text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2">{success}</div>}
+              <button onClick={handleForgot} disabled={loading}
+                className="ff-body inline-flex items-center justify-center gap-2 font-semibold text-sm py-3 rounded-full transition disabled:opacity-50"
+                style={{ backgroundColor:TEAL, color:"#fff" }}>
+                {loading?<Loader2 size={15} className="animate-spin"/>:<>Send reset code <ArrowRight size={15}/></>}
+              </button>
+              <button onClick={()=>switchMode("login")} className="ff-body text-xs text-stone-400 hover:text-stone-600 text-center">
+                Back to sign in
+              </button>
+            </div>
+          )}
+
+          {/* verify email — signup or reset */}
+          {mode==="verify" && (
+            <div className="flex flex-col gap-4">
+              <div className="text-center mb-1">
+                <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3" style={{backgroundColor:"#E9F1EC"}}>
+                  <Mail size={20} style={{color:TEAL}}/>
+                </div>
+                <h3 className="ff-display font-semibold" style={{color:INK}}>Check your email</h3>
+                <p className="ff-body text-xs text-stone-500 mt-1">
+                  We sent a 6-digit code to<br/><strong>{verifyEmail}</strong>
+                </p>
+              </div>
+              <div>
+                <label className="ff-body text-sm font-medium text-stone-700">Verification code</label>
+                <input value={code} onChange={e=>{setCode(e.target.value.replace(/\D/g,"").slice(0,6));setError("");}}
+                  type="text" inputMode="numeric" maxLength={6}
+                  className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-3 text-center tracking-[0.5em] text-lg font-semibold focus:outline-none focus:ring-2"
+                  placeholder="000000"/>
+              </div>
+              {error   && <div className="ff-body text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>}
+              {success && <div className="ff-body text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2">{success}</div>}
+              <button onClick={handleVerify} disabled={loading||code.length!==6}
+                className="ff-body inline-flex items-center justify-center gap-2 font-semibold text-sm py-3 rounded-full transition disabled:opacity-50"
+                style={{ backgroundColor:TEAL, color:"#fff" }}>
+                {loading?<Loader2 size={15} className="animate-spin"/>:<>Verify <Check size={15}/></>}
+              </button>
+              <div className="flex items-center justify-between">
+                <button onClick={handleResendCode} disabled={loading} className="ff-body text-xs text-stone-400 hover:text-stone-600">
+                  Resend code
+                </button>
+                <button onClick={()=>{ setLoginMfaMode(false); switchMode(resetMode?"forgot":loginMfaMode?"login":"register"); }} className="ff-body text-xs text-stone-400 hover:text-stone-600">
+                  Go back
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* new password after reset */}
+          {mode==="new_password" && (
+            <div className="flex flex-col gap-4">
+              <div className="text-center mb-1">
+                <h3 className="ff-display font-semibold" style={{color:INK}}>Set a new password</h3>
+              </div>
+              <div>
+                <label className="ff-body text-sm font-medium text-stone-700">New password</label>
+                <div className="relative mt-1">
+                  <input value={form.password} onChange={e=>f("password",e.target.value)} type={showPw?"text":"password"}
+                    className="ff-body w-full rounded-xl border border-stone-200 px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2"
+                    placeholder="At least 10 characters, incl. a letter and a number" autoComplete="new-password"/>
+                  <button onClick={()=>setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400">
+                    {showPw?<EyeOff size={16}/>:<Eye size={16}/>}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="ff-body text-sm font-medium text-stone-700">Confirm new password</label>
+                <input value={form.confirm} onChange={e=>f("confirm",e.target.value)} type={showPw?"text":"password"}
+                  className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
+                  placeholder="Repeat password" autoComplete="new-password"/>
+              </div>
+              {error && <div className="ff-body text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>}
+              <button onClick={handleNewPassword} disabled={loading}
+                className="ff-body inline-flex items-center justify-center gap-2 font-semibold text-sm py-3 rounded-full transition disabled:opacity-50"
+                style={{ backgroundColor:TEAL, color:"#fff" }}>
+                {loading?<Loader2 size={15} className="animate-spin"/>:<>Update password <Check size={15}/></>}
+              </button>
+            </div>
+          )}
+
+        </div>
+        <p className="ff-body text-xs text-stone-400 text-center mt-4">
+          Your details are stored securely and used only for booking management.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ---- CLASS CARD
+   - No pricing shown
+   - Capacity ring visible ONLY when spotsLeft ≤ 5 AND user is not already booked
+   ---- */
+
+function ClassCard({ cls, booked, onBook, bookingType, onWaitlist }) {
+  const Icon = ICONS[cls.icon] || Sparkles;
+  const full = booked >= cls.capacity;
+  const isMember = bookingType === "membership";
+  const isWaitlist = cls.bookingKind === "waitlist";
+  const isTbc = cls.tasterStatus === "tbc";
+  const isBooked = !!bookingType;
+  const isClosed =
+    TASTER_MODE &&
+    TASTERS_CLOSED &&
+    !isBooked;
+
+  const disabled =
+    isTbc ||
+    isBooked ||
+    (
+      !isWaitlist &&
+      (
+        full ||
+        isMember ||
+        isClosed
+      )
+    );
+
+  return (
+    <div className="bg-white rounded-2xl border border-stone-200 p-5 flex flex-col gap-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div
+            className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
+            style={{
+              backgroundColor: cls.color + "1A",
+            }}
+          >
+            <Icon
+              size={20}
+              style={{ color: cls.color }}
+            />
+          </div>
+
+          <div>
+            <h3
+              className="ff-display text-lg font-semibold"
+              style={{ color: INK }}
+            >
+              {cls.name}
+            </h3>
+
+            <p className="ff-body text-sm text-stone-500">
+              {cls.tagline}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Pill icon={Calendar}>
+          {cls.day}
+        </Pill>
+
+        <Pill icon={Clock}>
+          {cls.time}
+        </Pill>
+
+        {isMember && !TASTER_MODE && (
+          <Pill icon={Check}>
+            <span style={{ color: TEAL }}>
+              Member
+            </span>
+          </Pill>
+        )}
+      </div>
+
+      {cls.venue && (
+        <a
+          href={cls.venueMap}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="ff-body inline-flex items-center gap-1.5 text-xs text-stone-400 hover:text-stone-600 transition -mt-1"
+        >
+          <MapPin size={11}/>
+          {cls.venue}
+        </a>
+      )}
+
+      {cls.details && (
+        <ul className="ff-body text-sm text-stone-600 space-y-1">
+          {cls.details.map(detail => (
+            <li key={detail}>
+              • {detail}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="flex items-center justify-end pt-2 border-t border-stone-100 mt-auto">
+        <button
+          onClick={() => {
+            if (isWaitlist) {
+              onWaitlist(cls);
+            } else {
+              onBook(cls);
+            }
+          }}
+          disabled={disabled}
+          className="ff-body inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full transition disabled:cursor-not-allowed"
+          style={{
+            backgroundColor: isTbc
+              ? "#E3DFD3"
+              : isBooked
+                ? "#D4EBD9"
+                : !isWaitlist && (full || isClosed)
+                  ? "#E3DFD3"
+                  : TEAL,
+            color: isTbc
+              ? "#8A8478"
+              : isBooked
+                ? "#2D6B40"
+                : !isWaitlist && (full || isClosed)
+                  ? "#8A8478"
+                  : "#FFF",
+            opacity: disabled ? 0.85 : 1,
+          }}
+        >
+          {isTbc
+            ? "TBC"
+            : isBooked
+              ? isWaitlist
+                ? "On waiting list"
+                : "Taster booked"
+              : !isWaitlist && full
+                ? "Full"
+                : isClosed
+                  ? "Tasters closed"
+                  : isWaitlist
+                    ? "Join October waiting list"
+                    : TASTER_MODE
+                      ? "Book taster"
+                      : "Book"}
+
+          {!disabled && (
+            <ArrowRight size={14}/>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+/* ---- RETREAT CARD — same capacity ring logic ---- */
+
+function RetreatCard({ retreat, booked, onBook, isSignedUp }) {
+  const full = booked >= retreat.capacity;
+  const spotsLeft = Math.max(retreat.capacity - booked, 0);
+  const showRing = !isSignedUp && spotsLeft <= 5;
+
+  return (
+    <div className="rounded-2xl p-6 flex flex-col gap-4 shadow-sm text-white relative overflow-hidden" style={{ backgroundColor:TEAL }}>
+      <svg className="absolute inset-0 opacity-[0.07]" width="100%" height="100%" preserveAspectRatio="none">
+        <defs>
+          <pattern id="lattice" width="34" height="34" patternUnits="userSpaceOnUse">
+            <path d="M17 0 L34 17 L17 34 L0 17 Z" fill="none" stroke="white" strokeWidth="1"/>
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#lattice)"/>
+      </svg>
+
+      <div className="relative flex items-start justify-between gap-3">
+        <div>
+          <Pill icon={Sparkles}><span className="text-stone-600">Retreat</span></Pill>
+          <h3 className="ff-display text-2xl font-semibold mt-2">{retreat.name}</h3>
+        </div>
+        {showRing && <CapacityRing booked={booked} capacity={retreat.capacity} color={GOLD}/>}
+      </div>
+
+      <div className="relative flex flex-wrap gap-2">
+        <Pill icon={MapPin}><span className="text-stone-600">{retreat.location}</span></Pill>
+        <Pill icon={Calendar}><span className="text-stone-600">{retreat.dates}</span></Pill>
+        {isSignedUp && <Pill icon={Check}><span style={{ color:TEAL }}>You're booked</span></Pill>}
+      </div>
+
+      <div className="relative flex items-center justify-between pt-3 border-t border-white/15">
+        <div className="ff-body text-sm text-white/85">
+          <span className="font-semibold text-white">£{retreat.price}</span> total · £{retreat.deposit} deposit to secure
+        </div>
+        <button onClick={() => onBook(retreat)} disabled={full}
+          className="ff-body inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full transition disabled:opacity-50"
+          style={{ backgroundColor:full?"rgba(255,255,255,0.2)":GOLD, color:full?"#fff":INK }}>
+          {full ? "Full" : "Reserve a spot"}{!full && <ArrowRight size={14}/>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---- BOOKING MODAL
+   - Details pre-filled from logged-in user
+   - 2 membership tiers only
+   - PAYG £7.50
+   - 5-minute hold (not 30)
+   ---- */
+
+function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
+  const [step, setStep]           = useState(1);
+  const [plan, setPlan]           = useState(type==="class" ? "payg" : "deposit");
+  const [activities, setAct]      = useState(1);
+  const [selectedClasses, setSel] = useState([session.id]);
+  const [saving, setSaving]       = useState(false);
+  const [paymentUrl, setPUrl]     = useState("");
+  const [bankRef, setBankRef]     = useState("");
+  const [error, setError]         = useState("");
+
+  function toggleClass(id) {
+    if (id === session.id) return; // primary class always stays selected
+    setSel(prev => prev.includes(id)
+      ? prev.filter(x => x !== id)
+      : prev.length < activities ? [...prev, id] : prev
+    );
+  }
+
+  // Reset selected classes when activity count changes
+  function changeActivities(n) {
+    setAct(n);
+    setSel([session.id]); // keep primary, clear extras
+  }
+
+  const needsClassPicker = plan === "membership" && activities === 2;
+  const pickerReady      = !needsClassPicker || selectedClasses.length === 2;
+
+  const amount = type==="class"
+    ? (plan==="payg" ? PAYG_PRICE : MEMBERSHIP_TIERS.find(t=>t.activities===activities)?.price)
+    : (plan==="deposit" ? session.deposit : session.price);
+
+  async function handleConfirm() {
+    // ── TASTER MODE — no payment, instant confirmation ──
+    if (TASTER_MODE) {
+      setSaving(true); setError("");
+      try {
+        await onConfirm({
+          id: uid(), sessionId: session.id, sessionName: session.name, type,
+          userId: currentUser.id, name: currentUser.name,
+          email: currentUser.email, phone: currentUser.phone,
+          plan: "Taster", amount: 0,
+          status: "confirmed", createdAt: new Date().toISOString(),
+        });
+        // Send confirmation email with calendar invite (non-blocking)
+        callEdgeFunction("send-email", {
+          type: "confirm_taster",
+          to_email: currentUser.email, to_name: currentUser.name,
+          session_name: session.name, day: session.day, time: session.time,
+          venue: session.venue || "", what_to_bring: session.whatToBring || "",
+          ics_start: session.icsStart, ics_end: session.icsEnd,
+        }).catch(() => {});
+        setStep(2);
+      } catch { setError("Couldn't save your booking — please try again."); }
+      finally { setSaving(false); }
+      return;
+    }
+
+    // ── FULL BOOKING MODE ──────────────────────────────────────────────
+    if (needsClassPicker && selectedClasses.length < 2) {
+      return setError("Please choose your second class before continuing.");
+    }
+    setSaving(true); setError("");
+    try {
+      const url = type==="class"
+        ? (plan==="payg" ? STRIPE_LINKS.payg : STRIPE_LINKS.membership[activities])
+        : null; // retreats pay by bank transfer, not a Stripe link
+
+      const planLabel = type==="class"
+        ? (plan==="payg" ? "Pay as you go" : `Membership — ${activities} class${activities>1?"es":""}`)
+        : (plan==="deposit" ? "Deposit (bank transfer)" : "Paid in full (bank transfer)");
+
+      const base = {
+        type, userId: currentUser.id, name: currentUser.name,
+        email: currentUser.email, phone: currentUser.phone,
+        plan: planLabel, status: "pending_payment", createdAt: new Date().toISOString(),
+      };
+
+      if (plan === "membership" && activities === 2) {
+        const classes = DEFAULT_CLASSES.filter(c => selectedClasses.includes(c.id));
+        for (let i = 0; i < classes.length; i++) {
+          const cls = classes[i];
+          await onConfirm({
+            ...base, id: uid(),
+            sessionId: cls.id, sessionName: cls.name,
+            amount: cls.id === session.id ? amount : 0,
+          });
+        }
+      } else {
+        const bookingId = uid();
+        // A short, unique reference the person includes on their bank
+        // transfer, so it can be matched back to this booking manually.
+        const ref = type === "retreat" ? bookingId.slice(0, 8).toUpperCase() : null;
+        await onConfirm({
+          ...base, id: bookingId,
+          sessionId: session.id, sessionName: session.name,
+          amount,
+          ...(ref ? { bankRef: ref } : {}),
+        });
+        if (ref) setBankRef(ref);
+      }
+
+      setPUrl(url); setStep(2);
+    } catch { setError("Couldn't save your booking — please try again."); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+      <div className="ff-body bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md max-h-[92vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white flex items-center justify-between px-5 py-4 border-b border-stone-100">
+          {step > 1 && step < 2
+            ? <button onClick={() => setStep(s=>s-1)} className="text-stone-400"><ChevronLeft size={20}/></button>
+            : <div className="w-5"/>}
+          <h4 className="font-semibold text-sm text-stone-700">{session.name}</h4>
+          <button onClick={onClose} className="text-stone-400"><X size={20}/></button>
+        </div>
+
+        <div className="p-5">
+          {step === 1 && TASTER_MODE && type==="class" && (
+            <div className="flex flex-col gap-5">
+              <div className="rounded-xl border border-stone-100 p-4 flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                  style={{ backgroundColor: (ICONS[DEFAULT_CLASSES.find(c=>c.id===session.id)?.icon] ? DEFAULT_CLASSES.find(c=>c.id===session.id)?.color : TEAL) + "1A" }}>
+                  <Sparkles size={16} style={{ color: TEAL }}/>
+                </div>
+                <div>
+                  <p className="font-semibold text-sm" style={{ color:INK }}>{session.name}</p>
+                  <p className="text-xs text-stone-500 mt-0.5">{session.day} · {session.time}</p>
+                  <p className="text-xs text-stone-400 mt-1">Free taster session — come and give it a try</p>
+                </div>
+              </div>
+              {error && <p className="text-xs text-red-600">{error}</p>}
+              <button onClick={handleConfirm} disabled={saving}
+                className="inline-flex items-center justify-center gap-1.5 font-semibold text-sm py-3 rounded-full transition"
+                style={{ backgroundColor:TEAL, color:"#fff" }}>
+                {saving ? <Loader2 size={15} className="animate-spin"/> : <>Confirm taster booking <Check size={15}/></>}
+              </button>
+            </div>
+          )}
+
+          {step === 1 && !TASTER_MODE && (
+            <div className="flex flex-col gap-4">
+              {type==="class" ? (<>
+                <label className="text-sm font-medium text-stone-700">How would you like to pay?</label>
+                <button onClick={() => setPlan("payg")} className="text-left rounded-xl border-2 p-3.5 transition"
+                  style={{ borderColor:plan==="payg"?TEAL:"#E7E2D5" }}>
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-sm">Pay as you go</span>
+                    {plan==="payg" && <Check size={16} style={{ color:TEAL }}/>}
+                  </div>
+                  <p className="text-xs text-stone-500 mt-0.5">£{PAYG_PRICE.toFixed(2)} for this single session</p>
+                </button>
+                <button onClick={() => setPlan("membership")} className="text-left rounded-xl border-2 p-3.5 transition"
+                  style={{ borderColor:plan==="membership"?TEAL:"#E7E2D5" }}>
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-sm">Monthly membership</span>
+                    {plan==="membership" && <Check size={16} style={{ color:TEAL }}/>}
+                  </div>
+                  <p className="text-xs text-stone-500 mt-0.5">£26/month for 1 class · £45/month for 2 classes</p>
+                </button>
+                {plan==="membership" && (<>
+                  <div className="grid grid-cols-2 gap-2 pl-1">
+                    {MEMBERSHIP_TIERS.map(t => (
+                      <button key={t.activities} onClick={() => changeActivities(t.activities)}
+                        className="rounded-lg border px-3 py-2 text-xs font-medium text-left transition"
+                        style={{ borderColor:activities===t.activities?GOLD:"#E7E2D5", backgroundColor:activities===t.activities?"#FBF3E3":"#fff" }}>
+                        {t.activities} class{t.activities>1?"es":""}<br/>
+                        <span className="font-semibold">£{t.price}/mo</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {activities === 2 && (
+                    <div className="rounded-xl border border-stone-200 p-3.5">
+                      <p className="text-xs font-semibold text-stone-700 mb-2.5">
+                        Choose your 2 classes — pick one more to go with <strong>{session.name}</strong>
+                      </p>
+                      <div className="flex flex-col gap-2">
+                        {DEFAULT_CLASSES.map(cls => {
+                          const isPrimary  = cls.id === session.id;
+                          const isSelected = selectedClasses.includes(cls.id);
+                          return (
+                            <button key={cls.id} onClick={() => toggleClass(cls.id)}
+                              disabled={isPrimary}
+                              className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-left transition disabled:cursor-default"
+                              style={{
+                                backgroundColor: isSelected ? "#E9F1EC" : "#F8F7F4",
+                                border: `1.5px solid ${isSelected ? TEAL : "#E3DFD3"}`,
+                              }}>
+                              <div className="w-5 h-5 rounded flex items-center justify-center shrink-0"
+                                style={{ backgroundColor: isSelected ? TEAL : "#E3DFD3" }}>
+                                {isSelected && <Check size={12} color="white"/>}
+                              </div>
+                              <div className="flex-1">
+                                <span className="font-medium" style={{ color: INK }}>{cls.name}</span>
+                                <span className="text-stone-400 text-xs"> · {cls.day}</span>
+                              </div>
+                              {isPrimary && <span className="text-xs text-stone-400">Current</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {selectedClasses.length < 2 && (
+                        <p className="text-xs text-amber-600 mt-2">Select 1 more class to continue</p>
+                      )}
+                    </div>
+                  )}
+                </>)}
+              </>) : (<>
+                <label className="text-sm font-medium text-stone-700">How would you like to pay?</label>
+                <button onClick={() => setPlan("deposit")} className="text-left rounded-xl border-2 p-3.5 transition"
+                  style={{ borderColor:plan==="deposit"?TEAL:"#E7E2D5" }}>
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-sm">Pay deposit now</span>
+                    {plan==="deposit" && <Check size={16} style={{ color:TEAL }}/>}
+                  </div>
+                  <p className="text-xs text-stone-500 mt-0.5">£{session.deposit} now — balance due closer to the date</p>
+                </button>
+                <button onClick={() => setPlan("full")} className="text-left rounded-xl border-2 p-3.5 transition"
+                  style={{ borderColor:plan==="full"?TEAL:"#E7E2D5" }}>
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-sm">Pay in full</span>
+                    {plan==="full" && <Check size={16} style={{ color:TEAL }}/>}
+                  </div>
+                  <p className="text-xs text-stone-500 mt-0.5">£{session.price} total, nothing more to pay</p>
+                </button>
+              </>)}
+
+              <div className="flex items-center justify-between rounded-xl bg-stone-50 px-4 py-3 mt-1">
+                <span className="text-sm text-stone-600">Due now</span>
+                <span className="font-semibold text-base" style={{ color:INK }}>
+                  £{typeof amount==="number" ? amount.toFixed(2) : amount}
+                </span>
+              </div>
+
+              {error && <p className="text-xs text-red-600">{error}</p>}
+
+              <button onClick={handleConfirm} disabled={saving}
+                className="inline-flex items-center justify-center gap-1.5 font-semibold text-sm py-3 rounded-full transition"
+                style={{ backgroundColor:TEAL, color:"#fff" }}>
+                {saving ? <Loader2 size={15} className="animate-spin"/> : <>Hold my spot <ArrowRight size={15}/></>}
+              </button>
+            </div>
+          )}
+
+          {step === 2 && TASTER_MODE && (
+            <div className="flex flex-col items-center text-center gap-4 py-4">
+              <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{ backgroundColor:"#E9F1EC" }}>
+                <Check size={26} style={{ color:TEAL }}/>
+              </div>
+
+              <>
+                  <div>
+                    <h4 className="ff-display text-xl font-semibold" style={{ color:INK }}>Taster booked!</h4>
+                    <p className="ff-body text-sm text-stone-500 mt-1">
+                      You're coming to <strong>{session.name}</strong>
+                    </p>
+                  </div>
+                  <div className="w-full rounded-xl bg-stone-50 px-4 py-3 text-sm text-stone-600 text-left">
+                    <p><span className="font-medium">Session:</span> {session.name}</p>
+                    <p className="mt-1"><span className="font-medium">When:</span> {session.day} · {session.time}</p>
+                    {session.venue && (
+                      <p className="mt-1">
+                        <span className="font-medium">Venue:</span>{" "}
+                        <a href={session.venueMap} target="_blank" rel="noopener noreferrer"
+                          className="underline hover:text-stone-800">{session.venue}</a>
+                      </p>
+                    )}
+                  </div>
+                  {session.description && (
+                    <div className="w-full text-left">
+                      <p className="ff-body text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">About this class</p>
+                      <div className="max-h-48 overflow-y-auto rounded-xl bg-stone-50 px-4 py-3 flex flex-col gap-1.5">
+                        {session.description.split("\n").filter(l => l.trim()).map((line, i) => (
+                          line.startsWith("•")
+                            ? <div key={i} className="flex items-start gap-2">
+                                <span className="ff-body text-xs shrink-0 mt-0.5" style={{color:TEAL}}>•</span>
+                                <span className="ff-body text-xs text-stone-600">{line.slice(1).trim()}</span>
+                              </div>
+                            : <p key={i} className="ff-body text-xs text-stone-600 leading-relaxed">{line}</p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <p className="text-xs text-stone-400">We'll be in touch with everything you need to know before your first session.</p>
+                  <button onClick={onClose}
+                    className="w-full inline-flex items-center justify-center font-semibold text-sm py-3 rounded-full"
+                    style={{ backgroundColor:TEAL, color:"#fff" }}>
+                    Great, see you there!
+                  </button>
+              </>
+            </div>
+          )}
+
+          {step === 2 && !TASTER_MODE && type === "class" && (
+            <div className="flex flex-col items-center text-center gap-3 py-4">
+              <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor:"#E9F1EC" }}>
+                <ShieldCheck size={24} style={{ color:TEAL }}/>
+              </div>
+              <h4 className="ff-display text-lg font-semibold" style={{ color:INK }}>Your spot is held</h4>
+              <p className="text-sm text-stone-500 leading-relaxed">
+                We've reserved your place for <strong>5 minutes</strong>. Complete payment securely on Stripe to confirm it — your spot is released if payment isn't completed in time.
+              </p>
+              <a href={paymentUrl} target="_blank" rel="noopener noreferrer"
+                className="w-full inline-flex items-center justify-center gap-1.5 font-semibold text-sm py-3 rounded-full mt-2"
+                style={{ backgroundColor:GOLD, color:INK }}>
+                Continue to secure payment <ArrowUpRight size={15}/>
+              </a>
+              <button onClick={onClose} className="text-xs text-stone-400 mt-1 underline">Close — I'll pay later</button>
+            </div>
+          )}
+
+          {step === 2 && !TASTER_MODE && type === "retreat" && (
+            <div className="flex flex-col items-center text-center gap-3 py-4">
+              <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor:"#E9F1EC" }}>
+                <Banknote size={24} style={{ color:TEAL }}/>
+              </div>
+              <h4 className="ff-display text-lg font-semibold" style={{ color:INK }}>Almost there — pay by bank transfer</h4>
+              <p className="text-sm text-stone-500 leading-relaxed">
+                Your spot is reserved. Transfer <strong>£{typeof amount==="number" ? amount.toFixed(2) : amount}</strong> using
+                the details below, making sure to include your reference — this is how we match your payment to your booking.
+              </p>
+              <div className="w-full rounded-xl bg-stone-50 px-4 py-3 text-sm text-stone-700 text-left flex flex-col gap-1.5">
+                <p><span className="font-medium text-stone-500">Account name:</span> {BANK_TRANSFER_DETAILS.accountName}</p>
+                <p><span className="font-medium text-stone-500">Sort code:</span> {BANK_TRANSFER_DETAILS.sortCode}</p>
+                <p><span className="font-medium text-stone-500">Account number:</span> {BANK_TRANSFER_DETAILS.accountNumber}</p>
+              </div>
+              <div className="w-full rounded-xl px-4 py-3" style={{ backgroundColor:"#FBF3E3", border:"1px solid #C99A4B" }}>
+                <p className="ff-body text-xs font-semibold uppercase tracking-wide" style={{ color:"#7A5C20" }}>Payment reference</p>
+                <p className="ff-display text-xl font-bold tracking-wider mt-1" style={{ color:"#7A5C20" }}>{bankRef}</p>
+              </div>
+              <p className="text-xs text-stone-400">
+                Once we receive your transfer, we'll confirm your booking by email — usually within 1–2 working days.
+              </p>
+              <button onClick={onClose}
+                className="w-full inline-flex items-center justify-center font-semibold text-sm py-3 rounded-full mt-1"
+                style={{ backgroundColor:TEAL, color:"#fff" }}>
+                Got it, thank you
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---- WORKSHOP CARD ---- */
+
+function WorkshopCard({ workshop, booked, isBooked, onBook }) {
+  const Icon = ICONS[workshop.icon] || Paintbrush;
+  const full = booked >= workshop.capacity;
+  const spotsLeft = Math.max(workshop.capacity - booked, 0);
+  const disabled = full || isBooked;
+
+  return (
+    <div className="bg-white rounded-2xl border border-stone-200 p-5 flex flex-col gap-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor:workshop.color+"1A" }}>
+            <Icon size={20} style={{ color:workshop.color }}/>
+          </div>
+          <div>
+            <p className="ff-body text-xs font-semibold uppercase tracking-wider mb-0.5" style={{ color:workshop.color }}>Workshop</p>
+            <h3 className="ff-display text-lg font-semibold" style={{ color:INK }}>{workshop.name}</h3>
+            <p className="ff-body text-sm text-stone-500">{workshop.tagline}</p>
+          </div>
+        </div>
+        {showRing && <CapacityRing booked={booked} capacity={workshop.capacity} color={workshop.color}/>}
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Pill icon={Calendar}>{workshop.date}</Pill>
+        <Pill icon={Clock}>{workshop.time}</Pill>
+        <Pill icon={Banknote}>£{workshop.price}</Pill>
+      </div>
+
+      {workshop.venue && (
+        <a href={workshop.venueMap} target="_blank" rel="noopener noreferrer"
+          className="ff-body inline-flex items-center gap-1.5 text-xs text-stone-400 hover:text-stone-600 transition -mt-1">
+          <MapPin size={11}/> {workshop.venue}
+        </a>
+      )}
+
+      <p className="ff-body text-sm text-stone-500 leading-relaxed">{workshop.description}</p>
+
+      <div className="flex items-center justify-end pt-2 border-t border-stone-100 mt-auto">
+        <button onClick={() => onBook(workshop)} disabled={disabled}
+          className="ff-body inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full transition disabled:cursor-not-allowed"
+          style={{
+            backgroundColor: isBooked ? "#D4EBD9" : full ? "#E3DFD3" : TEAL,
+            color: isBooked ? "#2D6B40" : full ? "#8A8478" : "#FFF",
+            opacity: disabled ? 0.85 : 1
+          }}>
+          {full ? "Full" : isBooked ? "Booked ✓" : "Book now"}
+          {!disabled && <ArrowRight size={14}/>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---- WORKSHOP BOOKING MODAL ---- */
+
+function WorkshopBookingModal({ workshop, currentUser, onClose, onConfirm }) {
+  const [guests, setGuests] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [done, setDone]     = useState(false);
+  const [error, setError]   = useState("");
+
+  const totalPeople = 1 + guests.length;
+  const totalPrice  = totalPeople * workshop.price;
+
+  function addGuest() {
+    if (guests.length >= (workshop.maxGuests || 3)) return;
+    setGuests([...guests, { name:"", email:"", phone:"" }]);
+  }
+  function removeGuest(i) { setGuests(guests.filter((_,idx) => idx !== i)); }
+  function updateGuest(i, field, value) {
+    setGuests(guests.map((g,idx) => idx === i ? {...g, [field]:value} : g));
+  }
+
+  async function handleConfirm() {
+    // Validate guests
+    for (let i = 0; i < guests.length; i++) {
+      const g = guests[i];
+      if (!g.name.trim()) return setError(`Please enter a name for guest ${i+1}.`);
+      if (!/\S+@\S+\.\S+/.test(g.email)) return setError(`Please enter a valid email for guest ${i+1}.`);
+      if (g.phone.replace(/\D/g,"").length < 10) return setError(`Please enter a valid phone number for guest ${i+1}.`);
+    }
+    setSaving(true); setError("");
+    try {
+      const booking = {
+        id: uid(), sessionId: workshop.id, sessionName: workshop.name, type: "workshop",
+        userId: currentUser.id, name: currentUser.name,
+        email: currentUser.email, phone: currentUser.phone,
+        plan: "Workshop", amount: totalPrice, numPeople: totalPeople,
+        guests: guests.length > 0 ? guests.map(g => ({ name:g.name.trim(), email:g.email.trim(), phone:g.phone.trim() })) : null,
+        status: "confirmed", createdAt: new Date().toISOString(),
+      };
+      await onConfirm(booking);
+      // Workshop confirmation email with payment instructions (non-blocking)
+      callEdgeFunction("send-email", {
+        type: "confirm_workshop",
+        to_email: currentUser.email, to_name: currentUser.name,
+        session_name: workshop.name, day: workshop.date, time: workshop.time,
+        venue: workshop.venue || "", what_to_bring: workshop.whatToBring || "",
+        price: String(totalPrice), num_people: String(totalPeople),
+        guests: guests.length > 0 ? guests.map(g => g.name.trim()).join(", ") : "",
+        ics_start: workshop.icsStart, ics_end: workshop.icsEnd,
+      }).catch(() => {});
+      setDone(true);
+    } catch(err) { console.error("[Workshop booking error]:", err); setError("Couldn't save your booking — please try again."); }
+    finally { setSaving(false); }
+  }
+
+  if (done) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+        <div className="ff-body bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md p-6 text-center">
+          <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor:"#D4EBD9" }}>
+            <Check size={26} style={{ color:TEAL }}/>
+          </div>
+          <h3 className="ff-display text-xl font-semibold mb-2" style={{ color:INK }}>You're in! 🎨</h3>
+          <p className="ff-body text-sm text-stone-600 mb-1">
+            {workshop.name} — {workshop.date}, {workshop.time}
+          </p>
+          {guests.length > 0 && (
+            <p className="ff-body text-sm text-stone-500 mb-2">
+              + {guests.length} guest{guests.length > 1 ? "s" : ""} ({totalPeople} people total)
+            </p>
+          )}
+          <div className="rounded-xl px-4 py-4 mt-3 text-left" style={{ backgroundColor:"#FBF3E3", border:"1px solid #C99A4B" }}>
+            <p className="ff-body text-sm font-semibold mb-1.5" style={{ color:"#7A5C20" }}>
+              Keep an eye on your inbox 📬
+            </p>
+            <p className="ff-body text-sm leading-relaxed" style={{ color:"#9A7426" }}>
+              We've just sent a confirmation email to <strong>{currentUser.email}</strong> with
+              all the details and payment instructions. If you don't see it in a few minutes,
+              check your spam folder — and if you have any questions at all, just reply to the email
+              or drop us a message at shams@snbhive.com.
+            </p>
+          </div>
+          <p className="ff-body text-xs text-stone-400 mt-4">We can't wait to see you there!</p>
+          <button onClick={onClose}
+            className="mt-4 w-full py-3 rounded-full font-semibold text-sm text-white transition"
+            style={{ backgroundColor:TEAL }}>Lovely, see you there!</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+      <div className="ff-body bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md p-6 flex flex-col gap-4 max-h-[85vh] overflow-y-auto">
+        <div className="flex justify-between items-center">
+          <h3 className="ff-display text-xl font-semibold" style={{ color:INK }}>{workshop.name}</h3>
+          <button onClick={onClose} className="text-stone-400 hover:text-stone-600"><X size={20}/></button>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Pill icon={Calendar}>{workshop.date}</Pill>
+          <Pill icon={Clock}>{workshop.time}</Pill>
+        </div>
+
+        <div className="bg-stone-50 rounded-xl p-4">
+          <p className="ff-body text-sm text-stone-600"><strong>Your booking</strong></p>
+          <p className="ff-body text-sm text-stone-500 mt-1">{currentUser.name} — {currentUser.email}</p>
+        </div>
+
+        {/* Guest management */}
+        {workshop.allowGuests && (
+          <div className="border-t border-stone-100 pt-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="ff-body text-sm font-semibold text-stone-700">Bring a friend?</p>
+              {guests.length < (workshop.maxGuests || 3) && (
+                <button onClick={addGuest}
+                  className="ff-body inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-full transition"
+                  style={{ backgroundColor:workshop.color+"1A", color:workshop.color }}>
+                  <UserPlus size={13}/> Add guest
+                </button>
+              )}
+            </div>
+
+            {guests.map((g, i) => (
+              <div key={i} className="bg-stone-50 rounded-xl p-4 mb-3 relative">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="ff-body text-xs font-semibold text-stone-500 uppercase tracking-wider">Guest {i+1}</p>
+                  <button onClick={() => removeGuest(i)} className="text-stone-400 hover:text-red-500 transition"><Trash2 size={14}/></button>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <input value={g.name} onChange={e => updateGuest(i, "name", e.target.value)}
+                    placeholder="Full name *" type="text"
+                    className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-stone-400"/>
+                  <input value={g.email} onChange={e => updateGuest(i, "email", e.target.value)}
+                    placeholder="Email address *" type="email"
+                    className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-stone-400"/>
+                  <input value={g.phone} onChange={e => updateGuest(i, "phone", e.target.value)}
+                    placeholder="Phone number *" type="tel"
+                    className="w-full border border-stone-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-stone-400"/>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Price summary */}
+        <div className="bg-stone-50 rounded-xl p-4">
+          <div className="flex justify-between items-center">
+            <p className="ff-body text-sm text-stone-600">
+              {totalPeople} {totalPeople === 1 ? "person" : "people"} × £{workshop.price}
+            </p>
+            <p className="ff-display text-xl font-semibold" style={{ color:INK }}>£{totalPrice}</p>
+          </div>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border-l-2 border-red-400 text-red-700 px-4 py-2 rounded text-sm">{error}</div>
+        )}
+
+        <button onClick={handleConfirm} disabled={saving}
+          className="w-full py-3 rounded-full font-semibold text-sm text-white transition disabled:opacity-60"
+          style={{ backgroundColor:TEAL }}>
+          {saving ? "Booking…" : `Confirm booking — £${totalPrice}`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---- OPEN DAY POPUP ---- */
+
+function OpenDayModal({ onClose, onRegister }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+      <div className="ff-body bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-sm p-6 flex flex-col items-center text-center gap-4">
+        <button onClick={onClose} className="self-end -mt-2 -mr-2 text-stone-400"><X size={20}/></button>
+        <div className="w-14 h-14 rounded-full flex items-center justify-center -mt-6" style={{ backgroundColor:"#E9F1EC" }}>
+          <Calendar size={26} style={{ color:TEAL }}/>
+        </div>
+        <div>
+          <h3 className="ff-display text-xl font-semibold" style={{ color:INK }}>{OPEN_DAY.title}</h3>
+          <p className="ff-body text-sm font-semibold mt-1" style={{ color:TEAL }}>{OPEN_DAY.dates}</p>
+        </div>
+        <p className="ff-body text-sm text-stone-500 leading-relaxed">{OPEN_DAY.blurb}</p>
+        <button onClick={onRegister}
+          className="w-full inline-flex items-center justify-center gap-1.5 font-semibold text-sm py-3 rounded-full transition"
+          style={{ backgroundColor:TEAL, color:"#fff" }}>
+          Register my interest
+        </button>
+        <button onClick={onClose} className="text-xs text-stone-400 underline">Maybe later</button>
+      </div>
+    </div>
+  );
+}
+
+/* ---- MY BOOKINGS ---- */
+
+// Resolves display info (day, time, venue, icon, colour) for any sessionId —
+// covers both regular classes (DEFAULT_CLASSES) and Pilates sessions, which
+// live in a separate PILATES_SESSIONS/PILATES_BASE structure.
+function getSessionInfo(sessionId) {
+  const cls = DEFAULT_CLASSES.find(c => c.id === sessionId);
+  if (cls) return cls;
+  const pilatesSession = PILATES_SESSIONS.find(p => p.id === sessionId);
+  if (pilatesSession) return { ...PILATES_BASE, ...pilatesSession, icon: "sparkles" };
+  return null;
+}
+
+function MyBookings({ bookings, currentUser, onCancel }) {
+  const [confirmCancel, setConfirmCancel] = useState(null);
+  const mine = bookings
+    .filter(b => b.userId===currentUser.id || b.email===currentUser.email)
+    .filter(b => b.status !== "cancelled");
+  return (
+    <div className="max-w-md mx-auto flex flex-col gap-3">
+      {mine.length===0
+        ? <div className="text-center py-12">
+            <p className="text-sm text-stone-500">No bookings yet.</p>
+            <p className="text-xs text-stone-400 mt-1">Book a taster session to see it here.</p>
+          </div>
+        : mine.slice().reverse().map(b => {
+          const cls = getSessionInfo(b.sessionId);
+          const Icon = cls ? (ICONS[cls.icon] || Sparkles) : Sparkles;
+          return (
+            <div key={b.id} className="bg-white rounded-xl border border-stone-200 p-4 flex gap-3 items-start">
+              {cls && (
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
+                  style={{ backgroundColor: cls.color + "1A" }}>
+                  <Icon size={16} style={{ color: cls.color }}/>
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="font-semibold text-sm" style={{ color: INK }}>{b.sessionName}</span>
+                  <StatusBadge status={b.status}/>
+                </div>
+                {cls && <p className="text-xs text-stone-500 mt-1">{cls.day} · {cls.time}</p>}
+                {cls?.venue && (
+                  <a href={cls.venueMap} target="_blank" rel="noopener noreferrer"
+                    className="ff-body flex w-fit items-center gap-1 text-xs text-stone-400 hover:text-stone-600 hover:underline mt-1 transition">
+                    <MapPin size={10}/> {cls.venue}
+                  </a>
+                )}
+                {confirmCancel === b.id ? (
+                  <div className="mt-2 flex items-center gap-2">
+                    <p className="text-xs text-stone-500">Cancel this taster?</p>
+                    <button onClick={() => { onCancel(b.id); setConfirmCancel(null); }}
+                      className="ff-body text-xs font-semibold text-red-600 hover:underline">Yes</button>
+                    <button onClick={() => setConfirmCancel(null)}
+                      className="ff-body text-xs text-stone-400 hover:underline">No</button>
+                  </div>
+                ) : (
+                  <button onClick={() => setConfirmCancel(b.id)}
+                    className="ff-body mt-2 text-xs text-stone-400 hover:text-red-500 hover:underline transition">
+                    Cancel booking
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })
+      }
+    </div>
+  );
+}
+
+/* ---- ADMIN DASHBOARD ---- */
+
+function AdminDashboard({ bookings, onMarkPaid, onMarkPending, onCancel, onRestore, onClose }) {
+  const [statusFilter, setFilter]   = useState("all");
+  const [query, setQuery]           = useState("");
+  const [notifSubject, setNSubject] = useState("");
+  const [notifMessage, setNMessage] = useState("");
+  const [notifStatus, setNStatus]   = useState("idle"); // idle | sending | sent | error
+
+  async function handleSendBlast() {
+    if (!notifSubject.trim() || !notifMessage.trim()) return;
+    setNStatus("sending");
+    try {
+      const users = (await storage.get("snb_users")) || [];
+      let sent = 0;
+      for (const u of users) {
+        await callEdgeFunction("send-email", { type:"blast", to_email:u.email, to_name:u.name, subject:notifSubject, message:notifMessage });
+        sent++;
+        setNStatus(`sending_${sent}_${users.length}`);
+        await new Promise(r => setTimeout(r, 200)); // small delay between sends
+      }
+      setNStatus("sent");
+      setTimeout(() => setNStatus("idle"), 5000);
+    } catch(e) {
+      setNStatus(e.message==="EDGE_NOT_CONFIGURED" ? "not_configured" : "error");
+      setTimeout(() => setNStatus("idle"), 5000);
+    }
+  }
+
+  const filtered = bookings.filter(b => {
+    if (statusFilter!=="all" && b.status!==statusFilter) return false;
+    if (query && !(`${b.name} ${b.email} ${b.sessionName}`.toLowerCase().includes(query.toLowerCase()))) return false;
+    return true;
+  }).slice().reverse();
+
+  const active       = bookings.filter(b => b.status!=="cancelled");
+  const totalPaid    = active.filter(b=>b.status==="paid").reduce((s,b)=>s+Number(b.amount||0),0);
+  const totalPending = active.filter(b=>b.status==="pending_payment").reduce((s,b)=>s+Number(b.amount||0),0);
+  const classCount   = active.filter(b=>b.type==="class").length;
+  const retreatCount = active.filter(b=>b.type==="retreat").length;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-2 sm:p-4">
+      <div className="ff-body bg-white rounded-2xl w-full max-w-4xl max-h-[92vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white flex items-center justify-between px-5 py-4 border-b border-stone-100 z-10">
+          <h4 className="ff-display text-lg font-semibold flex items-center gap-2" style={{ color:INK }}>
+            <LayoutDashboard size={18}/> Admin dashboard
+          </h4>
+          <button onClick={onClose}><X size={20} className="text-stone-400"/></button>
+        </div>
+
+        <div className="p-5 flex flex-col gap-5">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label:"Confirmed revenue",  val:`£${totalPaid.toFixed(2)}`,    fg:TEAL },
+              { label:"Awaiting payment",   val:`£${totalPending.toFixed(2)}`, fg:"#9A7426" },
+              { label:"Class bookings",     val:classCount,                    fg:INK },
+              { label:"Retreat bookings",   val:retreatCount,                  fg:INK },
+            ].map(c => (
+              <div key={c.label} className="rounded-xl border border-stone-200 p-3.5">
+                <p className="text-xs text-stone-500">{c.label}</p>
+                <p className="ff-display text-xl font-semibold" style={{ color:c.fg }}>{c.val}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 justify-between">
+            <div className="flex gap-1.5 flex-wrap">
+              {["all","paid","pending_payment","cancelled"].map(s => (
+                <button key={s} onClick={() => setFilter(s)}
+                  className="text-xs font-medium px-3 py-1.5 rounded-full transition"
+                  style={{ backgroundColor:statusFilter===s?TEAL:"#F3F1EA", color:statusFilter===s?"#fff":"#6B6457" }}>
+                  {s==="all" ? "All" : STATUS_META[s].label}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <div className="relative">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400"/>
+                <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search name, email, class…"
+                  className="rounded-full border border-stone-200 pl-8 pr-3 py-1.5 text-xs w-44 sm:w-56 focus:outline-none"/>
+              </div>
+              <button onClick={() => exportCSV(bookings)}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border border-stone-200 text-stone-600 hover:bg-stone-50">
+                <Download size={13}/> Export CSV
+              </button>
+            </div>
+          </div>
+
+          {filtered.length===0
+            ? <p className="text-sm text-stone-500 py-10 text-center">No bookings match this filter.</p>
+            : <div className="flex flex-col gap-2">
+                {filtered.map(b => (
+                  <div key={b.id} className="flex flex-wrap items-center gap-3 border border-stone-100 rounded-xl px-3.5 py-3">
+                    <div className="min-w-[140px] flex-1">
+                      <p className="font-medium text-sm">{b.name}</p>
+                      <p className="text-xs text-stone-400">{b.email}{b.phone ? ` · ${b.phone}` : ""}</p>
+                    </div>
+                    <div className="min-w-[140px] flex-1">
+                      <p className="text-sm font-medium">{b.sessionName}</p>
+                      <p className="text-xs text-stone-400">{b.plan}</p>
+                    </div>
+                    <div className="text-sm font-semibold w-16 text-right">
+                      £{typeof b.amount==="number" ? b.amount.toFixed(2) : b.amount}
+                    </div>
+                    <StatusBadge status={b.status}/>
+                    <div className="flex gap-1.5 ml-auto">
+                      {b.status==="pending_payment" && (
+                        <button onClick={() => onMarkPaid(b.id)} title="Mark paid" className="p-1.5 rounded-lg hover:bg-stone-100" style={{ color:TEAL }}><Check size={15}/></button>
+                      )}
+                      {b.status==="paid" && (
+                        <button onClick={() => onMarkPending(b.id)} title="Mark awaiting" className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400"><Undo2 size={15}/></button>
+                      )}
+                      {b.status!=="cancelled"
+                        ? <button onClick={() => onCancel(b.id)} title="Cancel" className="p-1.5 rounded-lg hover:bg-stone-100 text-red-500"><Ban size={15}/></button>
+                        : <button onClick={() => onRestore(b.id)} title="Restore" className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400"><RotateCcw size={15}/></button>
+                      }
+                    </div>
+                  </div>
+                ))}
+              </div>
+          }
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---- WELCOME HERO ---- */
+
+function WelcomeHero({ currentUser }) {
+  const firstName = (currentUser?.name || "").split(" ")[0] || "there";
+  // First visit ever → "Welcome"; all subsequent logins → "Welcome back"
+  const visitKey  = "snb_visited_" + currentUser.email;
+  const isFirst   = !localStorage.getItem(visitKey);
+  useEffect(() => { if (isFirst) localStorage.setItem(visitKey, "1"); }, []);
+  return (
+    <div className="rounded-2xl overflow-hidden mb-6 relative" style={{ backgroundColor: TEAL }}>
+      <svg className="absolute inset-0 opacity-[0.07] w-full h-full" preserveAspectRatio="none">
+        <defs><pattern id="wh" width="34" height="34" patternUnits="userSpaceOnUse">
+          <path d="M17 0 L34 17 L17 34 L0 17 Z" fill="none" stroke="white" strokeWidth="1"/>
+        </pattern></defs>
+        <rect width="100%" height="100%" fill="url(#wh)"/>
+      </svg>
+      <div className="relative p-6 sm:p-8">
+        <p className="ff-body text-sm font-medium mb-1" style={{ color: BG }}>{isFirst ? "Welcome" : "Welcome back"}, {firstName} 👋</p>
+        <h2 className="ff-display text-xl sm:text-2xl font-semibold leading-snug" style={{ color: BG }}>
+          Women&apos;s Fitness &amp; Wellness Classes
+        </h2>
+        <p className="ff-body text-sm mt-2 leading-relaxed max-w-sm" style={{ color: "rgba(240,232,204,0.8)" }}>
+          Join our welcoming community. Browse our taster sessions below — they&apos;re free and a great
+          way to try a new class before committing.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ---- ACCOUNT PAGE ---- */
+
+function AccountPage({ currentUser, onUpdate }) {
+  const [form, setForm]     = useState({ name: currentUser.name, phone: currentUser.phone || "" });
+  const [pw, setPw]         = useState({ current:"", next:"", confirm:"" });
+  const [showPw, setShowPw] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [pwSaving, setPwS]  = useState(false);
+  const [msg, setMsg]       = useState("");
+  const [pwMsg, setPwMsg]   = useState("");
+
+  async function saveDetails() {
+    if (!form.name.trim()) return setMsg("Name is required.");
+    setSaving(true);
+    try {
+      const users = (await storage.get("snb_users")) || [];
+      const updated = users.map(u => u.id===currentUser.id ? {...u, name:form.name.trim(), phone:form.phone.trim()} : u);
+      await storage.set("snb_users", updated);
+      const session = {...currentUser, name:form.name.trim(), phone:form.phone.trim(), expiresAt:Date.now()+SESSION_DURATION_MS};
+      await storage.set("snb_session", session);
+      onUpdate(session);
+      setMsg("✓ Details saved.");
+    } catch { setMsg("Something went wrong — please try again."); }
+    finally { setSaving(false); setTimeout(() => setMsg(""), 4000); }
+  }
+
+  async function changePassword() {
+    if (!pw.current) return setPwMsg("Enter your current password.");
+    if (!isStrongPassword(pw.next)) return setPwMsg(PASSWORD_RULE_MSG);
+    if (pw.next !== pw.confirm) return setPwMsg("Passwords don\'t match.");
+    setPwS(true);
+    try {
+      const users = (await storage.get("snb_users")) || [];
+      const user = users.find(u => u.id === currentUser.id);
+      if (!user) return setPwMsg("User not found.");
+      const cHash = await hashPassword(pw.current, user.salt || "");
+      if (cHash !== user.passwordHash) return setPwMsg("Current password is incorrect.");
+      const ns = generateSalt(); const nh = await hashPassword(pw.next, ns);
+      await storage.set("snb_users", users.map(u => u.id===currentUser.id ? {...u, passwordHash:nh, salt:ns} : u));
+      setPw({current:"", next:"", confirm:""});
+      setPwMsg("✓ Password changed.");
+    } catch { setPwMsg("Something went wrong — please try again."); }
+    finally { setPwS(false); setTimeout(() => setPwMsg(""), 4000); }
+  }
+
+  const inputCls = "ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2";
+  const card = "bg-white rounded-2xl border border-stone-200 p-5 shadow-sm flex flex-col gap-3";
+
+  return (
+    <div className="max-w-md mx-auto flex flex-col gap-4">
+      <div className={card}>
+        <h3 className="ff-display text-base font-semibold" style={{color:INK}}>Your details</h3>
+        <div>
+          <label className="ff-body text-sm font-medium text-stone-700">Full name</label>
+          <input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} className={inputCls}/>
+        </div>
+        <div>
+          <label className="ff-body text-sm font-medium text-stone-700">Email address</label>
+          <input value={currentUser.email} disabled className={inputCls+" bg-stone-50 text-stone-400 cursor-not-allowed"}/>
+          <p className="ff-body text-xs text-stone-400 mt-1">Email cannot be changed. Contact shams@snbhive.com if needed.</p>
+        </div>
+        <div>
+          <label className="ff-body text-sm font-medium text-stone-700">Mobile number</label>
+          <input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} type="tel" className={inputCls}/>
+        </div>
+        {msg && <p className={"ff-body text-xs px-3 py-2 rounded-lg " + (msg.startsWith("✓") ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600")}>{msg}</p>}
+        <button onClick={saveDetails} disabled={saving}
+          className="ff-body font-semibold text-sm py-2.5 rounded-full disabled:opacity-50"
+          style={{backgroundColor:TEAL,color:"#fff"}}>{saving ? "Saving…" : "Save changes"}</button>
+      </div>
+
+      <div className={card}>
+        <h3 className="ff-display text-base font-semibold" style={{color:INK}}>Change password</h3>
+        {[["current","Current password",""],["next","New password","At least 10 characters, incl. a letter and a number"],["confirm","Confirm new password",""]].map(([k,label,ph]) => (
+          <div key={k}>
+            <label className="ff-body text-sm font-medium text-stone-700">{label}</label>
+            <div className="relative mt-1">
+              <input value={pw[k]} onChange={e=>setPw({...pw,[k]:e.target.value})} type={showPw?"text":"password"} placeholder={ph}
+                className={inputCls+" pr-10"}/>
+              {k==="current" && (
+                <button onClick={()=>setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400">
+                  {showPw ? <EyeOff size={16}/> : <Eye size={16}/>}
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+        {pwMsg && <p className={"ff-body text-xs px-3 py-2 rounded-lg " + (pwMsg.startsWith("✓") ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600")}>{pwMsg}</p>}
+        <button onClick={changePassword} disabled={pwSaving}
+          className="ff-body font-semibold text-sm py-2.5 rounded-full disabled:opacity-50"
+          style={{backgroundColor:TEAL,color:"#fff"}}>{pwSaving ? "Updating…" : "Change password"}</button>
+      </div>
+    </div>
+  );
+}
+
+/* ---- POLICY PAGES ---- */
+
+function PolicyPage({ title, children }) {
+  return (
+    <div className="min-h-screen" style={{backgroundColor:BG}}>
+      <Fonts/>
+      <div className="max-w-2xl mx-auto px-4 py-10">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center rounded-2xl px-5 py-3" style={{ backgroundColor:BG }}>
+            <img src={LOGO} alt="SNB Hive" style={{ height:"88px" }} onError={e => { e.target.style.display = "none"; }}/>
+          </div>
+        </div>
+        <div className="bg-white rounded-2xl border border-stone-200 p-8 shadow-sm">
+          <h1 className="ff-display text-2xl font-semibold mb-6" style={{color:INK}}>{title}</h1>
+          <div className="ff-body text-sm text-stone-600 leading-relaxed flex flex-col gap-4">{children}</div>
+        </div>
+        <p className="ff-body text-xs text-stone-400 text-center mt-4">
+          Questions? Contact <a href="mailto:shams@snbhive.com" className="underline">shams@snbhive.com</a>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function PrivacyPage() {
+  return (
+    <PolicyPage title="Privacy Policy">
+      <p><strong>Who we are:</strong> SNB Hive. Contact: shams@snbhive.com</p>
+      <p><strong>What we collect:</strong> Your name, email address, and mobile number when you create an account, and booking details when you register for a class or retreat.</p>
+      <p><strong>Why we collect it:</strong> To manage your bookings, send you confirmation emails, and notify you of class updates. We do not sell your data to third parties.</p>
+      <p><strong>How we store it:</strong> Your data is stored securely in Supabase (EU-based servers). Passwords are stored as salted hashes — we cannot read your password.</p>
+      <p><strong>How long we keep it:</strong> We keep your data for as long as you have an active account. You can request deletion at any time by emailing shams@snbhive.com.</p>
+      <p><strong>Your rights (UK GDPR):</strong> You have the right to access, correct, or delete your personal data. Contact us at shams@snbhive.com to exercise these rights.</p>
+      <p><strong>Last updated:</strong> July 2026</p>
+    </PolicyPage>
+  );
+}
+
+function TermsPage() {
+  return (
+    <PolicyPage title="Terms & Conditions">
+      <p><strong>1. Taster sessions</strong> — Taster sessions are free and subject to availability. Booking a taster does not guarantee a place on a regular class.</p>
+      <p><strong>2. Cancellations</strong> — Please cancel at least 24 hours in advance if you cannot attend. This allows us to offer your place to someone on the waitlist.</p>
+      <p><strong>3. Health & safety</strong> — By booking a taster you confirm you are in good health and able to participate. Please inform the instructor of any injuries before the session.</p>
+      <p><strong>4. Your account</strong> — You are responsible for keeping your login details secure. Contact shams@snbhive.com immediately if you suspect unauthorised access.</p>
+      <p><strong>5. Changes</strong> — We reserve the right to change session dates, times or venues. We will notify you by email if this affects a booking you have made.</p>
+      <p><strong>6. Governing law</strong> — These terms are governed by the laws of England and Wales.</p>
+      <p><strong>Last updated:</strong> July 2026</p>
+    </PolicyPage>
+  );
+}
+
+
+function PilatesCard({ booked, bookingType, onBook }) {
+  const color = PILATES_BASE.color;
+  const session = PILATES_SESSIONS[0];
+
+  const isBooked = bookingType === "membership";
+  const full = session.fullyBooked || booked >= session.capacity;
+  const isClosed =
+    TASTER_MODE &&
+    TASTERS_CLOSED &&
+    !isBooked;
+
+  const disabled =
+    full ||
+    isBooked ||
+    isClosed;
+
+  return (
+    <div className="bg-white rounded-2xl border border-stone-200 p-5 flex flex-col gap-4 shadow-sm">
+      <div className="flex items-start gap-3">
+        <div
+          className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
+          style={{
+            backgroundColor: color + "1A",
+          }}
+        >
+          <Sparkles
+            size={20}
+            style={{ color }}
+          />
+        </div>
+
+        <div>
+          <h3
+            className="ff-display text-lg font-semibold"
+            style={{ color: INK }}
+          >
+            {PILATES_BASE.name}
+          </h3>
+
+          <p className="ff-body text-sm text-stone-500">
+            {PILATES_BASE.tagline}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Pill icon={Calendar}>
+          {session.day}
+        </Pill>
+
+        <Pill icon={Clock}>
+          {session.time}
+        </Pill>
+      </div>
+
+      {PILATES_BASE.venue && (
+        <a
+          href={PILATES_BASE.venueMap}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="ff-body inline-flex items-center gap-1.5 text-xs text-stone-400 hover:text-stone-600 transition -mt-1"
+        >
+          <MapPin size={11}/>
+          {PILATES_BASE.venue}
+        </a>
+      )}
+
+      <div className="flex items-center justify-end pt-2 border-t border-stone-100 mt-auto">
+        <button
+          onClick={() => {
+            if (!disabled) {
+              onBook({
+                ...PILATES_BASE,
+                ...session,
+              });
+            }
+          }}
+          disabled={disabled}
+          className="ff-body inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full transition disabled:cursor-not-allowed"
+          style={{
+            backgroundColor: isBooked
+              ? "#D4EBD9"
+              : full || isClosed
+                ? "#E3DFD3"
+                : TEAL,
+            color: isBooked
+              ? "#2D6B40"
+              : full || isClosed
+                ? "#8A8478"
+                : "#FFF",
+          }}
+        >
+          {full
+            ? "Fully Booked"
+            : isBooked
+              ? "Taster booked"
+              : isClosed
+                ? "Tasters closed"
+                : "Book taster"}
+
+          {!disabled && (
+            <ArrowRight size={14}/>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+function ComingSoon() {
+  return (
+    <div className="max-w-lg mx-auto flex flex-col gap-5 py-4">
+
+      {/* Header */}
+      <div className="text-center">
+        <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor:TEAL+"1A" }}>
+          <Sparkles size={28} style={{ color:TEAL }}/>
+        </div>
+        <h2 className="ff-display text-2xl font-semibold" style={{ color:INK }}>SNB Hive Wellness Series</h2>
+        <div className="inline-flex items-center gap-2 mt-2 px-3 py-1 rounded-full text-xs font-medium" style={{ backgroundColor:TEAL+"1A", color:TEAL }}>
+          <Bell size={12}/> Coming soon — August 2026
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
+        <p className="ff-body text-sm text-stone-600 leading-relaxed">
+          Introducing the SNB Hive Wellness Series – exclusive luxury retreats created for women who deserve
+          time to pause, breathe and reconnect. Expect beautiful venues, wellness experiences, delicious food,
+          meaningful conversations and a carefully curated itinerary designed to leave you feeling refreshed,
+          empowered and inspired. Because self-care isn't a luxury—it's essential.
+        </p>
+      </div>
+
+      {/* Poster */}
+      <div className="rounded-2xl overflow-hidden shadow-sm border border-stone-200">
+        <img src={RETREAT_POSTER} alt="SNB Hive Wellness Series retreat poster" className="w-full h-auto block"
+          onError={e => { e.target.style.display = "none"; }}/>
+      </div>
+      <div className="rounded-2xl overflow-hidden shadow-sm border border-stone-200">
+        <img src={RETREAT_POSTER_2} alt="SNB Hive Wellness Series retreat details" className="w-full h-auto block"
+          onError={e => { e.target.style.display = "none"; }}/>
+      </div>
+
+      {/* CTA */}
+      <a href={"mailto:shams@snbhive.com?subject=Retreat%20Interest%20%E2%80%94%20August%202026"}
+        className="w-full inline-flex items-center justify-center gap-2 font-semibold text-sm py-3 rounded-full"
+        style={{ backgroundColor:TEAL, color:"#fff" }}>
+        <Mail size={15}/> Register your interest
+      </a>
+      <p className="ff-body text-xs text-stone-400 text-center -mt-2">
+        All registered members will also receive an email notification when retreat bookings open.
+      </p>
+    </div>
+  );
+}
+
+/* ---- STUDIO HIRE ENQUIRY FORM ---- */
+
+const STUDIO_HIRE_PURPOSES = ["Fitness and Wellbeing", "Creative Workshop", "Other"];
+const SESSIONS_PER_WEEK_OPTIONS = ["1", "2", "3", "4", "5", "One-off"];
+
+function StudioHireForm({ currentUser }) {
+  const [step, setStep]         = useState(1);
+  const [form, setForm]         = useState({
+    name: currentUser.name || "", email: currentUser.email || "", phone: currentUser.phone || "",
+    purpose: "", fitnessType: "", qualifications: "", workshopType: "", otherType: "",
+    sessionsPerWeek: "", classSize: "",
+  });
+  const [saving, setSaving]     = useState(false);
+  const [error, setError]       = useState("");
+  const [submitted, setSubmitted] = useState(false);
+
+  const isFitness  = form.purpose === "Fitness and Wellbeing";
+  const isWorkshop = form.purpose === "Creative Workshop";
+  const isOther    = form.purpose === "Other";
+  const totalSteps = isFitness ? 6 : 5;
+
+  function next() { setError(""); setStep(s => s + 1); }
+  function back() { setError(""); setStep(s => Math.max(1, s - 1)); }
+
+  async function submit() {
+    if (!form.sessionsPerWeek) return setError("Please select how many sessions per week.");
+    if (!form.classSize.trim()) return setError("Please tell us the expected class size.");
+    setSaving(true); setError("");
+    try {
+      await storage.set("studio_hire_enquiries", {
+        id: uid(), userId: currentUser.id,
+        name: form.name.trim(), email: form.email.trim(), phone: form.phone.trim(),
+        purpose: form.purpose,
+        fitnessType: isFitness ? form.fitnessType.trim() : "",
+        qualifications: isFitness ? form.qualifications.trim() : "",
+        workshopType: isWorkshop ? form.workshopType.trim() : "",
+        otherType: isOther ? form.otherType.trim() : "",
+        sessionsPerWeek: form.sessionsPerWeek,
+        classSize: form.classSize.trim(),
+        createdAt: new Date().toISOString(),
+      });
+      setSubmitted(true);
+    } catch { setError("Couldn't submit your enquiry — please try again."); }
+    finally { setSaving(false); }
+  }
+
+  const inputCls = "ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2";
+  const card = "bg-white rounded-2xl border border-stone-200 p-6 shadow-sm flex flex-col gap-4";
+
+  if (submitted) {
+    return (
+      <div className="max-w-md mx-auto flex flex-col gap-4">
+        <div className={card + " items-center text-center"}>
+          <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: TEAL+"1A" }}>
+            <Check size={22} style={{ color: TEAL }}/>
+          </div>
+          <h3 className="ff-display text-lg font-semibold" style={{ color: INK }}>Enquiry sent</h3>
+          <p className="ff-body text-sm text-stone-500">
+            Thank you — we've received your studio hire enquiry and will be in touch shortly.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-md mx-auto flex flex-col gap-4">
+
+      {/* Intro */}
+      <div className="text-center">
+        <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor:TEAL+"1A" }}>
+          <Sparkles size={28} style={{ color:TEAL }}/>
+        </div>
+        <h2 className="ff-display text-2xl font-semibold" style={{ color:INK }}>
+          Host Your Next Event in Our Boutique Women-Only Wellness Studio
+        </h2>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm flex flex-col gap-4">
+        <p className="ff-body text-sm text-stone-600 leading-relaxed">
+          Nestled in the heart of Hackney, our beautifully designed women-only wellness studio provides
+          an elegant and versatile space for inspiring experiences. Featuring a bright, spacious studio,
+          private changing facilities, a bathroom and a peaceful garden, it's the perfect setting for
+          events that bring women together.
+        </p>
+        <p className="ff-body text-sm text-stone-600 leading-relaxed">
+          Ideal for yoga and fitness classes, coaching sessions, networking events, wellbeing workshops,
+          creative experiences, photoshoots and community gatherings, the studio offers a warm,
+          professional and welcoming atmosphere where women can connect, learn and thrive.
+        </p>
+        <p className="ff-body text-sm text-stone-600 leading-relaxed">
+          Whether you're a wellness practitioner, coach, therapist, creative or business owner, our space
+          is designed to help you deliver exceptional experiences in a setting that reflects the quality
+          of your brand. Let us provide the space while you focus on creating something unforgettable.
+        </p>
+      </div>
+
+      <div className={card}>
+        <div>
+          <h3 className="ff-display text-lg font-semibold" style={{ color: INK }}>Studio Hire Enquiry</h3>
+          <p className="ff-body text-sm text-stone-500 mt-1">
+            Tell us a little about what you'd like to run, and we'll be in touch to discuss availability.
+          </p>
+          <p className="ff-body text-xs text-stone-400 mt-2">Step {step} of {totalSteps}</p>
+        </div>
+
+        {/* Step 1 — Name, email, phone */}
+        {step === 1 && (
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className="ff-body text-sm font-medium text-stone-700">Full name</label>
+              <input value={form.name} onChange={e => setForm({...form, name:e.target.value})}
+                autoFocus className={inputCls}/>
+            </div>
+            <div>
+              <label className="ff-body text-sm font-medium text-stone-700">Email address</label>
+              <input value={form.email} onChange={e => setForm({...form, email:e.target.value})}
+                type="email" className={inputCls}/>
+            </div>
+            <div>
+              <label className="ff-body text-sm font-medium text-stone-700">Phone number</label>
+              <input value={form.phone} onChange={e => setForm({...form, phone:e.target.value})}
+                type="tel" className={inputCls}/>
+            </div>
+            {error && <p className="ff-body text-xs text-red-600">{error}</p>}
+            <button onClick={() => {
+              if (!form.name.trim()) return setError("Please enter your name.");
+              if (!/\S+@\S+\.\S+/.test(form.email)) return setError("Please enter a valid email address.");
+              if (form.phone.replace(/\D/g,"").length < 10) return setError("Please enter a valid phone number.");
+              next();
+            }} className="ff-body font-semibold text-sm py-2.5 rounded-full"
+              style={{ backgroundColor: TEAL, color:"#fff" }}>Continue</button>
+          </div>
+        )}
+
+        {/* Step 2 — Purpose */}
+        {step === 2 && (
+          <div className="flex flex-col gap-3">
+            <label className="ff-body text-sm font-medium text-stone-700">What would you like to hire the studio for?</label>
+            <div className="flex flex-col gap-2">
+              {STUDIO_HIRE_PURPOSES.map(p => (
+                <button key={p} onClick={() => { setForm({...form, purpose:p}); next(); }}
+                  className="ff-body text-sm font-medium text-left px-4 py-2.5 rounded-xl border transition"
+                  style={{
+                    borderColor: form.purpose===p ? TEAL : "#E7E2D3",
+                    backgroundColor: form.purpose===p ? TEAL+"14" : "#fff",
+                    color: INK,
+                  }}>{p}</button>
+              ))}
+            </div>
+            <button onClick={back} className="ff-body text-xs text-stone-400 hover:text-stone-600 self-start flex items-center gap-1 mt-1">
+              <ChevronLeft size={14}/> Back
+            </button>
+          </div>
+        )}
+
+        {/* Step 3 — Fitness type (Fitness and Wellbeing only) */}
+        {step === 3 && isFitness && (
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className="ff-body text-sm font-medium text-stone-700">What type of fitness class would this be?</label>
+              <input value={form.fitnessType} onChange={e => setForm({...form, fitnessType:e.target.value})}
+                autoFocus className={inputCls} placeholder="e.g. Yoga, Boxing, Strength training"/>
+            </div>
+            {error && <p className="ff-body text-xs text-red-600">{error}</p>}
+            <div className="flex gap-2">
+              <button onClick={back} className="ff-body text-sm font-medium px-4 py-2.5 rounded-full border border-stone-200 text-stone-500">Back</button>
+              <button onClick={() => form.fitnessType.trim() ? next() : setError("Please tell us the type of class.")}
+                className="ff-body font-semibold text-sm py-2.5 rounded-full flex-1"
+                style={{ backgroundColor: TEAL, color:"#fff" }}>Continue</button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3 — Workshop type (Creative Workshop only) */}
+        {step === 3 && isWorkshop && (
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className="ff-body text-sm font-medium text-stone-700">What type of workshop will this be?</label>
+              <input value={form.workshopType} onChange={e => setForm({...form, workshopType:e.target.value})}
+                autoFocus className={inputCls} placeholder="e.g. Pottery, Painting, Jewellery making"/>
+            </div>
+            {error && <p className="ff-body text-xs text-red-600">{error}</p>}
+            <div className="flex gap-2">
+              <button onClick={back} className="ff-body text-sm font-medium px-4 py-2.5 rounded-full border border-stone-200 text-stone-500">Back</button>
+              <button onClick={() => form.workshopType.trim() ? next() : setError("Please tell us the type of workshop.")}
+                className="ff-body font-semibold text-sm py-2.5 rounded-full flex-1"
+                style={{ backgroundColor: TEAL, color:"#fff" }}>Continue</button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3 — Other type (Other only) */}
+        {step === 3 && isOther && (
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className="ff-body text-sm font-medium text-stone-700">Please tell us a bit more about what this would be</label>
+              <input value={form.otherType} onChange={e => setForm({...form, otherType:e.target.value})}
+                autoFocus className={inputCls} placeholder="Tell us what you have in mind"/>
+            </div>
+            {error && <p className="ff-body text-xs text-red-600">{error}</p>}
+            <div className="flex gap-2">
+              <button onClick={back} className="ff-body text-sm font-medium px-4 py-2.5 rounded-full border border-stone-200 text-stone-500">Back</button>
+              <button onClick={() => form.otherType.trim() ? next() : setError("Please tell us a bit more.")}
+                className="ff-body font-semibold text-sm py-2.5 rounded-full flex-1"
+                style={{ backgroundColor: TEAL, color:"#fff" }}>Continue</button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 4 — Qualifications (Fitness and Wellbeing only) */}
+        {step === 4 && isFitness && (
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className="ff-body text-sm font-medium text-stone-700">What qualifications or certificates do you hold in this area?</label>
+              <textarea value={form.qualifications} onChange={e => setForm({...form, qualifications:e.target.value})}
+                autoFocus rows={3} className={inputCls}/>
+            </div>
+            {error && <p className="ff-body text-xs text-red-600">{error}</p>}
+            <div className="flex gap-2">
+              <button onClick={back} className="ff-body text-sm font-medium px-4 py-2.5 rounded-full border border-stone-200 text-stone-500">Back</button>
+              <button onClick={() => form.qualifications.trim() ? next() : setError("Please list your qualification(s) or certificate(s).")}
+                className="ff-body font-semibold text-sm py-2.5 rounded-full flex-1"
+                style={{ backgroundColor: TEAL, color:"#fff" }}>Continue</button>
+            </div>
+          </div>
+        )}
+
+        {/* Sessions per week — reached straight from the purpose-detail step
+            (Creative Workshop / Other) or after Qualifications (Fitness and Wellbeing) */}
+        {((step === 4 && (isWorkshop || isOther)) || (step === 5 && isFitness)) && (
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className="ff-body text-sm font-medium text-stone-700">How many sessions per week will you be running?</label>
+              <select value={form.sessionsPerWeek} onChange={e => setForm({...form, sessionsPerWeek:e.target.value})}
+                className={inputCls}>
+                <option value="">Select…</option>
+                {SESSIONS_PER_WEEK_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
+            {error && <p className="ff-body text-xs text-red-600">{error}</p>}
+            <div className="flex gap-2">
+              <button onClick={back} className="ff-body text-sm font-medium px-4 py-2.5 rounded-full border border-stone-200 text-stone-500">Back</button>
+              <button onClick={() => form.sessionsPerWeek ? next() : setError("Please select an option.")}
+                className="ff-body font-semibold text-sm py-2.5 rounded-full flex-1"
+                style={{ backgroundColor: TEAL, color:"#fff" }}>Continue</button>
+            </div>
+          </div>
+        )}
+
+        {/* Class size — final step */}
+        {((step === 5 && (isWorkshop || isOther)) || (step === 6 && isFitness)) && (
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className="ff-body text-sm font-medium text-stone-700">What is the expected class size?</label>
+              <input value={form.classSize} onChange={e => setForm({...form, classSize:e.target.value})}
+                autoFocus className={inputCls} placeholder="e.g. 10–15 people"/>
+            </div>
+            {error && <p className="ff-body text-xs text-red-600">{error}</p>}
+            <div className="flex gap-2">
+              <button onClick={back} className="ff-body text-sm font-medium px-4 py-2.5 rounded-full border border-stone-200 text-stone-500">Back</button>
+              <button onClick={submit} disabled={saving}
+                className="ff-body font-semibold text-sm py-2.5 rounded-full flex-1 disabled:opacity-50"
+                style={{ backgroundColor: TEAL, color:"#fff" }}>{saving ? "Submitting…" : "Submit enquiry"}</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---- ADMIN PAGE (accessed at /admin — never linked from the user site) ---- */
+
+function AdminClassCard({ cls, bookings }) {
+  const Icon = ICONS[cls.icon] || Sparkles;
+  const clsBookings = bookings
+    .filter(b => b.sessionId === cls.id && b.status !== "cancelled")
+    .sort((a,b) => new Date(a.createdAt||0) - new Date(b.createdAt||0));
+  const pct = Math.min(100, cls.capacity ? (clsBookings.length / cls.capacity) * 100 : 0);
+  const full = clsBookings.length >= cls.capacity;
+  return (
+    <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+      {/* Class header */}
+      <div className="p-4 border-b border-stone-100 flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+            style={{ backgroundColor: cls.color + "1A" }}>
+            <Icon size={18} style={{ color: cls.color }}/>
+          </div>
+          <div>
+            <p className="ff-body font-semibold text-sm" style={{ color: INK }}>{cls.name}</p>
+            <p className="ff-body text-xs text-stone-400 mt-0.5">{cls.day} · {cls.time}</p>
+          </div>
+        </div>
+        <div className="text-right shrink-0">
+          <p className="ff-display text-2xl font-bold" style={{ color: full ? "#B3261E" : TEAL }}>
+            {clsBookings.length}
+          </p>
+          <p className="ff-body text-xs text-stone-400">of {cls.capacity}</p>
+        </div>
+      </div>
+
+      {/* Progress bar */}
+      <div className="px-4 pt-3 pb-2">
+        <div className="w-full bg-stone-100 rounded-full h-1.5">
+          <div className="h-1.5 rounded-full transition-all"
+            style={{ width: pct + "%", backgroundColor: full ? "#B3261E" : cls.color }}/>
+        </div>
+        <p className="ff-body text-xs mt-1.5" style={{ color: full ? "#B3261E" : "#8A8478" }}>
+          {full ? "Class full" : `${cls.capacity - clsBookings.length} spaces remaining`}
+        </p>
+      </div>
+
+      {/* Registered members list */}
+      <div className="px-4 pb-4">
+        {clsBookings.length === 0 ? (
+          <p className="ff-body text-xs text-stone-400 py-2 text-center italic">No registrations yet</p>
+        ) : (
+          <div>
+            <p className="ff-body text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">Registered</p>
+            <div className="flex flex-col divide-y divide-stone-50">
+              {clsBookings.map((b, i) => (
+                <div key={b.id} className="flex items-center justify-between py-2">
+                  <div className="flex items-center gap-2">
+                    <span className="ff-body text-xs text-stone-400 w-5 text-right shrink-0">{i+1}.</span>
+                    <span className="ff-body text-sm font-medium" style={{ color: INK }}>{b.name}</span>
+                  </div>
+                  <span className="ff-body text-xs text-stone-400 truncate ml-2">{b.email}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AdminPage() {
+  const [adminSession, setAdminSession] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem("snb_admin_session")) || null; }
+    catch { return null; }
+  });
+  const unlocked = !!adminSession;
+
+  const [loginStep, setLoginStep]   = useState("credentials"); // credentials | mfa
+  const [email, setEmail]           = useState("");
+  const [password, setPassword]     = useState("");
+  const [mfaCode, setMfaCode]       = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState("");
+  const [mfaSentMsg, setMfaSentMsg] = useState("");
+  const [showAdminPw, setShowAdminPw] = useState(false);
+
+  const [bookings, setBookings]   = useState([]);
+  const [members, setMembers]     = useState([]);
+  const [enquiries, setEnquiries] = useState([]);
+  const [loading, setLoading]     = useState(false);
+  const [adminTab, setAdminTab]   = useState("bookings");
+  const [statusFilter, setFilter] = useState("all");
+  const [query, setQuery]         = useState("");
+  const [memberQuery, setMQuery]  = useState("");
+  const [notifSubject, setNSubject] = useState("");
+  const [notifMessage, setNMessage] = useState("");
+  const [notifStatus, setNStatus]   = useState("idle");
+
+  // Auto-logout after 30 minutes of inactivity — same protection as the
+  // main user-facing app, arguably even more important here.
+  useIdleLogout(unlocked, handleAdminSignOut, 30);
+
+  // Load bookings + members + studio hire enquiries once unlocked
+  useEffect(() => {
+    if (!unlocked) return;
+    setLoading(true);
+    Promise.all([
+      storage.get("bookings"),
+      storage.get("snb_users"),
+      storage.get("studio_hire_enquiries"),
+    ]).then(([b, u, e]) => {
+      setBookings(b || []);
+      setMembers(u || []);
+      setEnquiries(e || []);
+    }).finally(() => setLoading(false));
+  }, [unlocked]);
+
+  function handleAdminSignOut() {
+    sessionStorage.removeItem("snb_admin_session");
+    setAdminSession(null);
+    setLoginStep("credentials");
+    setEmail(""); setPassword(""); setMfaCode("");
+  }
+
+  async function handleLoginStep1() {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!/\S+@\S+\.\S+/.test(cleanEmail)) return setLoginError("Please enter a valid email address.");
+    if (!password) return setLoginError("Please enter your password.");
+    const lock = lockMsg("admin_" + cleanEmail);
+    if (lock) return setLoginError(lock);
+
+    setLoginLoading(true); setLoginError("");
+    try {
+      const res = await callEdgeFunction("admin-auth", { step: "login", email: cleanEmail, password });
+      if (res.mfaRequired) {
+        clearAttempts("admin_" + cleanEmail);
+        setMfaSentMsg(`We've sent a 6-digit code to ${cleanEmail}.`);
+        setLoginStep("mfa");
+      }
+    } catch (e) {
+      recordFailure("admin_" + cleanEmail);
+      const isConfig = e.message.includes("EDGE_NOT_CONFIGURED");
+      setLoginError(isConfig ? "Admin login isn't set up yet — deploy the admin-auth Edge Function." : "Incorrect email or password.");
+    } finally { setLoginLoading(false); }
+  }
+
+  async function handleVerifyMfa() {
+    if (!mfaCode || mfaCode.length !== 6) return setLoginError("Please enter the 6-digit code from your email.");
+    setLoginLoading(true); setLoginError("");
+    try {
+      const cleanEmail = email.trim().toLowerCase();
+      const res = await callEdgeFunction("admin-auth", { step: "verify_mfa", email: cleanEmail, code: mfaCode });
+      if (res.success) {
+        const session = { email: res.admin.email, loginAt: Date.now() };
+        sessionStorage.setItem("snb_admin_session", JSON.stringify(session));
+        setAdminSession(session);
+      }
+    } catch {
+      setLoginError("Incorrect or expired code. Please try again.");
+    } finally { setLoginLoading(false); }
+  }
+
+  async function handleResendMfaCode() {
+    setLoginLoading(true); setLoginError("");
+    try {
+      await callEdgeFunction("admin-auth", { step: "login", email: email.trim().toLowerCase(), password });
+      setMfaSentMsg("New code sent — check your email.");
+    } catch {
+      setLoginError("Couldn't resend the code — please try again.");
+    } finally { setLoginLoading(false); }
+  }
+
+  async function updateStatus(id, status) {
+    const next = bookings.map(b => b.id === id ? { ...b, status } : b);
+    setBookings(next);
+    await storage.set("bookings", next);
+  }
+
+  async function handleSendBlast() {
+    if (!notifSubject.trim() || !notifMessage.trim()) return;
+    setNStatus("sending");
+    try {
+      const users = (await storage.get("snb_users")) || [];
+      let sent = 0;
+      for (const u of users) {
+        await callEdgeFunction("send-email", { type:"blast", to_email:u.email, to_name:u.name, subject:notifSubject, message:notifMessage });
+        sent++;
+        setNStatus(`sending_${sent}_${users.length}`);
+        await new Promise(r => setTimeout(r, 200));
+      }
+      setNStatus("sent");
+      setTimeout(() => setNStatus("idle"), 5000);
+    } catch(e) {
+      setNStatus(e.message === "EDGE_NOT_CONFIGURED" ? "not_configured" : "error");
+      setTimeout(() => setNStatus("idle"), 5000);
+    }
+  }
+
+  // ── Login screen ───────────────────────────────────────────────────
+  if (!unlocked) return (
+    <div className="min-h-screen flex flex-col items-center justify-center px-4"
+         style={{ backgroundColor: BG }}>
+      <Fonts/>
+      <div className="w-full max-w-xs">
+        <div className="text-center mb-8">
+          <div className="mx-auto mb-3 flex justify-center">
+            <div className="flex items-center justify-center rounded-2xl overflow-hidden" style={{ backgroundColor:BG, padding:"14px 28px" }}>
+              <img src={LOGO} alt="SNB Hive" style={{ height:"288px" }} onError={e => { e.target.style.display = "none"; }}/>
+            </div>
+          </div>
+          <p className="ff-body text-sm font-semibold" style={{ color: INK }}>Admin Dashboard</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-stone-200 p-6 flex flex-col gap-4 shadow-sm">
+
+          {loginStep === "credentials" && (<>
+            <div>
+              <label className="ff-body text-sm font-medium text-stone-700">Email address</label>
+              <input type="email" value={email} autoFocus
+                onChange={e => { setEmail(e.target.value); setLoginError(""); }}
+                onKeyDown={e => e.key === "Enter" && handleLoginStep1()}
+                className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
+                placeholder="you@snbhive.com"/>
+            </div>
+            <div>
+              <label className="ff-body text-sm font-medium text-stone-700">Password</label>
+              <div className="relative mt-1">
+                <input type={showAdminPw ? "text" : "password"} value={password}
+                  onChange={e => { setPassword(e.target.value); setLoginError(""); }}
+                  onKeyDown={e => e.key === "Enter" && handleLoginStep1()}
+                  className="ff-body w-full rounded-xl border border-stone-200 px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2"
+                  placeholder="••••••••"/>
+                <button type="button" onClick={() => setShowAdminPw(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400">
+                  {showAdminPw ? <EyeOff size={16}/> : <Eye size={16}/>}
+                </button>
+              </div>
+            </div>
+            {loginError && <p className="ff-body text-xs text-red-600 text-center">{loginError}</p>}
+            <button onClick={handleLoginStep1} disabled={loginLoading}
+              className="ff-body font-semibold text-sm py-3 rounded-full disabled:opacity-50"
+              style={{ backgroundColor: TEAL, color: "#fff" }}>
+              {loginLoading ? "Checking…" : "Sign in"}
+            </button>
+          </>)}
+
+          {loginStep === "mfa" && (<>
+            <div className="text-center mb-1">
+              <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3" style={{backgroundColor:"#E9F1EC"}}>
+                <Mail size={20} style={{color:TEAL}}/>
+              </div>
+              <p className="ff-body text-xs text-stone-500">{mfaSentMsg}</p>
+            </div>
+            <div>
+              <label className="ff-body text-sm font-medium text-stone-700">Verification code</label>
+              <input value={mfaCode} onChange={e => { setMfaCode(e.target.value.replace(/\D/g,"").slice(0,6)); setLoginError(""); }}
+                onKeyDown={e => e.key === "Enter" && handleVerifyMfa()}
+                type="text" inputMode="numeric" maxLength={6}
+                className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-3 text-center tracking-[0.5em] text-lg font-semibold focus:outline-none focus:ring-2"
+                placeholder="000000"/>
+            </div>
+            {loginError && <p className="ff-body text-xs text-red-600 text-center">{loginError}</p>}
+            <button onClick={handleVerifyMfa} disabled={loginLoading || mfaCode.length !== 6}
+              className="ff-body font-semibold text-sm py-3 rounded-full disabled:opacity-50"
+              style={{ backgroundColor: TEAL, color: "#fff" }}>
+              {loginLoading ? "Verifying…" : "Verify & sign in"}
+            </button>
+            <div className="flex items-center justify-between">
+              <button onClick={handleResendMfaCode} disabled={loginLoading} className="ff-body text-xs text-stone-400 hover:text-stone-600">
+                Resend code
+              </button>
+              <button onClick={() => { setLoginStep("credentials"); setMfaCode(""); setLoginError(""); }} className="ff-body text-xs text-stone-400 hover:text-stone-600">
+                Go back
+              </button>
+            </div>
+          </>)}
+
+          <p className="ff-body text-xs text-center mt-2 rounded-lg px-2 py-1.5"
+             style={{ backgroundColor: import.meta.env.VITE_SUPABASE_URL ? "#E9F1EC" : "#F3E7E5",
+                      color: import.meta.env.VITE_SUPABASE_URL ? "#1F4A42" : "#9B3A2E" }}>
+            {import.meta.env.VITE_SUPABASE_URL ? "✓ Supabase connected" : "✗ VITE_SUPABASE_URL missing — check Vercel env vars & redeploy"}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── Dashboard ─────────────────────────────────────────────────────────
+  const filtered = bookings.filter(b => {
+    if (statusFilter !== "all" && b.status !== statusFilter) return false;
+    if (query && !(`${b.name} ${b.email} ${b.sessionName}`.toLowerCase().includes(query.toLowerCase()))) return false;
+    return true;
+  }).slice().reverse();
+
+  const active       = bookings.filter(b => b.status !== "cancelled");
+  const totalPaid    = active.filter(b => b.status === "paid").reduce((s,b) => s + Number(b.amount||0), 0);
+  const totalPending = active.filter(b => b.status === "pending_payment").reduce((s,b) => s + Number(b.amount||0), 0);
+  const classCount   = active.filter(b => b.type === "class").length;
+  const retreatCount = active.filter(b => b.type === "retreat").length;
+
+  return (
+    <div className="min-h-screen" style={{ backgroundColor: BG }}>
+      <Fonts/>
+
+      {/* Header */}
+      <div style={{ backgroundColor: TEAL }}>
+        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center rounded-xl overflow-hidden" style={{ backgroundColor:BG, padding:"6px 14px" }}>
+              <img src={LOGO} alt="SNB Hive" style={{ height:"56px" }} onError={e => { e.target.style.display = "none"; }}/>
+            </div>
+            <div>
+              <p className="ff-display text-base font-semibold" style={{ color: GOLD }}>SNB Hive</p>
+              <p className="ff-body text-xs" style={{ color: "rgba(255,255,255,0.6)" }}>Admin Dashboard</p>
+            </div>
+          </div>
+          <button onClick={handleAdminSignOut}
+            className="ff-body text-xs px-3 py-1.5 rounded-full"
+            style={{ backgroundColor: "rgba(255,255,255,0.15)", color: "#fff" }}>
+            Sign out
+          </button>
+        </div>
+      </div>
+
+      <div className="max-w-5xl mx-auto px-4 py-6 flex flex-col gap-6">
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          {[
+            { label: "Total members",      value: members.length,                 color: TEAL },
+            { label: "Confirmed revenue",  value: `£${totalPaid.toFixed(2)}`,    color: TEAL },
+            { label: "Awaiting payment",   value: `£${totalPending.toFixed(2)}`, color: "#9A7426" },
+            { label: "Class bookings",     value: classCount,                     color: INK },
+            { label: "Retreat bookings",   value: retreatCount,                   color: INK },
+          ].map(s => (
+            <div key={s.label} className="bg-white rounded-xl border border-stone-200 p-4 shadow-sm">
+              <p className="ff-body text-xs text-stone-500">{s.label}</p>
+              <p className="ff-display text-2xl font-semibold mt-1" style={{ color: s.color }}>{s.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Tab navigation */}
+        <div className="flex gap-1 bg-stone-100 rounded-full p-1 w-fit">
+          {[["bookings","Bookings"],["members","Members"],["classes","Classes"],["studio-hire","Studio Hire"]].map(([key, label]) => {
+            const count = key==="members" ? members.length
+              : key==="classes" ? DEFAULT_CLASSES.length + PILATES_SESSIONS.length
+              : key==="studio-hire" ? enquiries.length
+              : bookings.filter(b=>b.status!=="cancelled").length;
+            return (
+              <button key={key} onClick={() => setAdminTab(key)}
+                className="ff-body text-sm font-medium px-5 py-1.5 rounded-full transition"
+                style={{
+                  backgroundColor: adminTab===key ? "#fff" : "transparent",
+                  color: adminTab===key ? INK : "#8A8478",
+                  boxShadow: adminTab===key ? "0 1px 2px rgba(0,0,0,0.08)" : "none"
+                }}>
+                {label} ({count})
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ── BOOKINGS TAB ── */}
+        {adminTab === "bookings" && <>
+
+        {/* Filters + search */}
+        <div className="flex flex-wrap items-center gap-2 justify-between">
+          <div className="flex gap-1.5 flex-wrap">
+            {["all","paid","pending_payment","cancelled"].map(s => (
+              <button key={s} onClick={() => setFilter(s)}
+                className="ff-body text-xs font-medium px-3 py-1.5 rounded-full transition"
+                style={{ backgroundColor: statusFilter===s ? TEAL : "#F3F1EA", color: statusFilter===s ? "#fff" : "#6B6457" }}>
+                {s === "all" ? "All" : STATUS_META[s]?.label || s}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <div className="relative">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400"/>
+              <input value={query} onChange={e => setQuery(e.target.value)}
+                placeholder="Search name, email, class…"
+                className="ff-body rounded-full border border-stone-200 pl-8 pr-3 py-1.5 text-xs w-48 focus:outline-none"/>
+            </div>
+            <button onClick={() => {
+              const headers = ["Name","Email","Phone","Session","Plan","Amount","Status","Booked at"];
+              const rows = bookings.map(b => [b.name,b.email,b.phone,b.sessionName,b.plan,b.amount,b.status,b.createdAt]);
+              const csv = [headers,...rows].map(r => r.map(v => `"${String(v||"").replace(/"/g,'""')}"`).join(",")).join("\n");
+              const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([csv],{type:"text/csv"})), download: `snb-bookings-${new Date().toISOString().slice(0,10)}.csv` });
+              document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            }} className="ff-body inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border border-stone-200 bg-white text-stone-600 hover:bg-stone-50">
+              <Download size={13}/> Export CSV
+            </button>
+          </div>
+        </div>
+
+        {/* Bookings table */}
+        <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+          {loading ? (
+            <div className="flex justify-center py-16"><Loader2 className="animate-spin text-stone-300"/></div>
+          ) : filtered.length === 0 ? (
+            <p className="ff-body text-sm text-stone-400 text-center py-16">No bookings match this filter.</p>
+          ) : (
+            <div className="divide-y divide-stone-100">
+              {filtered.map(b => (
+                <div key={b.id} className="flex flex-wrap items-center gap-3 px-4 py-3 hover:bg-stone-50 transition">
+                  <div className="min-w-[160px] flex-1">
+                    <p className="ff-body font-medium text-sm" style={{ color: INK }}>{b.name}</p>
+                    <p className="ff-body text-xs text-stone-400">{b.email}{b.phone ? ` · ${b.phone}` : ""}</p>
+                  </div>
+                  <div className="min-w-[140px] flex-1">
+                    <p className="ff-body text-sm font-medium">{b.sessionName}</p>
+                    <p className="ff-body text-xs text-stone-400">{b.plan}</p>
+                  </div>
+                  <div className="ff-body text-sm font-semibold w-16 text-right">
+                    £{typeof b.amount === "number" ? b.amount.toFixed(2) : b.amount}
+                  </div>
+                  <StatusBadge status={b.status}/>
+                  <div className="flex gap-1 ml-auto">
+                    {b.status === "pending_payment" && (
+                      <button onClick={() => updateStatus(b.id,"paid")} title="Mark paid"
+                        className="p-1.5 rounded-lg hover:bg-stone-100" style={{ color: TEAL }}>
+                        <Check size={15}/>
+                      </button>
+                    )}
+                    {b.status === "paid" && (
+                      <button onClick={() => updateStatus(b.id,"pending_payment")} title="Undo"
+                        className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400">
+                        <Undo2 size={15}/>
+                      </button>
+                    )}
+                    {b.status !== "cancelled"
+                      ? <button onClick={() => updateStatus(b.id,"cancelled")} title="Cancel"
+                          className="p-1.5 rounded-lg hover:bg-stone-100 text-red-400"><Ban size={15}/></button>
+                      : <button onClick={() => updateStatus(b.id,"pending_payment")} title="Restore"
+                          className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400"><RotateCcw size={15}/></button>
+                    }
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Send notification */}
+        <div className="bg-white rounded-xl border border-stone-200 p-5 shadow-sm flex flex-col gap-3">
+          <p className="ff-body text-sm font-semibold flex items-center gap-2" style={{ color: INK }}>
+            <Bell size={15}/> Send notification to all members
+          </p>
+          <input value={notifSubject} onChange={e => setNSubject(e.target.value)}
+            placeholder="Subject — e.g. New class added!"
+            className="ff-body w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"/>
+          <textarea value={notifMessage} onChange={e => setNMessage(e.target.value)}
+            placeholder="Your message to all members…" rows={4}
+            className="ff-body w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 resize-none"/>
+          {notifStatus === "not_configured" && (
+            <p className="ff-body text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
+              Email not configured — deploy the Supabase Edge Function and add secrets.
+            </p>
+          )}
+          {notifStatus.startsWith("sending_") && (() => {
+            const [,sent,total] = notifStatus.split("_");
+            return <p className="ff-body text-xs text-stone-500">Sending… {sent} of {total}</p>;
+          })()}
+          {notifStatus === "sent"  && <p className="ff-body text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2">✓ Notification sent to all members!</p>}
+          {notifStatus === "error" && <p className="ff-body text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">Failed — please try again.</p>}
+          <button onClick={handleSendBlast}
+            disabled={notifStatus==="sending"||!notifSubject.trim()||!notifMessage.trim()}
+            className="ff-body inline-flex items-center justify-center gap-2 font-semibold text-sm py-2.5 rounded-full disabled:opacity-50"
+            style={{ backgroundColor: TEAL, color: "#fff" }}>
+            {notifStatus.startsWith("sending") ? <Loader2 size={14} className="animate-spin"/> : <><Send size={14}/> Send to all members</>}
+          </button>
+        </div>
+
+        </> /* end bookings tab */}
+
+        {/* ── MEMBERS TAB ── */}
+        {adminTab === "members" && (
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1 max-w-xs">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400"/>
+                <input value={memberQuery} onChange={e => setMQuery(e.target.value)}
+                  placeholder="Search name, email or phone…"
+                  className="ff-body w-full rounded-full border border-stone-200 pl-8 pr-3 py-1.5 text-xs focus:outline-none"/>
+              </div>
+              <button onClick={() => {
+                const headers = ["Name","Email","Phone","Signed Up"];
+                const rows = members.map(m => [m.name, m.email, m.phone||"", m.createdAt ? new Date(m.createdAt).toLocaleDateString("en-GB") : ""]);
+                const csv = [headers,...rows].map(r => r.map(v => `"${String(v||"").replace(/"/g,"")}`).join(",")).join("\n");
+                const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([csv],{type:"text/csv"})), download: "snb-members.csv" });
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+              }} className="ff-body inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border border-stone-200 bg-white text-stone-600 hover:bg-stone-50">
+                <Download size={13}/> Export CSV
+              </button>
+            </div>
+
+            <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+              <div className="grid grid-cols-4 gap-4 px-4 py-2.5 bg-stone-50 border-b border-stone-100">
+                {["Full Name","Email","Mobile","Signed Up"].map(h => (
+                  <p key={h} className="ff-body text-xs font-semibold text-stone-500 uppercase tracking-wide">{h}</p>
+                ))}
+              </div>
+              {members.length === 0 ? (
+                <p className="ff-body text-sm text-stone-400 text-center py-12">No members yet.</p>
+              ) : members
+                .filter(m => !memberQuery || (m.name+" "+m.email+" "+(m.phone||"")).toLowerCase().includes(memberQuery.toLowerCase()))
+                .slice().sort((a,b) => new Date(b.createdAt||0) - new Date(a.createdAt||0))
+                .map(m => (
+                  <div key={m.id} className="grid grid-cols-4 gap-4 px-4 py-3 border-b border-stone-50 hover:bg-stone-50 transition last:border-0">
+                    <p className="ff-body text-sm font-medium" style={{ color: INK }}>{m.name}</p>
+                    <p className="ff-body text-sm text-stone-500 truncate">{m.email}</p>
+                    <p className="ff-body text-sm text-stone-500">{m.phone || "—"}</p>
+                    <p className="ff-body text-sm text-stone-500">
+                      {m.createdAt ? new Date(m.createdAt).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}) : "—"}
+                    </p>
+                  </div>
+                ))
+              }
+            </div>
+          </div>
+        )}
+
+        {/* ── CLASSES TAB ── */}
+        {adminTab === "classes" && (
+          <div className="grid sm:grid-cols-2 gap-4">
+            {DEFAULT_CLASSES.map(cls => <AdminClassCard key={cls.id} cls={cls} bookings={bookings}/>)}
+            {PILATES_SESSIONS.map(s => (
+              <AdminClassCard key={s.id} bookings={bookings} cls={{
+                id: s.id, name: `Pilates — ${s.label}`, day: s.day, time: s.time,
+                capacity: s.capacity, icon: "sparkles", color: PILATES_BASE.color,
+              }}/>
+            ))}
+          </div>
+        )}
+
+        {/* ── STUDIO HIRE TAB ── */}
+        {adminTab === "studio-hire" && (
+          <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+            {enquiries.length === 0 ? (
+              <p className="ff-body text-sm text-stone-400 text-center py-16">No studio hire enquiries yet.</p>
+            ) : (
+              <div className="divide-y divide-stone-100">
+                {enquiries.slice().sort((a,b) => new Date(b.createdAt||0) - new Date(a.createdAt||0)).map(e => (
+                  <div key={e.id} className="px-4 py-3 flex flex-col gap-1.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="ff-body text-sm font-semibold" style={{ color: INK }}>{e.name}</p>
+                      <p className="ff-body text-xs text-stone-400">
+                        {e.createdAt ? new Date(e.createdAt).toLocaleString("en-GB",{day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}) : "—"}
+                      </p>
+                    </div>
+                    <p className="ff-body text-xs text-stone-500">{e.email}{e.phone ? ` · ${e.phone}` : ""}</p>
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                      <Pill>{e.purpose}</Pill>
+                      {e.fitnessType && <Pill>{e.fitnessType}</Pill>}
+                      {e.workshopType && <Pill>{e.workshopType}</Pill>}
+                      {e.otherType && <Pill>{e.otherType}</Pill>}
+                      <Pill>{e.sessionsPerWeek} session{e.sessionsPerWeek === "1" ? "" : "s"}/week</Pill>
+                      <Pill>Class size: {e.classSize}</Pill>
+                    </div>
+                    {e.qualifications && (
+                      <p className="ff-body text-xs text-stone-500 mt-1"><span className="font-medium text-stone-600">Qualifications:</span> {e.qualifications}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
+/* ---- MAIN APP ---- */
+
+// ── Top-level router ─────────────────────────────────────────────────────────
+// /admin  → AdminPage  (private, passcode protected)
+// /       → BookingApp (public-facing booking site)
+export default function App() {
+  const path = window.location.pathname;
+  if (path.startsWith("/admin"))   return <AdminPage/>;
+  if (path.startsWith("/privacy")) return <PrivacyPage/>;
+  if (path.startsWith("/terms"))   return <TermsPage/>;
+  return <BookingApp/>;
+}
+
+function BookingApp() {
+  const [currentUser, setCurrentUser]       = useState(null);
+  const [authLoading, setAuthLoading]       = useState(true);
+  const [tab, setTab]                       = useState("classes");
+  const [bookings, setBookings]             = useState([]);
+  const [loading, setLoading]               = useState(true);
+  const [modalSession, setModalSession]     = useState(null);
+  const [modalType, setModalType]           = useState(null);
+  const [showOpenDay, setShowOpenDay]       = useState(false);
+  const [workshopModal, setWorkshopModal]   = useState(null);
+
+  // Restore session on load — check expiry
+  useEffect(() => {
+    (async () => {
+      try {
+        const s = await storage.get("snb_session");
+        if (s) {
+          if (s.expiresAt && s.expiresAt < Date.now()) {
+            await storage.remove("snb_session"); // expired — force re-login
+          } else {
+            setCurrentUser(s);
+            setTab("classes");
+          }
+        }
+      } catch {}
+      setAuthLoading(false);
+    })();
+  }, []);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      let b = [];
+      b = (await storage.get("bookings")) || [];
+      setBookings(b);
+    } finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { if (currentUser) load(); }, [currentUser, load]);
+
+  // Show the Open Day popup once per browser session after login — not on
+  // every render/navigation, but again on a fresh session (new tab/browser
+  // restart) so returning users still see it once more.
+  useEffect(() => {
+    if (!currentUser || !OPEN_DAY.enabled) return;
+    if (!sessionStorage.getItem("openday_seen")) {
+      setShowOpenDay(true);
+      sessionStorage.setItem("openday_seen", "1");
+    }
+  }, [currentUser]);
+
+  // Auto-logout after 30 minutes of inactivity. Separate from the existing
+  // 30-day expiresAt check above — that's a "how long can this login stay
+  // valid at all" cap, this is "sign out if nobody's actually using it".
+  useIdleLogout(!!currentUser, handleSignOut, 30);
+
+  function bookedCount(id) {
+    return bookings.filter(b => b.sessionId===id && b.status!=="cancelled").length;
+  }
+  function getUserBookingType(id) {
+    if (!currentUser) return null;
+    const b = bookings.find(b => b.sessionId===id && b.status!=="cancelled"
+      && (b.userId===currentUser.id || b.email===currentUser.email));
+    if (!b) return null;
+    const plan = (b.plan || "").toLowerCase();
+    if (plan.includes("waitlist")) return "waitlist";
+    if (plan.includes("membership") || plan.includes("taster")) return "membership";
+    return "payg";
+  }
+
+  async function persist(next) { setBookings(next); await storage.set("bookings", next); }
+  async function handleConfirmBooking(r) { await persist([...bookings, r]); }
+  async function updateStatus(id, s)     { await persist(bookings.map(b => b.id===id ? {...b, status:s} : b)); }
+  async function handleSignOut() {
+    await storage.remove("snb_session");
+    setCurrentUser(null); setBookings([]);
+  }
+  async function cancelMyBooking(id) {
+    await persist(bookings.map(b => b.id===id ? {...b, status:"cancelled"} : b));
+  }
+  async function joinWaitlist(cls) {
+    if (!currentUser) return;
+    await persist([...bookings, {
+      id:uid(), sessionId:cls.id, sessionName:cls.name, type:"class",
+      userId:currentUser.id, name:currentUser.name, email:currentUser.email, phone:currentUser.phone,
+      plan:"Waitlist", amount:0, status:"waitlisted", createdAt:new Date().toISOString(),
+    }]);
+    alert("You\'ve been added to the waitlist for " + cls.name + ". We\'ll contact you if a spot opens.");
+  }
+
+  // Loading spinner while checking session
+  if (authLoading) return (
+    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor:BG }}>
+      <Fonts/><Loader2 className="animate-spin text-stone-400"/>
+    </div>
+  );
+
+  // Not logged in — show registration / login
+  if (!currentUser) return <AuthScreen onAuth={s => { setCurrentUser(s); setTab("classes"); }}/>;
+
+  return (
+    <div className="min-h-screen w-full" style={{ backgroundColor:BG }}>
+      <Fonts/>
+
+      <header className="sticky top-0 z-30 border-b border-stone-200" style={{ backgroundColor:BG }}>
+        <div className="max-w-3xl mx-auto px-4 py-2 flex items-center justify-between gap-3">
+          <div className="shrink-0 flex items-center gap-2">
+            <img src={LOGO} alt="SNB Hive" style={{ height:"56px" }} onError={e => { e.target.style.display = "none"; }}/>
+            <p className="ff-body text-xs text-stone-500 hidden sm:block">{BRAND.tagline}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <nav className="flex gap-1 bg-stone-200 rounded-full p-1">
+              {[["classes","Classes"],["workshops","Workshops"],["retreats","Retreats"],["studio-hire","Studio Hire"],["bookings","My bookings"],["account","Account"]].map(([k,label]) => (
+                <button key={k} onClick={() => setTab(k)}
+                  className="ff-body text-sm font-medium px-3.5 py-1.5 rounded-full transition"
+                  style={{ backgroundColor:tab===k?"#fff":"transparent", color:tab===k?INK:"#6B6457", boxShadow:tab===k?"0 1px 2px rgba(0,0,0,0.08)":"none" }}>
+                  {label}
+                </button>
+              ))}
+            </nav>
+            <button onClick={handleSignOut} title="Sign out"
+              className="p-2 rounded-full text-stone-400 hover:text-stone-600 hover:bg-stone-200 transition">
+              <LogOut size={16}/>
+            </button>
+          </div>
+        </div>
+      </header>
+
+
+
+      <main className="max-w-3xl mx-auto px-4 py-6">
+        {loading
+          ? <div className="flex justify-center py-20"><Loader2 className="animate-spin text-stone-400"/></div>
+          : tab==="classes"
+            ? <>
+                <WelcomeHero currentUser={currentUser}/>
+                {OPEN_DAY.enabled && (
+                  <div className="rounded-xl px-4 py-3 mb-4 flex flex-wrap items-center justify-between gap-3" style={{ backgroundColor:"#FBF3E3", border:"1px solid #C99A4B" }}>
+                    <div className="flex items-center gap-2.5">
+                      <Calendar size={15} style={{ color:"#7A5C20" }}/>
+                      <p className="ff-body text-sm" style={{ color:"#7A5C20" }}>
+                        <strong>{OPEN_DAY.title}</strong> — {OPEN_DAY.dates}. Come see the studio!
+                      </p>
+                    </div>
+                    <button onClick={() => setTab("studio-hire")}
+                      className="ff-body text-xs font-semibold px-3.5 py-1.5 rounded-full shrink-0"
+                      style={{ backgroundColor:TEAL, color:"#fff" }}>
+                      Register
+                    </button>
+                  </div>
+                )}
+                <div className="grid sm:grid-cols-2 gap-4">
+  {/* Show all ordinary classes first */}
+  {DEFAULT_CLASSES
+    .filter(cls => cls.id !== "self_defence")
+    .map(cls => (
+      <ClassCard
+        key={cls.id}
+        cls={cls}
+        booked={bookedCount(cls.id)}
+        bookingType={getUserBookingType(cls.id)}
+        onBook={() => {
+          setModalSession(cls);
+          setModalType("class");
+        }}
+        onWaitlist={joinWaitlist}
+      />
+    ))}
+
+  {/* Pilates comes immediately before Self Defence */}
+  <PilatesCard
+    booked={bookedCount("pilates_taster")}
+    bookingType={getUserBookingType("pilates_taster")}
+    onBook={session => {
+      setModalSession(session);
+      setModalType("class");
+    }}
+  />
+
+  {/* Self Defence comes immediately after Pilates */}
+  {DEFAULT_CLASSES
+    .filter(cls => cls.id === "self_defence")
+    .map(cls => (
+      <ClassCard
+        key={cls.id}
+        cls={cls}
+        booked={bookedCount(cls.id)}
+        bookingType={getUserBookingType(cls.id)}
+        onBook={() => {
+          setModalSession(cls);
+          setModalType("class");
+        }}
+        onWaitlist={joinWaitlist}
+      />
+    ))}
+</div>
+              </>
+            : tab==="workshops"
+            ? <>
+                <h2 className="ff-display text-2xl font-semibold mb-1" style={{ color:INK }}>Workshops</h2>
+                <p className="ff-body text-sm text-stone-500 mb-5">One-off creative and social experiences</p>
+                <div className="grid sm:grid-cols-1 gap-4">
+                  {WORKSHOPS.filter(w => w.enabled).map(w => (
+                    <WorkshopCard key={w.id} workshop={w}
+                      booked={bookedCount(w.id)}
+                      isBooked={!!getUserBookingType(w.id)}
+                      onBook={() => setWorkshopModal(w)}/>
+                  ))}
+                  {WORKSHOPS.filter(w => w.enabled).length === 0 && (
+                    <div className="text-center py-12">
+                      <Paintbrush size={32} className="mx-auto text-stone-300 mb-3"/>
+                      <p className="ff-body text-sm text-stone-400">No workshops scheduled right now — check back soon!</p>
+                    </div>
+                  )}
+                </div>
+              </>
+            : tab==="retreats"
+              ? <ComingSoon/>
+              : tab==="account"
+                ? <AccountPage currentUser={currentUser} onUpdate={s => setCurrentUser(s)}/>
+                : tab==="studio-hire"
+                  ? <StudioHireForm currentUser={currentUser}/>
+                  : <MyBookings bookings={bookings} currentUser={currentUser} onCancel={cancelMyBooking}/>
+        }
+      </main>
+
+
+
+      {modalSession && (
+        <BookingModal session={modalSession} type={modalType} currentUser={currentUser}
+          onClose={() => setModalSession(null)} onConfirm={handleConfirmBooking}/>
+      )}
+
+      {workshopModal && (
+        <WorkshopBookingModal workshop={workshopModal} currentUser={currentUser}
+          onClose={() => setWorkshopModal(null)} onConfirm={handleConfirmBooking}/>
+      )}
+
+      {showOpenDay && (
+        <OpenDayModal
+          onClose={() => setShowOpenDay(false)}
+          onRegister={() => { setShowOpenDay(false); setTab("studio-hire"); }}/>
+      )}
+
+    </div>
+  );
+}
