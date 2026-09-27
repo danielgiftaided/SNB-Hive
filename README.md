@@ -64,13 +64,6 @@ Every value here flows automatically through the whole app.
 
 ## 3. Setting up GoCardless for Zumba
 
-For the complete click-by-click and command-by-command setup, sandbox testing,
-live cutover, troubleshooting, and ongoing administration guide, see
-**[`docs/GOCARDLESS_SETUP.md`](docs/GOCARDLESS_SETUP.md)**.
-
-Use the **existing SNB Hive Supabase account and project**—a separate Supabase
-account or payment project is not required.
-
 Payments use a server-side Supabase Edge Function so the GoCardless access
 token is never exposed in the browser. Pay as you go creates a £10 one-off
 Direct Debit payment. Membership creates a Direct Debit mandate and then a

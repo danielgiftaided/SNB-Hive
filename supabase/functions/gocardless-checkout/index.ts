@@ -1,25 +1,9 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, json } from "../_shared/http.ts";
 
 const GC_API = Deno.env.get("GOCARDLESS_API_URL") || "https://api.gocardless.com";
 const GC_VERSION = "2015-07-06";
 const PRICES = { payg: 1000, membership: 3500 } as const;
-
-async function getBooking(id: string) {
-  const url = Deno.env.get("SUPABASE_URL");
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!url || !serviceKey) throw new Error("Supabase function environment is not configured");
-  const query = new URLSearchParams({
-    id: `eq.${id}`,
-    select: "id,session_id,plan,amount,status",
-    limit: "1",
-  });
-  const response = await fetch(`${url}/rest/v1/bookings?${query}`, {
-    headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
-  });
-  if (!response.ok) throw new Error("Booking lookup failed");
-  const rows = await response.json();
-  return rows[0] || null;
-}
 
 async function gc(path: string, body: unknown) {
   const token = Deno.env.get("GOCARDLESS_ACCESS_TOKEN");
@@ -60,9 +44,17 @@ Deno.serve(async request => {
       return json({ error: "This payment option is not available" }, 400);
     }
 
-    const booking = await getBooking(booking_id);
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    const { data: booking, error } = await supabase
+      .from("bookings")
+      .select("id, session_id, plan, amount, status")
+      .eq("id", booking_id)
+      .single();
     const expectedAmount = PRICES[plan as keyof typeof PRICES];
-    if (!booking || booking.session_id !== "zumba" || booking.status !== "pending_payment" ||
+    if (error || !booking || booking.session_id !== "zumba" || booking.status !== "pending_payment" ||
         Math.round(Number(booking.amount) * 100) !== expectedAmount) {
       return json({ error: "Booking could not be verified" }, 400);
     }
