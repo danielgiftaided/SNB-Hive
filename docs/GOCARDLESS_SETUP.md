@@ -249,6 +249,26 @@ create a second subscription for the same booking.
 
 ## 7. Check logs if a test does not work
 
+### Checkout does not open and the booking popup shows an error
+
+The popup now shows the safe reason returned by `gocardless-checkout`. Copy
+that reason (for example, `Invalid redirect origin`, `Booking lookup failed`,
+or `GoCardless is not configured`) when asking for help.
+
+To find the matching server-side diagnostic:
+
+1. Open **Supabase Dashboard → Edge Functions → gocardless-checkout → Logs**.
+2. Retry **Continue to payment** once, then refresh the logs.
+3. Open the newest entry at the same time as the retry. A failed database
+   lookup includes the booking reference, HTTP status, and Supabase response.
+4. Share only the popup reason and that log entry after removing personal
+   information. Never share access tokens, webhook secrets, service-role keys,
+   database passwords, or `Authorization` headers.
+
+If the popup still shows only the old generic message, confirm Vercel deployed
+the commit containing this troubleshooting section and redeploy
+`gocardless-checkout` before testing again.
+
 Open **Supabase Dashboard → Edge Functions** and inspect the logs for both
 `gocardless-checkout` and `gocardless-webhook`.
 

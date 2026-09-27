@@ -148,7 +148,14 @@ async function callEdgeFunction(name, data) {
   });
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
-    throw new Error(name + " returned " + res.status + ": " + errText);
+    let detail = "";
+    try {
+      const payload = JSON.parse(errText);
+      detail = payload?.error || payload?.message || payload?.code || "";
+    } catch {
+      detail = errText;
+    }
+    throw new Error(detail || `${name} returned ${res.status}`);
   }
   return res.json();
 }
@@ -999,9 +1006,10 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
         return;
       }
       setStep(2);
-    } catch {
+    } catch (err) {
       if (pendingBookingId) await onPaymentFailure?.(pendingBookingId);
-      setError("Couldn't start GoCardless checkout. No payment was taken — please try again.");
+      const detail = err instanceof Error ? err.message : "Unknown checkout error";
+      setError(`Couldn't start GoCardless checkout. No payment was taken — ${detail}`);
     }
     finally { setSaving(false); }
   }
