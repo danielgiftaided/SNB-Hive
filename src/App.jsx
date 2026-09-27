@@ -61,7 +61,7 @@ const DEFAULT_CLASSES = [
 
 // 2 membership tiers only
 const PILATES_BASE = {
-  name: "Pilates", tagline: "Strength, Core, Balance",
+  name: "Reformer Pilates", tagline: "Strength, Core, Balance",
   color: "#9b7ecb",
   venue: "6 Dispensary Lane, London E8 1FT",
   venueMap: "https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
@@ -683,7 +683,7 @@ function AuthScreen({ onAuth }) {
 
 /* ---- CLASS CARD
    - No pricing shown
-   - Capacity ring visible ONLY when spotsLeft ≤ 5 AND user is not already booked
+   - Remaining capacity is kept private from regular users
    ---- */
 
 function ClassCard({ cls, booked, onBook, bookingType, onWaitlist }) {
@@ -2883,6 +2883,7 @@ function BookingApp() {
   const [modalType, setModalType]           = useState(null);
   const [showOpenDay, setShowOpenDay]       = useState(false);
   const [workshopModal, setWorkshopModal]   = useState(null);
+  const [showPilatesEnquiry, setShowPilatesEnquiry] = useState(false);
 
   // Restore session on load — check expiry
   useEffect(() => {
@@ -2985,7 +2986,7 @@ function BookingApp() {
           </div>
           <div className="flex items-center gap-2">
             <nav className="flex gap-1 bg-stone-200 rounded-full p-1">
-              {[["classes","Classes"],["workshops","Workshops"],["retreats","Retreats"],["studio-hire","Studio Hire"],["bookings","My bookings"],["account","Account"]].map(([k,label]) => (
+              {[["classes","Classes"],["retreats","Retreats"],["studio-hire","Studio Hire"],["bookings","My bookings"],["account","Account"]].map(([k,label]) => (
                 <button key={k} onClick={() => setTab(k)}
                   className="ff-body text-sm font-medium px-3.5 py-1.5 rounded-full transition"
                   style={{ backgroundColor:tab===k?"#fff":"transparent", color:tab===k?INK:"#6B6457", boxShadow:tab===k?"0 1px 2px rgba(0,0,0,0.08)":"none" }}>
@@ -3115,6 +3116,10 @@ function BookingApp() {
         <OpenDayModal
           onClose={() => setShowOpenDay(false)}
           onRegister={() => { setShowOpenDay(false); setTab("studio-hire"); }}/>
+      )}
+
+      {showPilatesEnquiry && (
+        <PilatesEnquiryModal onClose={() => setShowPilatesEnquiry(false)}/>
       )}
 
     </div>
