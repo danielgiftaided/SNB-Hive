@@ -16,8 +16,17 @@ async function getBooking(id: string) {
   const response = await fetch(`${url}/rest/v1/bookings?${query}`, {
     headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
   });
-  if (!response.ok) throw new Error("Booking lookup failed");
+  if (!response.ok) {
+    const responseText = await response.text();
+    console.error("Booking lookup failed", {
+      booking_id: id,
+      status: response.status,
+      response: responseText,
+    });
+    throw new Error("Booking lookup failed");
+  }
   const rows = await response.json();
+  if (!rows[0]) console.warn("Booking lookup returned no rows", { booking_id: id });
   return rows[0] || null;
 }
 
@@ -93,6 +102,7 @@ Deno.serve(async request => {
     return json({ authorisation_url: flow.billing_request_flows.authorisation_url });
   } catch (error) {
     console.error(error);
-    return json({ error: error instanceof Error ? error.message : "Checkout failed" }, 500);
+    const message = error instanceof Error ? error.message : "GoCardless could not start checkout";
+    return json({ code: "CHECKOUT_START_FAILED", error: message }, 500);
   }
 });
