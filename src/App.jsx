@@ -48,12 +48,12 @@ const DEFAULT_CLASSES = [
   { id:"somatic",  name:"Somatic",                 tagline:"Move, breathe, reconnect",  day:"Tuesday 22 September 2026", time:"12:00–12:45", capacity:20, icon:"flower",  color:"#7C9885", tasterStatus:"tbc",
     venue:"6 Dispensary Lane, London E8 1FT",              venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
     whatToBring:"Loose comfortable clothing and grip socks. Bring a water bottle.", icsStart:"20260922T110000", icsEnd:"20260922T114500", description:"Modern life places enormous demands on women. Many spend their days caring for others, managing households, working, raising children and carrying responsibilities that leave little time for themselves.\n\nThis class offers a gentle opportunity to slow down, reconnect with the body and create space for rest, reflection and renewal.\n\nThrough gentle movement, stretching, breathing exercises and guided relaxation, participants are supported in releasing physical tension and calming the nervous system.\n\nBenefits include:\n• Reduced stress and feelings of overwhelm\n• Improved sleep quality\n• Relief from physical tension and tightness\n• Improved body awareness\n• Support for emotional wellbeing\n• A greater sense of calm and balance\n• Time to pause and reconnect with oneself\n• Improved ability to manage the demands of everyday life\n\nSessions may also include gentle reminders around gratitude, self-care, reflection and caring for the body.\n\nFor many women, this class becomes a rare opportunity to simply pause, breathe and be present without expectation or pressure.\n\nSuitable for all ages, abilities and fitness levels.\n\nBecause when women are supported, strengthened and given space to care for themselves, they are better able to care for those around them." },
-  { id:"strength", name:"Strength & Conditioning", tagline:"Build strength, build power", day:"Thursday 24 September 2026", time:"12:00–12:45", capacity:20, icon:"dumbbell",color:"#1F4A42", tasterStatus:"tbc",
-    venue:"SCK Fitness, 439 High Road, Leyton, London E10 5EL", venueMap:"https://www.google.com/maps/search/?api=1&query=SCK+Fitness+439+High+Road+Leyton+London+E10+5EL",
+  { id:"strength", name:"Strength & Conditioning", tagline:"Build strength, build power", day:"Thursday 24 September 2026", time:"12:00–12:45", capacity:20, icon:"dumbbell",color:"#1F4A42", tasterStatus:"tbc", 
+    venue:"6 Dispensary Lane, London E8 1FT", venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
     whatToBring:"Gym clothes and trainers and bring a water bottle.", icsStart:"20260924T110000", icsEnd:"20260924T114500", description:"Strength training is one of the most beneficial forms of exercise for women, particularly as we navigate the demands of motherhood, work and daily life.\n\nThis class focuses on building functional strength, improving mobility and helping women feel stronger and more capable in their everyday activities.\n\nUsing bodyweight exercises, resistance bands and light equipment, sessions are designed to be accessible while still providing an effective workout.\n\nBenefits include:\n• Increased muscle tone and strength\n• Support with sustainable fat loss and body composition goals\n• Improved posture and reduced aches and pains\n• Better balance and stability\n• Increased energy levels\n• Stronger bones and joints\n• Improved confidence in daily movement\n• Support for healthy ageing and long-term wellbeing\n\nRather than focusing on appearance alone, this class encourages women to appreciate what their bodies can do and develop strength that carries into everyday life.\n\nSuitable for all fitness levels and can be adapted to individual needs." },
-  { id:"boxfit", name:"BoxFit", tagline:"Boxing-inspired fitness", day:"Thursday 1 October 2026", time:"13:00–14:00", capacity:20, icon:"flame", color:"#D06B4F",
-    venue:"SCK Fitness, 439 High Road, Leyton, London E10 5EL", venueMap:"https://www.google.com/maps/search/?api=1&query=SCK+Fitness+439+High+Road+Leyton+London+E10+5EL",
-    whatToBring:"Wear comfortable workout clothes and trainers. Bring a water bottle", icsStart:"20261001T120000", icsEnd:"20261001T130000", description:"A high-energy boxing-inspired fitness taster combining cardio, conditioning and boxing drills. Suitable for beginners and all fitness levels." },
+  { id: "boxfit", name: "BoxFit", tagline: "Boxing-inspired fitness", day: "Thursday 1 October 2026", time: "13:00–14:00", capacity: 12, icon: "flame", color: "#D06B4F",
+    venue: "6 Dispensary Lane, London E8 1FT", venueMap: "https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT", whatToBring: "Bring boxing gloves and pads if you have them. Wear comfortable workout clothes and trainers. Bring a water bottle", icsStart: "20261001T120000",
+    icsEnd: "20261001T130000", description: "A high-energy boxing-inspired fitness taster combining cardio, conditioning and boxing drills. Suitable for beginners and all fitness levels."},
   { id:"self_defence", name:"Self Defence", tagline:"Intensive 3-week course", day:"October 2026 start", time:"Wednesdays, 12:00–14:00", capacity:20, icon:"shield", color:"#6F596E", bookingKind:"waitlist",
     venue:"6 Dispensary Lane, London E8 1FT", venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
     details:["2-hour session each week for 3 weeks", "£90 per person", "Limited spaces available"], description:"Join the waiting list for our intensive three-week self defence course, starting in October." },
@@ -68,7 +68,7 @@ const PILATES_BASE = {
   whatToBring: "Wear comfortable clothes and grip socks",
 };
 const PILATES_SESSIONS = [
-  { id:"pilates_taster", day:"Weekly sessions", time:"Taster times available by email", capacity:20, icsStart:null, icsEnd:null },
+  { id:"pilates_taster", day:"21–27 September 2026", time:"Exact time will be sent by email", capacity:20, fullyBooked:true, icsStart:null, icsEnd:null },
 ];
 
 const MEMBERSHIP_TIERS = [
@@ -689,68 +689,151 @@ function AuthScreen({ onAuth }) {
 function ClassCard({ cls, booked, onBook, bookingType, onWaitlist }) {
   const Icon = ICONS[cls.icon] || Sparkles;
   const full = booked >= cls.capacity;
-  const isMember  = bookingType === "membership";
-  const isPayg    = bookingType === "payg";
+  const isMember = bookingType === "membership";
   const isWaitlist = cls.bookingKind === "waitlist";
   const isTbc = cls.tasterStatus === "tbc";
-  const isBooked  = !!bookingType;
-  const isClosed  = TASTER_MODE && TASTERS_CLOSED && !isBooked;
-  const disabled  = isTbc || isBooked || (!isWaitlist && (full || isMember || isClosed));
+  const isBooked = !!bookingType;
+  const isClosed =
+    TASTER_MODE &&
+    TASTERS_CLOSED &&
+    !isBooked;
+
+  const disabled =
+    isTbc ||
+    isBooked ||
+    (
+      !isWaitlist &&
+      (
+        full ||
+        isMember ||
+        isClosed
+      )
+    );
 
   return (
     <div className="bg-white rounded-2xl border border-stone-200 p-5 flex flex-col gap-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor:cls.color+"1A" }}>
-            <Icon size={20} style={{ color:cls.color }}/>
+          <div
+            className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
+            style={{
+              backgroundColor: cls.color + "1A",
+            }}
+          >
+            <Icon
+              size={20}
+              style={{ color: cls.color }}
+            />
           </div>
+
           <div>
-            <h3 className="ff-display text-lg font-semibold" style={{ color:INK }}>{cls.name}</h3>
-            <p className="ff-body text-sm text-stone-500">{cls.tagline}</p>
+            <h3
+              className="ff-display text-lg font-semibold"
+              style={{ color: INK }}
+            >
+              {cls.name}
+            </h3>
+
+            <p className="ff-body text-sm text-stone-500">
+              {cls.tagline}
+            </p>
           </div>
         </div>
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Pill icon={Calendar}>{cls.day}</Pill>
-        <Pill icon={Clock}>{cls.time}</Pill>
-        {isMember && !TASTER_MODE && <Pill icon={Check}><span style={{ color:TEAL }}>Member</span></Pill>}
+        <Pill icon={Calendar}>
+          {cls.day}
+        </Pill>
+
+        <Pill icon={Clock}>
+          {cls.time}
+        </Pill>
+
+        {isMember && !TASTER_MODE && (
+          <Pill icon={Check}>
+            <span style={{ color: TEAL }}>
+              Member
+            </span>
+          </Pill>
+        )}
       </div>
 
       {cls.venue && (
-        <a href={cls.venueMap} target="_blank" rel="noopener noreferrer"
-          className="ff-body inline-flex items-center gap-1.5 text-xs text-stone-400 hover:text-stone-600 transition -mt-1">
-          <MapPin size={11}/> {cls.venue}
+        <a
+          href={cls.venueMap}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="ff-body inline-flex items-center gap-1.5 text-xs text-stone-400 hover:text-stone-600 transition -mt-1"
+        >
+          <MapPin size={11}/>
+          {cls.venue}
         </a>
       )}
 
       {cls.details && (
         <ul className="ff-body text-sm text-stone-600 space-y-1">
-          {cls.details.map(detail => <li key={detail}>• {detail}</li>)}
+          {cls.details.map(detail => (
+            <li key={detail}>
+              • {detail}
+            </li>
+          ))}
         </ul>
       )}
 
       <div className="flex items-center justify-end pt-2 border-t border-stone-100 mt-auto">
-        <button onClick={() => isWaitlist ? onWaitlist(cls) : onBook(cls)} disabled={disabled}
+        <button
+          onClick={() => {
+            if (isWaitlist) {
+              onWaitlist(cls);
+            } else {
+              onBook(cls);
+            }
+          }}
+          disabled={disabled}
           className="ff-body inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full transition disabled:cursor-not-allowed"
           style={{
-            backgroundColor: isTbc ? "#E3DFD3" : isBooked ? "#D4EBD9" : (!isWaitlist && (full || isClosed)) ? "#E3DFD3" : TEAL,
-            color: isTbc ? "#8A8478" : isBooked ? "#2D6B40" : (!isWaitlist && (full || isClosed)) ? "#8A8478" : "#FFF",
-            opacity: disabled ? 0.85 : 1
-          }}>
-          {isTbc ? "TBC"
-            : isBooked ? (isWaitlist ? "On waiting list" : "Taster booked")
-            : (!isWaitlist && full) ? "Full"
-            : isClosed ? "Tasters closed"
-            : isWaitlist ? "Join October waiting list"
-            : TASTER_MODE ? "Book taster" : "Book"}
-          {!disabled && <ArrowRight size={14}/>}
+            backgroundColor: isTbc
+              ? "#E3DFD3"
+              : isBooked
+                ? "#D4EBD9"
+                : !isWaitlist && (full || isClosed)
+                  ? "#E3DFD3"
+                  : TEAL,
+            color: isTbc
+              ? "#8A8478"
+              : isBooked
+                ? "#2D6B40"
+                : !isWaitlist && (full || isClosed)
+                  ? "#8A8478"
+                  : "#FFF",
+            opacity: disabled ? 0.85 : 1,
+          }}
+        >
+          {isTbc
+            ? "TBC"
+            : isBooked
+              ? isWaitlist
+                ? "On waiting list"
+                : "Taster booked"
+              : !isWaitlist && full
+                ? "Full"
+                : isClosed
+                  ? "Tasters closed"
+                  : isWaitlist
+                    ? "Join October waiting list"
+                    : TASTER_MODE
+                      ? "Book taster"
+                      : "Book"}
+
+          {!disabled && (
+            <ArrowRight size={14}/>
+          )}
         </button>
       </div>
     </div>
   );
 }
-
 /* ---- RETREAT CARD — same capacity ring logic ---- */
 
 function RetreatCard({ retreat, booked, onBook, isSignedUp }) {
@@ -1157,7 +1240,6 @@ function WorkshopCard({ workshop, booked, isBooked, onBook }) {
   const Icon = ICONS[workshop.icon] || Paintbrush;
   const full = booked >= workshop.capacity;
   const spotsLeft = Math.max(workshop.capacity - booked, 0);
-  const showRing = !isBooked && spotsLeft <= 5;
   const disabled = full || isBooked;
 
   return (
@@ -1779,81 +1861,114 @@ function TermsPage() {
 }
 
 
-function PilatesCard({ onBook }) {
+function PilatesCard({ booked, bookingType, onBook }) {
   const color = PILATES_BASE.color;
   const session = PILATES_SESSIONS[0];
+
+  const isBooked = bookingType === "membership";
+  const full = session.fullyBooked || booked >= session.capacity;
+  const isClosed =
+    TASTER_MODE &&
+    TASTERS_CLOSED &&
+    !isBooked;
+
+  const disabled =
+    full ||
+    isBooked ||
+    isClosed;
 
   return (
     <div className="bg-white rounded-2xl border border-stone-200 p-5 flex flex-col gap-4 shadow-sm">
       <div className="flex items-start gap-3">
-        <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: color+"1A" }}>
-          <Sparkles size={20} style={{ color }}/>
+        <div
+          className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
+          style={{
+            backgroundColor: color + "1A",
+          }}
+        >
+          <Sparkles
+            size={20}
+            style={{ color }}
+          />
         </div>
+
         <div>
-          <h3 className="ff-display text-lg font-semibold" style={{ color: INK }}>{PILATES_BASE.name}</h3>
-          <p className="ff-body text-sm text-stone-500">{PILATES_BASE.tagline}</p>
+          <h3
+            className="ff-display text-lg font-semibold"
+            style={{ color: INK }}
+          >
+            {PILATES_BASE.name}
+          </h3>
+
+          <p className="ff-body text-sm text-stone-500">
+            {PILATES_BASE.tagline}
+          </p>
         </div>
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Pill icon={Calendar}>{session.day}</Pill>
-        <Pill icon={Clock}>{session.time}</Pill>
+        <Pill icon={Calendar}>
+          {session.day}
+        </Pill>
+
+        <Pill icon={Clock}>
+          {session.time}
+        </Pill>
       </div>
 
       {PILATES_BASE.venue && (
-        <a href={PILATES_BASE.venueMap} target="_blank" rel="noopener noreferrer"
-          className="ff-body inline-flex items-center gap-1.5 text-xs text-stone-400 hover:text-stone-600 transition -mt-1">
-          <MapPin size={11}/> {PILATES_BASE.venue}
+        <a
+          href={PILATES_BASE.venueMap}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="ff-body inline-flex items-center gap-1.5 text-xs text-stone-400 hover:text-stone-600 transition -mt-1"
+        >
+          <MapPin size={11}/>
+          {PILATES_BASE.venue}
         </a>
       )}
 
       <div className="flex items-center justify-end pt-2 border-t border-stone-100 mt-auto">
-        <button onClick={() => onBook({...PILATES_BASE, ...session})}
-          className="ff-body inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full transition"
-          style={{ backgroundColor:TEAL, color:"#FFF" }}>
-          Book <ArrowRight size={14}/>
+        <button
+          onClick={() => {
+            if (!disabled) {
+              onBook({
+                ...PILATES_BASE,
+                ...session,
+              });
+            }
+          }}
+          disabled={disabled}
+          className="ff-body inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full transition disabled:cursor-not-allowed"
+          style={{
+            backgroundColor: isBooked
+              ? "#D4EBD9"
+              : full || isClosed
+                ? "#E3DFD3"
+                : TEAL,
+            color: isBooked
+              ? "#2D6B40"
+              : full || isClosed
+                ? "#8A8478"
+                : "#FFF",
+          }}
+        >
+          {full
+            ? "Fully Booked"
+            : isBooked
+              ? "Taster booked"
+              : isClosed
+                ? "Tasters closed"
+                : "Book taster"}
+
+          {!disabled && (
+            <ArrowRight size={14}/>
+          )}
         </button>
       </div>
     </div>
   );
 }
-
-function PilatesEnquiryModal({ onClose }) {
-  const email = "shamsb@snbhive.com";
-  const subject = encodeURIComponent("Reformer Pilates booking enquiry");
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
-      <div className="ff-body bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md p-6 flex flex-col gap-5">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color:PILATES_BASE.color }}>
-              Reformer Pilates
-            </p>
-            <h3 className="ff-display text-xl font-semibold" style={{ color:INK }}>Book your session</h3>
-          </div>
-          <button onClick={onClose} aria-label="Close" className="text-stone-400 hover:text-stone-600 transition">
-            <X size={20}/>
-          </button>
-        </div>
-
-        <div className="rounded-xl bg-stone-50 px-4 py-4">
-          <p className="text-sm text-stone-600 leading-relaxed">
-            Please email <a className="font-semibold underline" style={{ color:TEAL }} href={`mailto:${email}?subject=${subject}`}>{email}</a> to confirm whether you would like to book a taster session or sign up for the weekly sessions.
-          </p>
-        </div>
-
-        <a href={`mailto:${email}?subject=${subject}`}
-          className="inline-flex items-center justify-center gap-2 font-semibold text-sm py-3 rounded-full"
-          style={{ backgroundColor:TEAL, color:"#fff" }}>
-          <Mail size={15}/> Email to book
-        </a>
-        <button onClick={onClose} className="text-xs text-stone-400 hover:text-stone-600 underline">Close</button>
-      </div>
-    </div>
-  );
-}
-
 function ComingSoon() {
   return (
     <div className="max-w-lg mx-auto flex flex-col gap-5 py-4">
@@ -2911,21 +3026,50 @@ function BookingApp() {
                   </div>
                 )}
                 <div className="grid sm:grid-cols-2 gap-4">
-                  {DEFAULT_CLASSES.filter(cls => cls.id !== "self_defence").map(cls => (
-                    <ClassCard key={cls.id} cls={cls} booked={bookedCount(cls.id)}
-                      bookingType={getUserBookingType(cls.id)}
-                      onBook={() => { setModalSession(cls); setModalType("class"); }}
-                      onWaitlist={joinWaitlist}/>
-                  ))}
-                  <PilatesCard
-                    onBook={() => setShowPilatesEnquiry(true)}/>
-                  {DEFAULT_CLASSES.filter(cls => cls.id === "self_defence").map(cls => (
-                    <ClassCard key={cls.id} cls={cls} booked={bookedCount(cls.id)}
-                      bookingType={getUserBookingType(cls.id)}
-                      onBook={() => { setModalSession(cls); setModalType("class"); }}
-                      onWaitlist={joinWaitlist}/>
-                  ))}
-                </div>
+  {/* Show all ordinary classes first */}
+  {DEFAULT_CLASSES
+    .filter(cls => cls.id !== "self_defence")
+    .map(cls => (
+      <ClassCard
+        key={cls.id}
+        cls={cls}
+        booked={bookedCount(cls.id)}
+        bookingType={getUserBookingType(cls.id)}
+        onBook={() => {
+          setModalSession(cls);
+          setModalType("class");
+        }}
+        onWaitlist={joinWaitlist}
+      />
+    ))}
+
+  {/* Pilates comes immediately before Self Defence */}
+  <PilatesCard
+    booked={bookedCount("pilates_taster")}
+    bookingType={getUserBookingType("pilates_taster")}
+    onBook={session => {
+      setModalSession(session);
+      setModalType("class");
+    }}
+  />
+
+  {/* Self Defence comes immediately after Pilates */}
+  {DEFAULT_CLASSES
+    .filter(cls => cls.id === "self_defence")
+    .map(cls => (
+      <ClassCard
+        key={cls.id}
+        cls={cls}
+        booked={bookedCount(cls.id)}
+        bookingType={getUserBookingType(cls.id)}
+        onBook={() => {
+          setModalSession(cls);
+          setModalType("class");
+        }}
+        onWaitlist={joinWaitlist}
+      />
+    ))}
+</div>
               </>
             : tab==="workshops"
             ? <>
