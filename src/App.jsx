@@ -1129,7 +1129,7 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
               </>)}
 
               <div className="flex items-center justify-between rounded-xl bg-stone-50 px-4 py-3 mt-1">
-                <span className="text-sm text-stone-600">Due now</span>
+                <span className="text-sm text-stone-600">{plan === "membership" ? "Monthly payment" : "Due now"}</span>
                 <span className="font-semibold text-base" style={{ color:INK }}>
                   £{typeof amount==="number" ? amount.toFixed(2) : amount}
                 </span>
