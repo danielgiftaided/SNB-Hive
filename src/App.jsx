@@ -68,7 +68,7 @@ const PILATES_BASE = {
   whatToBring: "Wear comfortable clothes and grip socks",
 };
 const PILATES_SESSIONS = [
-  { id:"pilates_taster", day:"21–27 September 2026", time:"Exact time will be sent by email", capacity:20, fullyBooked:true, icsStart:null, icsEnd:null },
+  { id:"pilates_taster" },
 ];
 
 const MEMBERSHIP_TIERS = [
@@ -1861,114 +1861,80 @@ function TermsPage() {
 }
 
 
-function PilatesCard({ booked, bookingType, onBook }) {
+function PilatesCard({ onBook }) {
   const color = PILATES_BASE.color;
   const session = PILATES_SESSIONS[0];
-
-  const isBooked = bookingType === "membership";
-  const full = session.fullyBooked || booked >= session.capacity;
-  const isClosed =
-    TASTER_MODE &&
-    TASTERS_CLOSED &&
-    !isBooked;
-
-  const disabled =
-    full ||
-    isBooked ||
-    isClosed;
 
   return (
     <div className="bg-white rounded-2xl border border-stone-200 p-5 flex flex-col gap-4 shadow-sm">
       <div className="flex items-start gap-3">
-        <div
-          className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
-          style={{
-            backgroundColor: color + "1A",
-          }}
-        >
-          <Sparkles
-            size={20}
-            style={{ color }}
-          />
+        <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: color+"1A" }}>
+          <Sparkles size={20} style={{ color }}/>
         </div>
-
         <div>
-          <h3
-            className="ff-display text-lg font-semibold"
-            style={{ color: INK }}
-          >
-            {PILATES_BASE.name}
-          </h3>
-
-          <p className="ff-body text-sm text-stone-500">
-            {PILATES_BASE.tagline}
-          </p>
+          <h3 className="ff-display text-lg font-semibold" style={{ color:INK }}>{PILATES_BASE.name}</h3>
+          <p className="ff-body text-sm text-stone-500">{PILATES_BASE.tagline}</p>
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <Pill icon={Calendar}>
-          {session.day}
-        </Pill>
-
-        <Pill icon={Clock}>
-          {session.time}
-        </Pill>
-      </div>
+      <p className="ff-body text-sm text-stone-500 leading-relaxed">
+        Exact taster and weekly session dates will be sent by email.
+      </p>
 
       {PILATES_BASE.venue && (
-        <a
-          href={PILATES_BASE.venueMap}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="ff-body inline-flex items-center gap-1.5 text-xs text-stone-400 hover:text-stone-600 transition -mt-1"
-        >
-          <MapPin size={11}/>
-          {PILATES_BASE.venue}
+        <a href={PILATES_BASE.venueMap} target="_blank" rel="noopener noreferrer"
+          className="ff-body inline-flex items-center gap-1.5 text-xs text-stone-400 hover:text-stone-600 transition -mt-1">
+          <MapPin size={11}/> {PILATES_BASE.venue}
         </a>
       )}
 
       <div className="flex items-center justify-end pt-2 border-t border-stone-100 mt-auto">
-        <button
-          onClick={() => {
-            if (!disabled) {
-              onBook({
-                ...PILATES_BASE,
-                ...session,
-              });
-            }
-          }}
-          disabled={disabled}
-          className="ff-body inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full transition disabled:cursor-not-allowed"
-          style={{
-            backgroundColor: isBooked
-              ? "#D4EBD9"
-              : full || isClosed
-                ? "#E3DFD3"
-                : TEAL,
-            color: isBooked
-              ? "#2D6B40"
-              : full || isClosed
-                ? "#8A8478"
-                : "#FFF",
-          }}
-        >
-          {full
-            ? "Fully Booked"
-            : isBooked
-              ? "Taster booked"
-              : isClosed
-                ? "Tasters closed"
-                : "Book taster"}
-
-          {!disabled && (
-            <ArrowRight size={14}/>
-          )}
+        <button onClick={() => onBook({...PILATES_BASE, ...session})}
+          className="ff-body inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full transition"
+          style={{ backgroundColor:TEAL, color:"#FFF" }}>
+          Book <ArrowRight size={14}/>
         </button>
       </div>
     </div>
   );
 }
+
+function PilatesEnquiryModal({ onClose }) {
+  const email = "shamsb@snbhive.com";
+  const subject = encodeURIComponent("Reformer Pilates booking enquiry");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+      <div className="ff-body bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md p-6 flex flex-col gap-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color:PILATES_BASE.color }}>
+              Reformer Pilates
+            </p>
+            <h3 className="ff-display text-xl font-semibold" style={{ color:INK }}>Book your session</h3>
+          </div>
+          <button onClick={onClose} aria-label="Close" className="text-stone-400 hover:text-stone-600 transition">
+            <X size={20}/>
+          </button>
+        </div>
+
+        <div className="rounded-xl bg-stone-50 px-4 py-4">
+          <p className="text-sm text-stone-600 leading-relaxed">
+            Please email <a className="font-semibold underline" style={{ color:TEAL }} href={`mailto:${email}?subject=${subject}`}>{email}</a> to confirm whether you would like to book a taster session or sign up for the weekly sessions.
+          </p>
+        </div>
+
+        <a href={`mailto:${email}?subject=${subject}`}
+          className="inline-flex items-center justify-center gap-2 font-semibold text-sm py-3 rounded-full"
+          style={{ backgroundColor:TEAL, color:"#fff" }}>
+          <Mail size={15}/> Email to book
+        </a>
+        <button onClick={onClose} className="text-xs text-stone-400 hover:text-stone-600 underline">Close</button>
+      </div>
+    </div>
+  );
+}
+
 function ComingSoon() {
   return (
     <div className="max-w-lg mx-auto flex flex-col gap-5 py-4">
@@ -3039,12 +3005,7 @@ function BookingApp() {
 
   {/* Pilates comes immediately before Self Defence */}
   <PilatesCard
-    booked={bookedCount("pilates_taster")}
-    bookingType={getUserBookingType("pilates_taster")}
-    onBook={session => {
-      setModalSession(session);
-      setModalType("class");
-    }}
+    onBook={() => setShowPilatesEnquiry(true)}
   />
 
   {/* Self Defence comes immediately after Pilates */}
