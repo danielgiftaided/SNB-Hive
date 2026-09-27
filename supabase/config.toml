@@ -1,0 +1,2 @@
+[functions.gocardless-webhook]
+verify_jwt = false
