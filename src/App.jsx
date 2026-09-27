@@ -10,7 +10,7 @@ import storage, { supabase } from "./storage.js";
 
 /* =====================================================================
    CONFIG — edit these to customise the app.
-   Swap STRIPE_LINKS values for your real Stripe Payment Link URLs.
+   Class payments are created server-side through GoCardless.
    Admin login now uses real email+password+MFA (see AdminPage) rather
    than a hardcoded passcode — set up your admin account via
    generate-admin-hash.mjs, see the accompanying setup notes.
@@ -39,7 +39,7 @@ const OPEN_DAY = {
 const WORKSHOPS = [];
 
 const DEFAULT_CLASSES = [
-  { id:"zumba",    name:"Zumba",                  tagline:"High-energy dance cardio",  day:"Friday 25 September 2026", time:"12:00–12:45", capacity:20, icon:"music",   color:"#C99A4B", tasterStatus:"tbc",
+  { id:"zumba",    name:"Zumba",                  tagline:"High-energy dance cardio",  day:"Fridays", time:"12:00–12:45", capacity:20, icon:"music",   color:"#C99A4B",
     venue:"6 Dispensary Lane, London E8 1FT",              venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
     whatToBring:"Wear comfortable clothes and grip socks", icsStart:"20260925T110000", icsEnd:"20260925T114500", description:"Zumba is about much more than fitness. It's about community, confidence, and feeling good. Dance has been shown to support memory, coordination, and emotional wellbeing, and music and dance can help get through some of the most challenging times in life.\n\nIt has the power to bring people together, lift spirits, and remind us that exercise doesn't have to feel like a chore — it can be something you genuinely look forward to.\n\nZumba is based on repetitive movements throughout each song, so you don't need to be an experienced dancer or technically advanced to join in. It's all about having fun while getting fit.\n\nThe routines are repeated for about 6 weeks, which allows people to learn the moves and build their confidence and then new routines are introduced gradually over time. That repetition helps build confidence because your body begins to associate the movements with the music, allowing you to learn naturally without pressure. It's a welcoming, supportive environment." },
   { id:"boxing",   name:"Boxing",                  tagline:"Pad work, Co-ordination",   day:"TBC", time:"TBC", capacity:20, icon:"flame",   color:"#9B5B45", tasterStatus:"tbc",
@@ -59,7 +59,7 @@ const DEFAULT_CLASSES = [
     details:["2-hour session each week for 3 weeks", "£90 per person", "Limited spaces available"], description:"Join the waiting list for our intensive three-week self defence course, starting in October." },
 ];
 
-// 2 membership tiers only
+// Zumba launches with one monthly membership tier.
 const PILATES_BASE = {
   name: "Reformer Pilates", tagline: "Strength, Core, Balance",
   color: "#9b7ecb",
@@ -71,23 +71,19 @@ const PILATES_SESSIONS = [
   { id:"pilates_taster" },
 ];
 
-const MEMBERSHIP_TIERS = [
-  { activities: 1, price: 26 },
-  { activities: 2, price: 45 },
-];
+const MEMBERSHIP_TIERS = [{ activities: 1, price: 35 }];
 
-const PAYG_PRICE = 7.50;
+const PAYG_PRICE = 10;
 
 const DEFAULT_RETREATS = [
   { id: "retreat-1", name: "Women's Wellness Retreat", location: "Surrey Hills", dates: "Fri 18 – Sun 20 Sept", price: 950, deposit: 300, capacity: 15 },
 ];
 
-const STRIPE_LINKS = {
-  payg: "https://buy.stripe.com/REPLACE_PAYG",
-  membership: { 1: "https://buy.stripe.com/REPLACE_MEMBERSHIP_1", 2: "https://buy.stripe.com/REPLACE_MEMBERSHIP_2" },
-};
+// Paid bookings are being launched for Zumba only. Add another class id here
+// when it is ready to accept payments.
+const PAID_CLASS_IDS = new Set(["zumba"]);
 
-// Retreat payments go via bank transfer rather than Stripe. Replace these
+// Retreat payments continue to use bank transfer. Replace these
 // with your real account details before going live — knowing an account
 // number/sort code only lets someone SEND you money, not take it, so
 // there's no security risk in these being visible in the app's source.
@@ -104,9 +100,9 @@ const BANK_TRANSFER_DETAILS = {
 
 // ── TASTER MODE ───────────────────────────────────────────────────────
 // true  = simple "Book taster" flow, no pricing or payments shown
-// false = full booking with PAYG / membership / Stripe payment
+// false = full booking with PAYG / membership / GoCardless payment
 // Change this one line to switch between the two modes.
-const TASTER_MODE = true;
+const TASTER_MODE = false;
 // Set to true to stop new taster bookings across every class (existing
 // bookings/cancellations are unaffected — this only blocks NEW bookings).
 // Flip back to false whenever you want to reopen taster bookings.
@@ -693,6 +689,7 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist }) {
   const isWaitlist = cls.bookingKind === "waitlist";
   const isTbc = cls.tasterStatus === "tbc";
   const isBooked = !!bookingType;
+  const paymentsAvailable = TASTER_MODE || PAID_CLASS_IDS.has(cls.id) || isWaitlist;
   const isClosed =
     TASTER_MODE &&
     TASTERS_CLOSED &&
@@ -700,6 +697,7 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist }) {
 
   const disabled =
     isTbc ||
+    !paymentsAvailable ||
     isBooked ||
     (
       !isWaitlist &&
@@ -810,7 +808,9 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist }) {
             opacity: disabled ? 0.85 : 1,
           }}
         >
-          {isTbc
+          {!paymentsAvailable
+            ? "Coming soon"
+            : isTbc
             ? "TBC"
             : isBooked
               ? isWaitlist
@@ -882,18 +882,17 @@ function RetreatCard({ retreat, booked, onBook, isSignedUp }) {
 
 /* ---- BOOKING MODAL
    - Details pre-filled from logged-in user
-   - 2 membership tiers only
-   - PAYG £7.50
+   - Zumba monthly membership
+   - PAYG £10
    - 5-minute hold (not 30)
    ---- */
 
-function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
+function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymentFailure }) {
   const [step, setStep]           = useState(1);
   const [plan, setPlan]           = useState(type==="class" ? "payg" : "deposit");
   const [activities, setAct]      = useState(1);
   const [selectedClasses, setSel] = useState([session.id]);
   const [saving, setSaving]       = useState(false);
-  const [paymentUrl, setPUrl]     = useState("");
   const [bankRef, setBankRef]     = useState("");
   const [error, setError]         = useState("");
 
@@ -919,6 +918,7 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
     : (plan==="deposit" ? session.deposit : session.price);
 
   async function handleConfirm() {
+    let pendingBookingId = null;
     // ── TASTER MODE — no payment, instant confirmation ──
     if (TASTER_MODE) {
       setSaving(true); setError("");
@@ -950,10 +950,6 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
     }
     setSaving(true); setError("");
     try {
-      const url = type==="class"
-        ? (plan==="payg" ? STRIPE_LINKS.payg : STRIPE_LINKS.membership[activities])
-        : null; // retreats pay by bank transfer, not a Stripe link
-
       const planLabel = type==="class"
         ? (plan==="payg" ? "Pay as you go" : `Membership — ${activities} class${activities>1?"es":""}`)
         : (plan==="deposit" ? "Deposit (bank transfer)" : "Paid in full (bank transfer)");
@@ -964,6 +960,7 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
         plan: planLabel, status: "pending_payment", createdAt: new Date().toISOString(),
       };
 
+      let bookingId = null;
       if (plan === "membership" && activities === 2) {
         const classes = DEFAULT_CLASSES.filter(c => selectedClasses.includes(c.id));
         for (let i = 0; i < classes.length; i++) {
@@ -975,7 +972,8 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
           });
         }
       } else {
-        const bookingId = uid();
+        bookingId = uid();
+        pendingBookingId = bookingId;
         // A short, unique reference the person includes on their bank
         // transfer, so it can be matched back to this booking manually.
         const ref = type === "retreat" ? bookingId.slice(0, 8).toUpperCase() : null;
@@ -988,8 +986,23 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
         if (ref) setBankRef(ref);
       }
 
-      setPUrl(url); setStep(2);
-    } catch { setError("Couldn't save your booking — please try again."); }
+      if (type === "class") {
+        const checkout = await callEdgeFunction("gocardless-checkout", {
+          booking_id: bookingId,
+          plan,
+          session_id: session.id,
+          return_url: `${window.location.origin}/payment-complete?booking_id=${encodeURIComponent(bookingId)}`,
+          exit_url: window.location.href,
+        });
+        if (!checkout?.authorisation_url) throw new Error("Checkout URL was not returned");
+        window.location.assign(checkout.authorisation_url);
+        return;
+      }
+      setStep(2);
+    } catch {
+      if (pendingBookingId) await onPaymentFailure?.(pendingBookingId);
+      setError("Couldn't start GoCardless checkout. No payment was taken — please try again.");
+    }
     finally { setSaving(false); }
   }
 
@@ -1030,7 +1043,7 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
           {step === 1 && !TASTER_MODE && (
             <div className="flex flex-col gap-4">
               {type==="class" ? (<>
-                <label className="text-sm font-medium text-stone-700">How would you like to pay?</label>
+                <label className="text-sm font-medium text-stone-700">Choose your Zumba payment option</label>
                 <button onClick={() => setPlan("payg")} className="text-left rounded-xl border-2 p-3.5 transition"
                   style={{ borderColor:plan==="payg"?TEAL:"#E7E2D5" }}>
                   <div className="flex items-center justify-between">
@@ -1045,7 +1058,7 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
                     <span className="font-semibold text-sm">Monthly membership</span>
                     {plan==="membership" && <Check size={16} style={{ color:TEAL }}/>}
                   </div>
-                  <p className="text-xs text-stone-500 mt-0.5">£26/month for 1 class · £45/month for 2 classes</p>
+                  <p className="text-xs text-stone-500 mt-0.5">£35/month for one weekly Zumba class</p>
                 </button>
                 {plan==="membership" && (<>
                   <div className="grid grid-cols-2 gap-2 pl-1">
@@ -1127,7 +1140,7 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
               <button onClick={handleConfirm} disabled={saving}
                 className="inline-flex items-center justify-center gap-1.5 font-semibold text-sm py-3 rounded-full transition"
                 style={{ backgroundColor:TEAL, color:"#fff" }}>
-                {saving ? <Loader2 size={15} className="animate-spin"/> : <>Hold my spot <ArrowRight size={15}/></>}
+                {saving ? <><Loader2 size={15} className="animate-spin"/> Opening secure payment…</> : <>Continue to payment <ArrowRight size={15}/></>}
               </button>
             </div>
           )}
@@ -1178,24 +1191,6 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm }) {
                     Great, see you there!
                   </button>
               </>
-            </div>
-          )}
-
-          {step === 2 && !TASTER_MODE && type === "class" && (
-            <div className="flex flex-col items-center text-center gap-3 py-4">
-              <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor:"#E9F1EC" }}>
-                <ShieldCheck size={24} style={{ color:TEAL }}/>
-              </div>
-              <h4 className="ff-display text-lg font-semibold" style={{ color:INK }}>Your spot is held</h4>
-              <p className="text-sm text-stone-500 leading-relaxed">
-                We've reserved your place for <strong>5 minutes</strong>. Complete payment securely on Stripe to confirm it — your spot is released if payment isn't completed in time.
-              </p>
-              <a href={paymentUrl} target="_blank" rel="noopener noreferrer"
-                className="w-full inline-flex items-center justify-center gap-1.5 font-semibold text-sm py-3 rounded-full mt-2"
-                style={{ backgroundColor:GOLD, color:INK }}>
-                Continue to secure payment <ArrowUpRight size={15}/>
-              </a>
-              <button onClick={onClose} className="text-xs text-stone-400 mt-1 underline">Close — I'll pay later</button>
             </div>
           )}
 
@@ -2827,10 +2822,33 @@ function AdminPage() {
 // /       → BookingApp (public-facing booking site)
 export default function App() {
   const path = window.location.pathname;
+  if (path.startsWith("/payment-complete")) return <PaymentCompletePage/>;
   if (path.startsWith("/admin"))   return <AdminPage/>;
   if (path.startsWith("/privacy")) return <PrivacyPage/>;
   if (path.startsWith("/terms"))   return <TermsPage/>;
   return <BookingApp/>;
+}
+
+function PaymentCompletePage() {
+  const bookingId = new URLSearchParams(window.location.search).get("booking_id");
+  return (
+    <div className="min-h-screen flex items-center justify-center p-5" style={{ backgroundColor:BG }}>
+      <Fonts/>
+      <div className="ff-body bg-white rounded-3xl border border-stone-200 shadow-sm max-w-md w-full p-7 text-center">
+        <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto" style={{ backgroundColor:"#E9F1EC" }}>
+          <Check size={27} style={{ color:TEAL }}/>
+        </div>
+        <h1 className="ff-display text-2xl font-semibold mt-4" style={{ color:INK }}>Payment details received</h1>
+        <p className="text-sm text-stone-500 leading-relaxed mt-2">
+          Thank you. GoCardless is processing your authorisation and we'll update your Zumba booking automatically. Direct Debit payments can take a few working days to collect.
+        </p>
+        {bookingId && <p className="text-xs text-stone-400 mt-3">Booking reference: {bookingId.slice(0, 8).toUpperCase()}</p>}
+        <a href="/" className="inline-flex justify-center w-full font-semibold text-sm py-3 rounded-full mt-5" style={{ backgroundColor:TEAL, color:"#fff" }}>
+          Return to my bookings
+        </a>
+      </div>
+    </div>
+  );
 }
 
 function BookingApp() {
@@ -3059,7 +3077,8 @@ function BookingApp() {
 
       {modalSession && (
         <BookingModal session={modalSession} type={modalType} currentUser={currentUser}
-          onClose={() => setModalSession(null)} onConfirm={handleConfirmBooking}/>
+          onClose={() => setModalSession(null)} onConfirm={handleConfirmBooking}
+          onPaymentFailure={id => updateStatus(id, "cancelled")}/>
       )}
 
       {workshopModal && (
