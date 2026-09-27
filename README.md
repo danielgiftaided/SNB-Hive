@@ -55,28 +55,70 @@ Every value here flows automatically through the whole app.
 | Business name & tagline | `BRAND` object | `name: "SNB Hive"` |
 | Class schedule | `DEFAULT_CLASSES` array | `day`, `time`, `capacity` per class |
 | Membership tiers | `MEMBERSHIP_TIERS` array | `price` per tier |
-| Pay-as-you-go price | `PAYG_PRICE` | e.g. `7.50` |
+| Pay-as-you-go price | `PAYG_PRICE` | currently `10` |
 | Retreats | `DEFAULT_RETREATS` array | dates, price, deposit, capacity |
-| Stripe payment URLs | `STRIPE_LINKS` object | paste your real Stripe links |
+| Paid classes | `PAID_CLASS_IDS` | Zumba only by default |
 | Admin dashboard passcode | `ADMIN_PASSCODE` | **change this before going live** |
 
 ---
 
-## 3. Setting up Stripe Payment Links
+## 3. Setting up GoCardless for Zumba
 
-1. Log into **dashboard.stripe.com**
-2. Go to **Products → Payment Links → + New**
-3. Create one link for each payment type:
+For the complete click-by-click and command-by-command setup, sandbox testing,
+live cutover, troubleshooting, and ongoing administration guide, see
+**[`docs/GOCARDLESS_SETUP.md`](docs/GOCARDLESS_SETUP.md)**.
 
-| Name | Type | Amount |
-|---|---|---|
-| SNB Hive — Pay As You Go | One-off payment | £7.50 |
-| SNB Hive — Membership 1 Class | Recurring · monthly | £26.00 |
-| SNB Hive — Membership 2 Classes | Recurring · monthly | £45.00 |
-| SNB Hive — Retreat Deposit | One-off payment | your deposit amount |
-| SNB Hive — Retreat Full | One-off payment | your full retreat price |
+Use the **existing SNB Hive Supabase account and project**—a separate Supabase
+account or payment project is not required.
 
-4. Copy each link URL and paste into `STRIPE_LINKS` in `src/App.jsx`
+Payments use a server-side Supabase Edge Function so the GoCardless access
+token is never exposed in the browser. Pay as you go creates a £10 one-off
+Direct Debit payment. Membership creates a Direct Debit mandate and then a
+£35 monthly subscription after the customer completes the hosted GoCardless
+flow. Only Zumba is enabled in `PAID_CLASS_IDS`.
+
+### Sandbox first
+
+1. In the GoCardless sandbox dashboard, create an access token and a webhook
+   endpoint. Use this endpoint URL:
+   `https://YOUR_PROJECT.supabase.co/functions/v1/gocardless-webhook`.
+2. Copy the webhook secret shown by GoCardless.
+3. Install and log in to the Supabase CLI, link the production project, then
+   add secrets (do not put these values in `.env` or Vercel):
+
+```bash
+supabase secrets set \
+  GOCARDLESS_ACCESS_TOKEN=YOUR_SANDBOX_TOKEN \
+  GOCARDLESS_WEBHOOK_SECRET=YOUR_WEBHOOK_SECRET \
+  GOCARDLESS_API_URL=https://api-sandbox.gocardless.com \
+  APP_URL=https://YOUR-LIVE-DOMAIN
+```
+
+4. Deploy both functions:
+
+```bash
+supabase functions deploy gocardless-checkout
+supabase functions deploy gocardless-webhook --no-verify-jwt
+```
+
+5. Make a Zumba pay-as-you-go booking with a GoCardless sandbox test bank
+   account. Confirm that checkout returns to `/payment-complete` and that the
+   booking changes from `pending_payment` to `confirmed` after the signed
+   `billing_requests.fulfilled` webhook arrives. Repeat for membership and
+   verify a £35 monthly subscription appears in GoCardless.
+
+### Go live
+
+Create a live access token and live webhook in the GoCardless dashboard, then
+replace the three GoCardless secrets. The production API URL is
+`https://api.gocardless.com`. Redeploying is not required after changing
+secrets. Keep `APP_URL` set to the exact public origin (for example,
+`https://book.snbhive.com`, with no trailing slash).
+
+The prices are deliberately validated in both the app and the Edge Function.
+If the Zumba price changes, update `PAYG_PRICE`/`MEMBERSHIP_TIERS` in
+`src/App.jsx` and `PRICES` in
+`supabase/functions/gocardless-checkout/index.ts` together.
 
 ---
 
@@ -236,7 +278,7 @@ Redeploy (or push a commit) and you're live with a shared database.
 | Icons | lucide-react 0.383.0 |
 | Data (default) | localStorage (per-browser) |
 | Data (production) | Supabase (shared Postgres) |
-| Payments | Stripe Payment Links |
+| Payments | GoCardless Billing Requests + Direct Debit |
 | Hosting | Vercel (recommended) |
 
 ---
