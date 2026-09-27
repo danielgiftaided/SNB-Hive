@@ -51,7 +51,7 @@ const DEFAULT_CLASSES = [
   { id:"strength", name:"Strength & Conditioning", tagline:"Build strength, build power", day:"TBC", time:"TBC", capacity:20, icon:"dumbbell",color:"#1F4A42", tasterStatus:"tbc", 
     venue:"6 Dispensary Lane, London E8 1FT", venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
     whatToBring:"Gym clothes and trainers and bring a water bottle.", icsStart:"20260924T110000", icsEnd:"20260924T114500", description:"Strength training is one of the most beneficial forms of exercise for women, particularly as we navigate the demands of motherhood, work and daily life.\n\nThis class focuses on building functional strength, improving mobility and helping women feel stronger and more capable in their everyday activities.\n\nUsing bodyweight exercises, resistance bands and light equipment, sessions are designed to be accessible while still providing an effective workout.\n\nBenefits include:\n• Increased muscle tone and strength\n• Support with sustainable fat loss and body composition goals\n• Improved posture and reduced aches and pains\n• Better balance and stability\n• Increased energy levels\n• Stronger bones and joints\n• Improved confidence in daily movement\n• Support for healthy ageing and long-term wellbeing\n\nRather than focusing on appearance alone, this class encourages women to appreciate what their bodies can do and develop strength that carries into everyday life.\n\nSuitable for all fitness levels and can be adapted to individual needs." },
-  { id: "boxfit", name: "BoxFit", tagline: "Boxing-inspired fitness", day: "Thursday 1 October 2026", time: "13:00–14:00", capacity: 18, icon: "flame", color: "#D06B4F",
+  { id: "boxfit", name: "BoxFit", tagline: "Boxing-inspired fitness", day: "Thursday 1 October 2026", time: "13:00–14:00", capacity: 18, icon: "flame", color: "#D06B4F", bookingKind: "taster",
     venue: "6 Dispensary Lane, London E8 1FT", venueMap: "https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT", whatToBring: "Bring boxing gloves and pads if you have them. Wear comfortable workout clothes and trainers. Bring a water bottle", icsStart: "20261001T120000",
     icsEnd: "20261001T130000", description: "A high-energy boxing-inspired fitness taster combining cardio, conditioning and boxing drills. Suitable for beginners and all fitness levels."},
   { id:"self_defence", name:"Self Defence", tagline:"Intensive 3-week course", day:"October 2026 start", time:"Wednesdays, 12:00–14:00", capacity:20, icon:"shield", color:"#6F596E", bookingKind:"waitlist",
@@ -694,11 +694,12 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist }) {
   const full = booked >= cls.capacity;
   const isMember = bookingType === "membership";
   const isWaitlist = cls.bookingKind === "waitlist";
+  const isTaster = TASTER_MODE || cls.bookingKind === "taster";
   const isTbc = cls.tasterStatus === "tbc";
   const isBooked = !!bookingType;
-  const paymentsAvailable = TASTER_MODE || PAID_CLASS_IDS.has(cls.id) || isWaitlist;
+  const paymentsAvailable = isTaster || PAID_CLASS_IDS.has(cls.id) || isWaitlist;
   const isClosed =
-    TASTER_MODE &&
+    isTaster &&
     TASTERS_CLOSED &&
     !isBooked;
 
@@ -755,7 +756,7 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist }) {
           {cls.time}
         </Pill>
 
-        {isMember && !TASTER_MODE && (
+        {isMember && !isTaster && (
           <Pill icon={Check}>
             <span style={{ color: TEAL }}>
               Member
@@ -829,7 +830,7 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist }) {
                   ? "Tasters closed"
                   : isWaitlist
                     ? "Join October waiting list"
-                    : TASTER_MODE
+                    : isTaster
                       ? "Book taster"
                       : "Book"}
 
@@ -895,6 +896,7 @@ function RetreatCard({ retreat, booked, onBook, isSignedUp }) {
    ---- */
 
 function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymentFailure }) {
+  const isTaster = type === "class" && (TASTER_MODE || session.bookingKind === "taster");
   const [step, setStep]           = useState(1);
   const [plan, setPlan]           = useState(type==="class" ? "payg" : "deposit");
   const [activities, setAct]      = useState(1);
@@ -927,7 +929,7 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
   async function handleConfirm() {
     let pendingBookingId = null;
     // ── TASTER MODE — no payment, instant confirmation ──
-    if (TASTER_MODE) {
+    if (isTaster) {
       setSaving(true); setError("");
       try {
         await onConfirm({
@@ -1026,7 +1028,7 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
         </div>
 
         <div className="p-5">
-          {step === 1 && TASTER_MODE && type==="class" && (
+          {step === 1 && isTaster && (
             <div className="flex flex-col gap-5">
               <div className="rounded-xl border border-stone-100 p-4 flex items-start gap-3">
                 <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
@@ -1048,7 +1050,7 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
             </div>
           )}
 
-          {step === 1 && !TASTER_MODE && (
+          {step === 1 && !isTaster && (
             <div className="flex flex-col gap-4">
               {type==="class" ? (<>
                 <label className="text-sm font-medium text-stone-700">Choose your Zumba payment option</label>
@@ -1153,7 +1155,7 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
             </div>
           )}
 
-          {step === 2 && TASTER_MODE && (
+          {step === 2 && isTaster && (
             <div className="flex flex-col items-center text-center gap-4 py-4">
               <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{ backgroundColor:"#E9F1EC" }}>
                 <Check size={26} style={{ color:TEAL }}/>
@@ -1202,7 +1204,7 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
             </div>
           )}
 
-          {step === 2 && !TASTER_MODE && type === "retreat" && (
+          {step === 2 && !isTaster && type === "retreat" && (
             <div className="flex flex-col items-center text-center gap-3 py-4">
               <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor:"#E9F1EC" }}>
                 <Banknote size={24} style={{ color:TEAL }}/>
@@ -2926,7 +2928,8 @@ function BookingApp() {
     if (!b) return null;
     const plan = (b.plan || "").toLowerCase();
     if (plan.includes("waitlist")) return "waitlist";
-    if (plan.includes("membership") || plan.includes("taster")) return "membership";
+    if (plan.includes("taster")) return "taster";
+    if (plan.includes("membership")) return "membership";
     return "payg";
   }
 
