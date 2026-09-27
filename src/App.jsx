@@ -823,7 +823,7 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist }) {
             : isBooked
               ? isWaitlist
                 ? "On waiting list"
-                : "Taster booked"
+                : "Booked"
               : !isWaitlist && full
                 ? "Full"
                 : isClosed
@@ -1163,7 +1163,7 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
 
               <>
                   <div>
-                    <h4 className="ff-display text-xl font-semibold" style={{ color:INK }}>Taster booked!</h4>
+                    <h4 className="ff-display text-xl font-semibold" style={{ color:INK }}>Booked!</h4>
                     <p className="ff-body text-sm text-stone-500 mt-1">
                       You're coming to <strong>{session.name}</strong>
                     </p>
