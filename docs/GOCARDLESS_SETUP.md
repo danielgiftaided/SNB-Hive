@@ -22,9 +22,11 @@ second project for GoCardless.
 
 The only new Supabase items are:
 
-- two Edge Functions: `gocardless-checkout` and `gocardless-webhook`; and
-- four function secrets: `APP_URL`, `GOCARDLESS_ACCESS_TOKEN`,
-  `GOCARDLESS_API_URL`, and `GOCARDLESS_WEBHOOK_SECRET`.
+- three Edge Functions: `gocardless-checkout`, `gocardless-webhook`, and
+  `send-email`; and
+- the payment secrets `APP_URL`, `GOCARDLESS_ACCESS_TOKEN`,
+  `GOCARDLESS_API_URL`, and `GOCARDLESS_WEBHOOK_SECRET`, plus the email
+  secrets `RESEND_API_KEY`, `SENDER_EMAIL`, and `ADMIN_EMAIL`.
 
 When the instructions below say to link a project, select the existing SNB Hive
 project—the same project that contains the `users` and `bookings` tables and
@@ -137,6 +139,7 @@ Deploy checkout first:
 
 ```bash
 npx supabase functions deploy gocardless-checkout
+npx supabase functions deploy send-email
 ```
 
 Deploy the webhook without Supabase JWT verification. GoCardless cannot send a
@@ -227,7 +230,7 @@ You should see `APP_URL`, `GOCARDLESS_ACCESS_TOKEN`,
    shows the short booking reference.
 7. In **My bookings**, the booking begins as **Awaiting payment**. After the
    signed `billing_requests.fulfilled` webhook is processed it changes to
-   **Booked**.
+   **Paid**. The customer and Shams each receive a confirmation email.
 8. In the GoCardless sandbox dashboard, verify that the customer, mandate, and
    £10 payment were created.
 
@@ -242,7 +245,7 @@ again, because the app prevents one customer from booking Zumba twice.
    **Continue to payment**.
 4. Complete the GoCardless sandbox authorization.
 5. Confirm the app returns to `/payment-complete` and the booking eventually
-   changes to **Booked**.
+   changes to **Paid**, and that the membership confirmation emails arrive.
 6. In GoCardless, verify that a mandate and a subscription named
    `SNB Hive Zumba monthly membership` exist and that the subscription amount
    is £35 monthly.
@@ -339,7 +342,8 @@ Only do this after both sandbox journeys pass.
   subscriptions. Changing the booking status in SNB Hive does not cancel a
   GoCardless mandate or subscription.
 - The SNB Hive admin dashboard shows the booking state. The webhook changes a
-  successfully authorized booking from **Awaiting payment** to **Booked**.
+  successfully authorized booking from **Awaiting payment** to **Paid** and
+  asks `send-email` to notify both the customer and Shams.
 - If prices change, update all three locations together:
   1. `PAYG_PRICE` and `MEMBERSHIP_TIERS` in `src/App.jsx`;
   2. `PRICES` in `supabase/functions/gocardless-checkout/index.ts`;

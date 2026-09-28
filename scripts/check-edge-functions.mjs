@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 const functions = [
   "supabase/functions/gocardless-checkout/index.ts",
   "supabase/functions/gocardless-webhook/index.ts",
+  "supabase/functions/send-email/index.ts",
 ];
 
 let failed = false;

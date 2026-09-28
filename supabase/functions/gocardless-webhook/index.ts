@@ -4,17 +4,38 @@ async function confirmBooking(id: string) {
   const url = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !serviceKey) throw new Error("Supabase function environment is not configured");
-  const response = await fetch(`${url}/rest/v1/bookings?id=eq.${encodeURIComponent(id)}`, {
+  const response = await fetch(`${url}/rest/v1/bookings?id=eq.${encodeURIComponent(id)}&status=eq.pending_payment&select=id,name,email,phone,session_name,plan,amount`, {
     method: "PATCH",
     headers: {
       apikey: serviceKey,
       Authorization: `Bearer ${serviceKey}`,
       "Content-Type": "application/json",
-      Prefer: "return=minimal",
+      Prefer: "return=representation",
     },
-    body: JSON.stringify({ status: "confirmed" }),
+    body: JSON.stringify({ status: "paid" }),
   });
   if (!response.ok) throw new Error("Booking status update failed");
+  const rows = await response.json();
+  return rows[0] || null;
+}
+
+async function sendPaymentConfirmation(booking: Record<string, unknown>) {
+  const url = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !serviceKey) throw new Error("Supabase function environment is not configured");
+  const response = await fetch(`${url}/functions/v1/send-email`, {
+    method: "POST",
+    headers: {
+      apikey: serviceKey,
+      Authorization: `Bearer ${serviceKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ type: "payment_confirmation", ...booking }),
+  });
+  if (!response.ok) {
+    console.error("Payment confirmation email failed", response.status, await response.text());
+    throw new Error("Payment confirmation email failed");
+  }
 }
 
 function hex(bytes: ArrayBuffer) {
@@ -89,7 +110,10 @@ Deno.serve(async request => {
         });
       }
 
-      await confirmBooking(bookingId);
+      // The conditional update makes webhook retries idempotent: only the
+      // first fulfilled event moves the booking and sends the two emails.
+      const booking = await confirmBooking(bookingId);
+      if (booking) await sendPaymentConfirmation(booking);
     }
     return new Response("ok", { status: 200 });
   } catch (error) {

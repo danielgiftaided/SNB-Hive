@@ -947,6 +947,13 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
           venue: session.venue || "", what_to_bring: session.whatToBring || "",
           ics_start: session.icsStart, ics_end: session.icsEnd,
         }).catch(() => {});
+        callEdgeFunction("send-email", {
+          type: "admin_booking",
+          user_name: currentUser.name, user_email: currentUser.email,
+          user_phone: currentUser.phone, session_name: session.name,
+          plan: "Free taster", amount: "0", status: "confirmed",
+          booked_at: new Date().toLocaleString("en-GB"),
+        }).catch(error => console.error("[SNB booking admin notify FAILED]:", error.message));
         setStep(2);
       } catch { setError("Couldn't save your booking — please try again."); }
       finally { setSaving(false); }
@@ -996,6 +1003,15 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
       }
 
       if (type === "class") {
+        // Tell Shams about the booking as soon as it is recorded. Payment
+        // confirmation is sent separately by the signed GoCardless webhook.
+        await callEdgeFunction("send-email", {
+          type: "admin_booking",
+          user_name: currentUser.name, user_email: currentUser.email,
+          user_phone: currentUser.phone, session_name: session.name,
+          plan: planLabel, amount: String(amount), status: "pending_payment",
+          booked_at: new Date().toLocaleString("en-GB"),
+        }).catch(error => console.error("[SNB booking admin notify FAILED]:", error.message));
         const checkout = await callEdgeFunction("gocardless-checkout", {
           booking_id: bookingId,
           plan,
@@ -2848,9 +2864,9 @@ function PaymentCompletePage() {
         <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto" style={{ backgroundColor:"#E9F1EC" }}>
           <Check size={27} style={{ color:TEAL }}/>
         </div>
-        <h1 className="ff-display text-2xl font-semibold mt-4" style={{ color:INK }}>Payment details received</h1>
+        <h1 className="ff-display text-2xl font-semibold mt-4" style={{ color:INK }}>You're all set! 🎉</h1>
         <p className="text-sm text-stone-500 leading-relaxed mt-2">
-          Thank you. GoCardless is processing your authorisation and we'll update your Zumba booking automatically. Direct Debit payments can take a few working days to collect.
+          Success — your GoCardless details have been submitted and your Zumba place is secured. We'll email you as soon as your payment or membership is confirmed. Direct Debit collections can take a few working days to appear in your bank account.
         </p>
         {bookingId && <p className="text-xs text-stone-400 mt-3">Booking reference: {bookingId.slice(0, 8).toUpperCase()}</p>}
         <a href="/" className="inline-flex justify-center w-full font-semibold text-sm py-3 rounded-full mt-5" style={{ backgroundColor:TEAL, color:"#fff" }}>
