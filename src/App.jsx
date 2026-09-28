@@ -160,6 +160,19 @@ async function callEdgeFunction(name, data) {
   return res.json();
 }
 
+function isEdgeFunctionMissing(error) {
+  const message = String(error?.message || error || "").toLowerCase();
+  return message.includes("edge_not_configured") || message.includes("404") ||
+    message.includes("function not found") || message.includes("not_found");
+}
+
+function emailDeliveryError(error, action = "sign-in code") {
+  if (isEdgeFunctionMissing(error)) {
+    return "The email service isn't set up yet. Please contact shams@snbhive.com for help.";
+  }
+  return `We couldn't send your ${action}. Please try again in a moment or contact shams@snbhive.com.`;
+}
+
 function genCode() { return Math.floor(100000 + Math.random() * 900000).toString(); }
 
 // ── Salted password hashing ───────────────────────────────────────────────
@@ -387,7 +400,7 @@ function AuthScreen({ onAuth }) {
       setResetMode(false);
       setLoginMfaMode(true);
       switchMode("verify");
-    } catch { setError("Something went wrong — please try again."); }
+    } catch (e) { setError(emailDeliveryError(e)); }
     finally { setLoading(false); }
   }
 
@@ -2354,6 +2367,7 @@ function AdminPage() {
   const [email, setEmail]           = useState("");
   const [password, setPassword]     = useState("");
   const [mfaCode, setMfaCode]       = useState("");
+  const [mfaChallenge, setMfaChallenge] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [mfaSentMsg, setMfaSentMsg] = useState("");
@@ -2409,13 +2423,17 @@ function AdminPage() {
       const res = await callEdgeFunction("admin-auth", { step: "login", email: cleanEmail, password });
       if (res.mfaRequired) {
         clearAttempts("admin_" + cleanEmail);
+        setMfaChallenge(res.challenge || "");
         setMfaSentMsg(`We've sent a 6-digit code to ${cleanEmail}.`);
         setLoginStep("mfa");
       }
     } catch (e) {
       recordFailure("admin_" + cleanEmail);
-      const isConfig = e.message.includes("EDGE_NOT_CONFIGURED");
-      setLoginError(isConfig ? "Admin login isn't set up yet — deploy the admin-auth Edge Function." : "Incorrect email or password.");
+      const isConfig = isEdgeFunctionMissing(e);
+      const serviceError = /resend|configured|email|network|fetch/i.test(e.message);
+      setLoginError(isConfig
+        ? "Admin login isn't set up yet — deploy the admin-auth Edge Function."
+        : serviceError ? emailDeliveryError(e, "admin sign-in code") : "Incorrect email or password.");
     } finally { setLoginLoading(false); }
   }
 
@@ -2424,7 +2442,7 @@ function AdminPage() {
     setLoginLoading(true); setLoginError("");
     try {
       const cleanEmail = email.trim().toLowerCase();
-      const res = await callEdgeFunction("admin-auth", { step: "verify_mfa", email: cleanEmail, code: mfaCode });
+      const res = await callEdgeFunction("admin-auth", { step: "verify_mfa", email: cleanEmail, code: mfaCode, challenge: mfaChallenge });
       if (res.success) {
         const session = { email: res.admin.email, loginAt: Date.now() };
         sessionStorage.setItem("snb_admin_session", JSON.stringify(session));
@@ -2438,7 +2456,8 @@ function AdminPage() {
   async function handleResendMfaCode() {
     setLoginLoading(true); setLoginError("");
     try {
-      await callEdgeFunction("admin-auth", { step: "login", email: email.trim().toLowerCase(), password });
+      const res = await callEdgeFunction("admin-auth", { step: "login", email: email.trim().toLowerCase(), password });
+      setMfaChallenge(res.challenge || "");
       setMfaSentMsg("New code sent — check your email.");
     } catch {
       setLoginError("Couldn't resend the code — please try again.");

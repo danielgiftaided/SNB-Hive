@@ -155,10 +155,26 @@ Every time you push a change to GitHub, Vercel redeploys automatically.
 
 ## 6. Admin dashboard
 
-Click **"Admin dashboard"** in the footer of the app.
-Default passcode: `admin123`
+The admin dashboard is available at `/admin` and uses server-side password
+checking plus an emailed one-time code. Deploy the `admin-auth` Edge Function
+and set these Supabase function secrets before attempting to sign in:
 
-**Change `ADMIN_PASSCODE` in `src/App.jsx` before sharing the live link with anyone.**
+- `ADMIN_EMAIL` — the admin sign-in email address
+- `ADMIN_PASSWORD_HASH` — SHA-256 of the salt immediately followed by the password
+- `ADMIN_PASSWORD_SALT` — a long random string (recommended)
+- `ADMIN_MFA_SECRET` — a separate long random string used to sign MFA challenges
+- `RESEND_API_KEY` and `SENDER_EMAIL` — used to deliver the one-time code
+
+For example, generate the password hash locally (replace both example values):
+
+```bash
+node -e "const c=require('node:crypto'); console.log(c.createHash('sha256').update('YOUR_SALT'+'YOUR_PASSWORD').digest('hex'))"
+supabase secrets set ADMIN_EMAIL=you@example.com ADMIN_PASSWORD_HASH=THE_HASH ADMIN_PASSWORD_SALT=YOUR_SALT ADMIN_MFA_SECRET=ANOTHER_LONG_RANDOM_VALUE RESEND_API_KEY=re_xxx SENDER_EMAIL=shams@snbhive.com
+supabase functions deploy admin-auth
+supabase functions deploy send-email
+```
+
+There is deliberately no default admin password in the browser bundle.
 
 The dashboard shows:
 - Revenue summary (confirmed vs awaiting payment)
@@ -194,6 +210,7 @@ create table users (
   email        text unique not null,
   phone        text,
   password_hash text not null,
+  salt         text,
   created_at   timestamptz default now()
 );
 
@@ -259,6 +276,14 @@ Add:
 
 Redeploy (or push a commit) and you're live with a shared database.
 
+### Step 8 — Deploy email and admin authentication
+
+User sign-in sends an emailed verification code, so `send-email` must be
+deployed even for existing member accounts. The admin page additionally needs
+`admin-auth`. Follow the secret setup in section 6, then deploy both functions.
+If either function is missing or Resend is not configured, the app now reports
+an email-service/configuration error instead of a generic sign-in failure.
+
 ---
 
 ## Tech stack
@@ -280,7 +305,7 @@ Redeploy (or push a commit) and you're live with a shared database.
 
 - **Passwords** are hashed with SHA-256 in the browser. Fine for an MVP,
   but production-grade auth requires bcrypt with salt and a backend.
-- **Admin passcode** is readable in the page source. A real admin login
-  needs server-side verification.
+- **Admin credentials** are checked only in the `admin-auth` Edge Function;
+  never expose its secrets as `VITE_` environment variables.
 - **HTTPS is required** for password hashing (`crypto.subtle`).
   Vercel provides HTTPS automatically on all deployments.
