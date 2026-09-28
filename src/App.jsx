@@ -120,9 +120,6 @@ const ICONS = { music: Music2, flame: Flame, flower: Flower2, dumbbell: Dumbbell
 // The space and parentheses are URL-encoded below, since raw spaces/special
 // characters aren't valid in a URL/path as-is.
 const LOGO  = "/7%20(1).png";
-// Retreats section poster — upload retreat-poster.png to your public folder.
-const RETREAT_POSTER = "/retreat-poster.png";
-const RETREAT_POSTER_2 = "/retreat-poster-2.png";
 
 function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
@@ -2031,48 +2028,12 @@ function PilatesEnquiryModal({ onClose }) {
 
 function ComingSoon() {
   return (
-    <div className="max-w-lg mx-auto flex flex-col gap-5 py-4">
-
-      {/* Header */}
-      <div className="text-center">
-        <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor:TEAL+"1A" }}>
-          <Sparkles size={28} style={{ color:TEAL }}/>
-        </div>
-        <h2 className="ff-display text-2xl font-semibold" style={{ color:INK }}>SNB Hive Wellness Series</h2>
-        <div className="inline-flex items-center gap-2 mt-2 px-3 py-1 rounded-full text-xs font-medium" style={{ backgroundColor:TEAL+"1A", color:TEAL }}>
-          <Bell size={12}/> Coming soon — August 2026
-        </div>
+    <div className="max-w-lg mx-auto py-16 text-center">
+      <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor:TEAL+"1A" }}>
+        <Sparkles size={28} style={{ color:TEAL }}/>
       </div>
-
-      {/* Content */}
-      <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-sm">
-        <p className="ff-body text-sm text-stone-600 leading-relaxed">
-          Introducing the SNB Hive Wellness Series – exclusive luxury retreats created for women who deserve
-          time to pause, breathe and reconnect. Expect beautiful venues, wellness experiences, delicious food,
-          meaningful conversations and a carefully curated itinerary designed to leave you feeling refreshed,
-          empowered and inspired. Because self-care isn't a luxury—it's essential.
-        </p>
-      </div>
-
-      {/* Poster */}
-      <div className="rounded-2xl overflow-hidden shadow-sm border border-stone-200">
-        <img src={RETREAT_POSTER} alt="SNB Hive Wellness Series retreat poster" className="w-full h-auto block"
-          onError={e => { e.target.style.display = "none"; }}/>
-      </div>
-      <div className="rounded-2xl overflow-hidden shadow-sm border border-stone-200">
-        <img src={RETREAT_POSTER_2} alt="SNB Hive Wellness Series retreat details" className="w-full h-auto block"
-          onError={e => { e.target.style.display = "none"; }}/>
-      </div>
-
-      {/* CTA */}
-      <a href={"mailto:shams@snbhive.com?subject=Retreat%20Interest%20%E2%80%94%20August%202026"}
-        className="w-full inline-flex items-center justify-center gap-2 font-semibold text-sm py-3 rounded-full"
-        style={{ backgroundColor:TEAL, color:"#fff" }}>
-        <Mail size={15}/> Register your interest
-      </a>
-      <p className="ff-body text-xs text-stone-400 text-center -mt-2">
-        All registered members will also receive an email notification when retreat bookings open.
-      </p>
+      <h2 className="ff-display text-2xl font-semibold" style={{ color:INK }}>Retreats coming soon</h2>
+      <p className="ff-body text-sm text-stone-500 mt-2">We&apos;re working on something special. Check back soon.</p>
     </div>
   );
 }
@@ -2736,8 +2697,11 @@ function AdminPage() {
                 className="ff-body rounded-full border border-stone-200 pl-8 pr-3 py-1.5 text-xs w-48 focus:outline-none"/>
             </div>
             <button onClick={() => {
-              const headers = ["Name","Email","Phone","Session","Plan","Amount","Status","Booked at"];
-              const rows = bookings.map(b => [b.name,b.email,b.phone,b.sessionName,b.plan,b.amount,b.status,b.createdAt]);
+              const headers = ["Name","Email","Phone","Session","Date","Time","Plan","Amount","Status","Booked at"];
+              const rows = bookings.map(b => {
+                const session = getSessionInfo(b.sessionId);
+                return [b.name,b.email,b.phone,b.sessionName,session?.day||"",session?.time||"",b.plan,b.amount,b.status,b.createdAt];
+              });
               const csv = [headers,...rows].map(r => r.map(v => `"${String(v||"").replace(/"/g,'""')}"`).join(",")).join("\n");
               const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([csv],{type:"text/csv"})), download: `snb-bookings-${new Date().toISOString().slice(0,10)}.csv` });
               document.body.appendChild(a); a.click(); document.body.removeChild(a);
@@ -2755,7 +2719,9 @@ function AdminPage() {
             <p className="ff-body text-sm text-stone-400 text-center py-16">No bookings match this filter.</p>
           ) : (
             <div className="divide-y divide-stone-100">
-              {filtered.map(b => (
+              {filtered.map(b => {
+                const session = getSessionInfo(b.sessionId);
+                return (
                 <div key={b.id} className="flex flex-wrap items-center gap-3 px-4 py-3 hover:bg-stone-50 transition">
                   <div className="min-w-[160px] flex-1">
                     <p className="ff-body font-medium text-sm" style={{ color: INK }}>{b.name}</p>
@@ -2763,7 +2729,10 @@ function AdminPage() {
                   </div>
                   <div className="min-w-[140px] flex-1">
                     <p className="ff-body text-sm font-medium">{b.sessionName}</p>
-                    <p className="ff-body text-xs text-stone-400">{b.plan}</p>
+                    {session?.day && session?.time && (
+                      <p className="ff-body text-xs text-stone-500">{session.day} · {session.time}</p>
+                    )}
+                    <p className="ff-body text-xs text-stone-400 mt-0.5">{b.plan}</p>
                   </div>
                   <div className="ff-body text-sm font-semibold w-16 text-right">
                     £{typeof b.amount === "number" ? b.amount.toFixed(2) : b.amount}
@@ -2790,7 +2759,8 @@ function AdminPage() {
                     }
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
