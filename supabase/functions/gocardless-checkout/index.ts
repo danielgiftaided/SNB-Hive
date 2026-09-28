@@ -10,7 +10,7 @@ async function getBooking(id: string) {
   if (!url || !serviceKey) throw new Error("Supabase function environment is not configured");
   const query = new URLSearchParams({
     id: `eq.${id}`,
-    select: "id,session_id,plan,amount,status",
+    select: "id,session_id,plan,amount,status,payment_group_id",
     limit: "1",
   });
   const response = await fetch(`${url}/rest/v1/bookings?${query}`, {
@@ -28,6 +28,16 @@ async function getBooking(id: string) {
   const rows = await response.json();
   if (!rows[0]) console.warn("Booking lookup returned no rows", { booking_id: id });
   return rows[0] || null;
+}
+
+async function getPaymentGroup(groupId: string) {
+  const url = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !serviceKey) throw new Error("Supabase function environment is not configured");
+  const query = new URLSearchParams({ payment_group_id: `eq.${groupId}`, select: "id,session_id,plan,amount,status,payment_group_id" });
+  const response = await fetch(`${url}/rest/v1/bookings?${query}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
+  if (!response.ok) throw new Error("Booking group lookup failed");
+  return await response.json();
 }
 
 async function gc(path: string, body: unknown) {
@@ -97,9 +107,14 @@ Deno.serve(async request => {
     }
 
     const booking = await getBooking(booking_id);
-    const expectedAmount = PRICES[plan as keyof typeof PRICES];
-    if (!booking || booking.session_id !== "zumba" || booking.status !== "pending_payment" ||
-        Math.round(Number(booking.amount) * 100) !== expectedAmount) {
+    const group = plan === "payg" && booking?.payment_group_id ? await getPaymentGroup(booking.payment_group_id) : [booking];
+    const expectedAmount = plan === "payg"
+      ? group.reduce((sum: number, row: Record<string, unknown>) => sum + Math.round(Number(row.amount) * 100), 0)
+      : PRICES.membership;
+    const validGroup = group.length > 0 && group.every((row: Record<string, unknown>) =>
+      row && row.session_id === "zumba" && row.status === "pending_payment" &&
+      (plan !== "payg" || Math.round(Number(row.amount) * 100) === PRICES.payg));
+    if (!booking || !validGroup) {
       return json({ error: "Booking could not be verified" }, 400);
     }
 
@@ -111,7 +126,7 @@ Deno.serve(async request => {
     const redirectUri = allowedRedirect(return_url, expectedOrigin, requestOrigin);
     const exitUri = allowedRedirect(exit_url, expectedOrigin, requestOrigin);
 
-    const metadata = { booking_id, payment_plan: plan, session_id: "zumba" };
+    const metadata = { booking_id, payment_group_id: booking.payment_group_id || "", payment_plan: plan, session_id: "zumba" };
     const requestBody = plan === "payg"
       ? {
           payment_request: {

@@ -1,10 +1,17 @@
 const GC_API = Deno.env.get("GOCARDLESS_API_URL") || "https://api.gocardless.com";
 
-async function confirmBooking(id: string) {
+function formatBookingDate(input: unknown) {
+  if (!input) return "";
+  return new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })
+    .format(new Date(`${String(input)}T12:00:00Z`));
+}
+
+async function confirmBooking(id: string, paymentGroupId = "") {
   const url = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !serviceKey) throw new Error("Supabase function environment is not configured");
-  const response = await fetch(`${url}/rest/v1/bookings?id=eq.${encodeURIComponent(id)}&status=eq.pending_payment&select=id,name,email,phone,session_name,plan,amount`, {
+  const filter = paymentGroupId ? `payment_group_id=eq.${encodeURIComponent(paymentGroupId)}` : `id=eq.${encodeURIComponent(id)}`;
+  const response = await fetch(`${url}/rest/v1/bookings?${filter}&status=eq.pending_payment&select=id,name,email,phone,session_name,plan,amount,booking_date`, {
     method: "PATCH",
     headers: {
       apikey: serviceKey,
@@ -16,7 +23,12 @@ async function confirmBooking(id: string) {
   });
   if (!response.ok) throw new Error("Booking status update failed");
   const rows = await response.json();
-  return rows[0] || null;
+  if (!rows.length) return null;
+  return {
+    ...rows[0],
+    amount: rows.reduce((sum: number, row: Record<string, unknown>) => sum + Number(row.amount || 0), 0),
+    booking_dates: rows.map((row: Record<string, unknown>) => formatBookingDate(row.booking_date)).filter(Boolean).join(", "),
+  };
 }
 
 async function sendPaymentConfirmation(booking: Record<string, unknown>) {
@@ -112,7 +124,7 @@ Deno.serve(async request => {
 
       // The conditional update makes webhook retries idempotent: only the
       // first fulfilled event moves the booking and sends the two emails.
-      const booking = await confirmBooking(bookingId);
+      const booking = await confirmBooking(bookingId, billingRequest.metadata?.payment_group_id || "");
       if (booking) await sendPaymentConfirmation(booking);
     }
     return new Response("ok", { status: 200 });

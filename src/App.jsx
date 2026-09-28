@@ -125,6 +125,22 @@ function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
+function fridayBookingDates(from = new Date(), count = 4) {
+  const date = new Date(from.getFullYear(), from.getMonth(), from.getDate() + 1);
+  while (date.getDay() !== 5) date.setDate(date.getDate() + 1);
+  return Array.from({ length: count }, (_, index) => {
+    const friday = new Date(date);
+    friday.setDate(date.getDate() + index * 7);
+    return `${friday.getFullYear()}-${String(friday.getMonth() + 1).padStart(2, "0")}-${String(friday.getDate()).padStart(2, "0")}`;
+  });
+}
+
+function formatBookingDate(date) {
+  if (!date) return "";
+  return new Intl.DateTimeFormat("en-GB", { weekday:"long", day:"numeric", month:"long", year:"numeric", timeZone:"UTC" })
+    .format(new Date(`${date}T12:00:00Z`));
+}
+
 // ── Supabase Edge Function caller ─────────────────────────────────────────────
 // Calls the send-email function deployed on Supabase.
 // Requires VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in Vercel env vars.
@@ -257,9 +273,9 @@ function useIdleLogout(active, onTimeout, minutes = 30) {
 }
 
 function exportCSV(bookings) {
-  const headers = ["Name","Email","Phone","Session","Type","Plan","Amount (£)","Status","Booked at"];
+  const headers = ["Name","Email","Phone","Session","Lesson date","Type","Plan","Amount (£)","Status","Booked at"];
   const esc = v => `"${String(v ?? "").replace(/"/g,'""')}"`;
-  const rows = bookings.map(b => [b.name,b.email,b.phone,b.sessionName,b.type,b.plan,b.amount,b.status,b.createdAt]);
+  const rows = bookings.map(b => [b.name,b.email,b.phone,b.sessionName,b.bookingDate,b.type,b.plan,b.amount,b.status,b.createdAt]);
   const csv = [headers,...rows].map(r => r.map(esc).join(",")).join("\n");
   const url = URL.createObjectURL(new Blob([csv], { type:"text/csv;charset=utf-8;" }));
   const a = Object.assign(document.createElement("a"), { href:url, download:`snb-bookings-${new Date().toISOString().slice(0,10)}.csv` });
@@ -720,6 +736,7 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist }) {
   const isTaster = TASTER_MODE || cls.bookingKind === "taster";
   const isTbc = cls.tasterStatus === "tbc";
   const isBooked = !!bookingType;
+  const canBookAnotherPayg = bookingType === "payg";
   const paymentsAvailable = isTaster || PAID_CLASS_IDS.has(cls.id) || isWaitlist;
   const isClosed =
     isTaster &&
@@ -729,11 +746,11 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist }) {
   const disabled =
     isTbc ||
     !paymentsAvailable ||
-    isBooked ||
+    (isBooked && !canBookAnotherPayg) ||
     (
       !isWaitlist &&
       (
-        full ||
+        (full && !PAID_CLASS_IDS.has(cls.id)) ||
         isMember ||
         isClosed
       )
@@ -824,16 +841,16 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist }) {
           style={{
             backgroundColor: isTbc
               ? "#E3DFD3"
-              : isBooked
+              : isBooked && !canBookAnotherPayg
                 ? "#D4EBD9"
-                : !isWaitlist && (full || isClosed)
+                : !isWaitlist && ((full && !PAID_CLASS_IDS.has(cls.id)) || isClosed)
                   ? "#E3DFD3"
                   : TEAL,
             color: isTbc
               ? "#8A8478"
-              : isBooked
+              : isBooked && !canBookAnotherPayg
                 ? "#2D6B40"
-                : !isWaitlist && (full || isClosed)
+                : !isWaitlist && ((full && !PAID_CLASS_IDS.has(cls.id)) || isClosed)
                   ? "#8A8478"
                   : "#FFF",
             opacity: disabled ? 0.85 : 1,
@@ -843,16 +860,18 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist }) {
             ? "Coming soon"
             : isTbc
             ? "TBC"
-            : isBooked
+            : isBooked && !canBookAnotherPayg
               ? isWaitlist
                 ? "On waiting list"
                 : "Booked"
-              : !isWaitlist && full
+              : !isWaitlist && full && !PAID_CLASS_IDS.has(cls.id)
                 ? "Full"
                 : isClosed
                   ? "Tasters closed"
                   : isWaitlist
                     ? "Join October waiting list"
+                    : canBookAnotherPayg
+                      ? "Book another lesson"
                     : isTaster
                       ? "Book taster"
                       : "Book"}
@@ -974,6 +993,14 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
   const [saving, setSaving]       = useState(false);
   const [bankRef, setBankRef]     = useState("");
   const [error, setError]         = useState("");
+  const availableDates = fridayBookingDates();
+  const [selectedDates, setSelectedDates] = useState([availableDates[0]]);
+
+  function toggleDate(date) {
+    setSelectedDates(current => current.includes(date)
+      ? (current.length === 1 ? current : current.filter(value => value !== date))
+      : [...current, date]);
+  }
 
   function toggleClass(id) {
     if (id === session.id) return; // primary class always stays selected
@@ -993,7 +1020,7 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
   const pickerReady      = !needsClassPicker || selectedClasses.length === 2;
 
   const amount = type==="class"
-    ? (plan==="payg" ? PAYG_PRICE : MEMBERSHIP_TIERS.find(t=>t.activities===activities)?.price)
+    ? (plan==="payg" ? PAYG_PRICE * selectedDates.length : MEMBERSHIP_TIERS.find(t=>t.activities===activities)?.price)
     : (plan==="deposit" ? session.deposit : session.price);
 
   async function handleConfirm() {
@@ -1057,6 +1084,19 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
             amount: cls.id === session.id ? amount : 0,
           });
         }
+      } else if (type === "class" && plan === "payg") {
+        const paymentGroupId = uid();
+        bookingId = paymentGroupId;
+        pendingBookingId = paymentGroupId;
+        await onConfirm(selectedDates.map((bookingDate, index) => ({
+          ...base,
+          id: index === 0 ? paymentGroupId : uid(),
+          sessionId: session.id,
+          sessionName: session.name,
+          bookingDate,
+          paymentGroupId,
+          amount: PAYG_PRICE,
+        })));
       } else {
         bookingId = uid();
         pendingBookingId = bookingId;
@@ -1080,6 +1120,7 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
           user_name: currentUser.name, user_email: currentUser.email,
           user_phone: currentUser.phone, session_name: session.name,
           plan: planLabel, amount: String(amount), status: "pending_payment",
+          booking_dates: plan === "payg" ? selectedDates.map(formatBookingDate).join(", ") : "",
           booked_at: new Date().toLocaleString("en-GB"),
         }).catch(error => console.error("[SNB booking admin notify FAILED]:", error.message));
         const checkout = await callEdgeFunction("gocardless-checkout", {
@@ -1148,6 +1189,20 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
                   </div>
                   <p className="text-xs text-stone-500 mt-0.5">£{PAYG_PRICE.toFixed(2)} for this single session</p>
                 </button>
+                {plan==="payg" && (
+                  <fieldset className="rounded-xl border border-stone-200 p-3.5">
+                    <legend className="px-1 text-sm font-medium text-stone-700">Choose one or more lesson dates</legend>
+                    <p className="text-xs text-stone-400 mb-2">The next four available Fridays are always shown.</p>
+                    <div className="flex flex-col gap-2">
+                      {availableDates.map(date => (
+                        <label key={date} className="flex items-center gap-2.5 rounded-lg bg-stone-50 px-3 py-2 text-sm cursor-pointer">
+                          <input type="checkbox" checked={selectedDates.includes(date)} onChange={() => toggleDate(date)}/>
+                          <span>{formatBookingDate(date)}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                )}
                 <button onClick={() => setPlan("membership")} className="text-left rounded-xl border-2 p-3.5 transition"
                   style={{ borderColor:plan==="membership"?TEAL:"#E7E2D5" }}>
                   <div className="flex items-center justify-between">
@@ -1615,7 +1670,7 @@ function MyBookings({ bookings, currentUser, onCancel }) {
                   <span className="font-semibold text-sm" style={{ color: INK }}>{b.sessionName}</span>
                   <StatusBadge status={b.status}/>
                 </div>
-                {cls?.day && cls?.time && <p className="text-xs text-stone-500 mt-1">{cls.day} · {cls.time}</p>}
+                {cls?.day && cls?.time && <p className="text-xs text-stone-500 mt-1">{b.bookingDate ? formatBookingDate(b.bookingDate) : cls.day} · {cls.time}</p>}
                 {cls?.venue && (
                   <a href={cls.venueMap} target="_blank" rel="noopener noreferrer"
                     className="ff-body flex w-fit items-center gap-1 text-xs text-stone-400 hover:text-stone-600 hover:underline mt-1 transition">
@@ -1745,7 +1800,7 @@ function AdminDashboard({ bookings, onMarkPaid, onMarkPending, onCancel, onResto
                     </div>
                     <div className="min-w-[140px] flex-1">
                       <p className="text-sm font-medium">{b.sessionName}</p>
-                      <p className="text-xs text-stone-400">{b.plan}</p>
+                      <p className="text-xs text-stone-400">{b.plan}{b.bookingDate ? ` · ${formatBookingDate(b.bookingDate)}` : ""}</p>
                     </div>
                     <div className="text-sm font-semibold w-16 text-right">
                       £{typeof b.amount==="number" ? b.amount.toFixed(2) : b.amount}
@@ -2314,8 +2369,11 @@ function StudioHireForm({ currentUser }) {
 
 function AdminClassCard({ cls, bookings }) {
   const Icon = ICONS[cls.icon] || Sparkles;
+  const dates = fridayBookingDates();
+  const [selectedDate, setSelectedDate] = useState(dates[0]);
   const clsBookings = bookings
     .filter(b => b.sessionId === cls.id && b.status !== "cancelled")
+    .filter(b => !PAID_CLASS_IDS.has(cls.id) || b.bookingDate === selectedDate)
     .sort((a,b) => new Date(a.createdAt||0) - new Date(b.createdAt||0));
   const pct = Math.min(100, cls.capacity ? (clsBookings.length / cls.capacity) * 100 : 0);
   const full = clsBookings.length >= cls.capacity;
@@ -2343,6 +2401,15 @@ function AdminClassCard({ cls, bookings }) {
 
       {/* Progress bar */}
       <div className="px-4 pt-3 pb-2">
+        {PAID_CLASS_IDS.has(cls.id) && (
+          <label className="ff-body block text-xs font-semibold text-stone-500 mb-3">
+            Lesson date
+            <select value={selectedDate} onChange={event => setSelectedDate(event.target.value)}
+              className="mt-1.5 block w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm font-normal text-stone-700">
+              {dates.map(date => <option key={date} value={date}>{formatBookingDate(date)}</option>)}
+            </select>
+          </label>
+        )}
         <div className="w-full bg-stone-100 rounded-full h-1.5">
           <div className="h-1.5 rounded-full transition-all"
             style={{ width: pct + "%", backgroundColor: full ? "#B3261E" : cls.color }}/>
@@ -3000,8 +3067,8 @@ function BookingApp() {
   }
 
   async function persist(next) { setBookings(next); await storage.set("bookings", next); }
-  async function handleConfirmBooking(r) { await persist([...bookings, r]); }
-  async function updateStatus(id, s)     { await persist(bookings.map(b => b.id===id ? {...b, status:s} : b)); }
+  async function handleConfirmBooking(r) { await persist([...bookings, ...(Array.isArray(r) ? r : [r])]); }
+  async function updateStatus(id, s)     { await persist(bookings.map(b => b.id===id || b.paymentGroupId===id ? {...b, status:s} : b)); }
   async function handleSignOut() {
     await storage.remove("snb_session");
     setCurrentUser(null); setBookings([]);

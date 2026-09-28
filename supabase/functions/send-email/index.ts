@@ -47,11 +47,13 @@ function codeBox(code: unknown) {
 }
 
 function bookingRows(p: Payload): [string, unknown][] {
-  return [
+  const rows: [string, unknown][] = [
     ["Member", p.user_name ?? p.name], ["Email", p.user_email ?? p.email],
     ["Phone", p.user_phone ?? p.phone], ["Class", p.session_name],
     ["Booking type", p.plan], ["Amount", `£${value(p.amount, "0")}`],
   ];
+  if (p.booking_dates || p.booking_date) rows.splice(4, 0, ["Lesson date(s)", p.booking_dates ?? p.booking_date]);
+  return rows;
 }
 
 function calendarAttachment(p: Payload): Attachment[] | undefined {
@@ -93,7 +95,7 @@ function messagesFor(p: Payload): Message[] {
     }
     case "payment_confirmation": {
       const plan = value(p.plan);
-      const customer = { to, subject: `Payment confirmed — ${value(p.session_name)} 🐝`, html: shell("Your payment is confirmed", "Payment successful — your place is confirmed!", paragraph(`Hi ${value(p.name, "there")}, thank you! Your ${plan.toLowerCase().includes("membership") ? "membership" : "pay as you go session"} payment has been confirmed.`) + details(bookingRows(p))) };
+      const customer = { to, subject: `Payment and booking confirmed — ${value(p.session_name)} 🐝`, html: shell("Your payment and class booking are confirmed", "Payment successful — you're booked!", paragraph(`Hi ${value(p.name, "there")}, thank you! Your ${plan.toLowerCase().includes("membership") ? "membership" : "pay as you go lesson booking"} and payment have both been confirmed in this email.`) + details(bookingRows(p))) };
       const admin = { to: ADMIN_EMAIL, subject: `💳 Payment confirmed: ${value(p.name)} — ${value(p.session_name)}`, html: shell("A class payment was confirmed", "Payment received", paragraph("This booking has automatically moved to Paid in the admin portal.") + details(bookingRows(p))) };
       return [customer, admin];
     }
