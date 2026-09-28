@@ -6,7 +6,7 @@ function formatBookingDate(input: unknown) {
     .format(new Date(`${String(input)}T12:00:00Z`));
 }
 
-async function confirmBooking(id: string, paymentGroupId = "") {
+async function confirmBooking(id: string, paymentGroupId = "", paidAmount?: number) {
   const url = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !serviceKey) throw new Error("Supabase function environment is not configured");
@@ -19,7 +19,7 @@ async function confirmBooking(id: string, paymentGroupId = "") {
       "Content-Type": "application/json",
       Prefer: "return=representation",
     },
-    body: JSON.stringify({ status: "paid" }),
+    body: JSON.stringify({ status: "paid", ...(paidAmount === undefined ? {} : { amount: paidAmount / 100 }) }),
   });
   if (!response.ok) throw new Error("Booking status update failed");
   const rows = await response.json();
@@ -115,6 +115,7 @@ Deno.serve(async request => {
               currency: "GBP",
               name: "SNB Hive Zumba monthly membership",
               interval_unit: "monthly",
+              day_of_month: 1,
               links: { mandate: billingRequest.links.mandate },
               metadata: { booking_id: bookingId, session_id: "zumba" },
             },
@@ -124,7 +125,11 @@ Deno.serve(async request => {
 
       // The conditional update makes webhook retries idempotent: only the
       // first fulfilled event moves the booking and sends the two emails.
-      const booking = await confirmBooking(bookingId, billingRequest.metadata?.payment_group_id || "");
+      const firstPaymentAmount = Number(billingRequest.metadata?.first_payment_amount);
+      const paidAmount = Number.isInteger(firstPaymentAmount) && firstPaymentAmount > 0
+        ? firstPaymentAmount
+        : undefined;
+      const booking = await confirmBooking(bookingId, billingRequest.metadata?.payment_group_id || "", paidAmount);
       if (booking) await sendPaymentConfirmation(booking);
     }
     return new Response("ok", { status: 200 });

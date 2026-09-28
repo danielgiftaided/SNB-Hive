@@ -4,7 +4,8 @@ The app is already configured to offer these choices when a customer presses
 **Book** on Zumba:
 
 - **Pay as you go:** £10, collected once by Direct Debit
-- **Monthly membership:** £35, collected monthly by Direct Debit
+- **Monthly membership:** a prorated first payment for the remaining calendar
+  days in the joining month, then £35 on the 1st of each month by Direct Debit
 
 The customer chooses an option in the booking popup and is then redirected to
 GoCardless to enter and authorise her bank details. Bank details and the
@@ -241,14 +242,15 @@ again, because the app prevents one customer from booking Zumba twice.
 
 1. Press **Book** on Zumba.
 2. Select **Monthly membership — £35/month**.
-3. Check that **Monthly payment** shows **£35.00**, then press
+3. Check that **Prorated first payment** shows the joining month's proportional
+   amount, then press
    **Continue to payment**.
 4. Complete the GoCardless sandbox authorization.
 5. Confirm the app returns to `/payment-complete` and the booking eventually
    changes to **Paid**, and that the membership confirmation emails arrive.
-6. In GoCardless, verify that a mandate and a subscription named
+6. In GoCardless, verify the prorated one-off payment and a subscription named
    `SNB Hive Zumba monthly membership` exist and that the subscription amount
-   is £35 monthly.
+   is £35 monthly with collection day set to the 1st.
 
 The webhook uses an idempotency key, so a webhook retry will not intentionally
 create a second subscription for the same booking.
@@ -344,9 +346,9 @@ Only do this after both sandbox journeys pass.
 - The SNB Hive admin dashboard shows the booking state. The webhook changes a
   successfully authorized booking from **Awaiting payment** to **Paid** and
   asks `send-email` to notify both the customer and Shams.
-- If prices change, update all three locations together:
+- If prices change, update both customer-facing and server-side prices together:
   1. `PAYG_PRICE` and `MEMBERSHIP_TIERS` in `src/App.jsx`;
-  2. `PRICES` in `supabase/functions/gocardless-checkout/index.ts`;
-  3. the subscription amount in
-     `supabase/functions/gocardless-webhook/index.ts`.
+  2. `PRICES` in `supabase/functions/gocardless-checkout/index.ts` for PAYG,
+     and `MEMBERSHIP_MONTHLY_AMOUNT` in
+     `supabase/functions/_shared/membership.ts` for membership.
 - After any price/code change, run a sandbox test again before deploying live.
