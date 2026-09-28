@@ -137,7 +137,7 @@ async function callEdgeFunction(name, data) {
     url = import.meta.env.VITE_SUPABASE_URL || "";
     key = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
   } catch {}
-  if (!url) throw new Error("EDGE_NOT_CONFIGURED");
+  if (!url || !key) throw new Error("EDGE_NOT_CONFIGURED");
   const res = await fetch(url + "/functions/v1/" + name, {
     method: "POST",
     headers: {
@@ -167,8 +167,21 @@ function isEdgeFunctionMissing(error) {
 }
 
 function emailDeliveryError(error, action = "sign-in code") {
+  const message = String(error?.message || error || "").toLowerCase();
   if (isEdgeFunctionMissing(error)) {
-    return "The email service isn't set up yet. Please contact shams@snbhive.com for help.";
+    return "The email service isn't connected to this site. Please contact shams@snbhive.com for help.";
+  }
+  if (message.includes("resend_api_key") || message.includes("resend 401") ||
+      message.includes("resend 403") || message.includes("invalid_api_key") ||
+      message.includes("invalid api key")) {
+    return "The email service credentials need updating. Please contact shams@snbhive.com for help.";
+  }
+  if (message.includes("resend 422") || message.includes("domain") ||
+      message.includes("sender") || message.includes("from address")) {
+    return "The sign-in email sender isn't verified yet. Please contact shams@snbhive.com for help.";
+  }
+  if (message.includes("resend 429") || message.includes("rate limit") || message.includes("too many requests")) {
+    return `We couldn't send your ${action} because the email service is busy. Please wait a minute and try again.`;
   }
   return `We couldn't send your ${action}. Please try again in a moment or contact shams@snbhive.com.`;
 }
