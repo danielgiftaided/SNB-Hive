@@ -868,6 +868,53 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist }) {
     </div>
   );
 }
+
+/* ---- WAITLIST CONFIRMATION MODAL ---- */
+
+function WaitlistConfirmationModal({ session, onClose }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+      <div className="ff-body bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100">
+          <div className="w-5"/>
+          <h4 className="font-semibold text-sm text-stone-700">{session.name}</h4>
+          <button onClick={onClose} className="text-stone-400" aria-label="Close confirmation">
+            <X size={20}/>
+          </button>
+        </div>
+
+        <div className="p-5 flex flex-col items-center text-center gap-4 py-8">
+          <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{ backgroundColor:"#E9F1EC" }}>
+            <Check size={26} style={{ color:TEAL }}/>
+          </div>
+          <div>
+            <h4 className="ff-display text-xl font-semibold" style={{ color:INK }}>You're on the waiting list!</h4>
+            <p className="ff-body text-sm text-stone-500 mt-1">
+              Your place has been registered for <strong>{session.name}</strong>.
+            </p>
+          </div>
+          <div className="w-full rounded-xl bg-stone-50 px-4 py-3 text-sm text-stone-600 text-left">
+            <p><span className="font-medium">Class:</span> {session.name}</p>
+            <p className="mt-1"><span className="font-medium">When:</span> {session.day} · {session.time}</p>
+            {session.venue && (
+              <p className="mt-1">
+                <span className="font-medium">Venue:</span>{" "}
+                <a href={session.venueMap} target="_blank" rel="noopener noreferrer"
+                  className="underline hover:text-stone-800">{session.venue}</a>
+              </p>
+            )}
+          </div>
+          <p className="text-xs text-stone-400">We'll contact you when booking opens or if a place becomes available.</p>
+          <button onClick={onClose}
+            className="w-full inline-flex items-center justify-center font-semibold text-sm py-3 rounded-full"
+            style={{ backgroundColor:TEAL, color:"#fff" }}>
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 /* ---- RETREAT CARD — same capacity ring logic ---- */
 
 function RetreatCard({ retreat, booked, onBook, isSignedUp }) {
@@ -2920,6 +2967,7 @@ function BookingApp() {
   const [showOpenDay, setShowOpenDay]       = useState(false);
   const [workshopModal, setWorkshopModal]   = useState(null);
   const [showPilatesEnquiry, setShowPilatesEnquiry] = useState(false);
+  const [waitlistConfirmation, setWaitlistConfirmation] = useState(null);
 
   // Restore session on load — check expiry
   useEffect(() => {
@@ -2998,7 +3046,7 @@ function BookingApp() {
       userId:currentUser.id, name:currentUser.name, email:currentUser.email, phone:currentUser.phone,
       plan:"Waitlist", amount:0, status:"waitlisted", createdAt:new Date().toISOString(),
     }]);
-    alert("You\'ve been added to the waitlist for " + cls.name + ". We\'ll contact you if a spot opens.");
+    setWaitlistConfirmation(cls);
   }
 
   // Loading spinner while checking session
@@ -3153,6 +3201,12 @@ function BookingApp() {
 
       {showPilatesEnquiry && (
         <PilatesEnquiryModal onClose={() => setShowPilatesEnquiry(false)}/>
+      )}
+
+      {waitlistConfirmation && (
+        <WaitlistConfirmationModal
+          session={waitlistConfirmation}
+          onClose={() => setWaitlistConfirmation(null)}/>
       )}
 
     </div>
