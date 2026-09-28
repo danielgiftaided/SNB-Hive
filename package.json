@@ -7,7 +7,8 @@
     "dev":     "vite",
     "build":   "vite build",
     "preview": "vite preview",
-    "check:edge-functions": "node scripts/check-edge-functions.mjs"
+    "check:edge-functions": "node scripts/check-edge-functions.mjs",
+    "test:membership-proration": "node scripts/test-membership-proration.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

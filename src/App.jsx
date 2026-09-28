@@ -7,6 +7,7 @@ import {
   Paintbrush, UserPlus, Trash2
 } from "lucide-react";
 import storage, { supabase } from "./storage.js";
+import { proratedMembershipAmount } from "../supabase/functions/_shared/membership.ts";
 
 /* =====================================================================
    CONFIG — edit these to customise the app.
@@ -1019,8 +1020,10 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
   const needsClassPicker = plan === "membership" && activities === 2;
   const pickerReady      = !needsClassPicker || selectedClasses.length === 2;
 
+  const monthlyMembershipAmount = MEMBERSHIP_TIERS.find(t=>t.activities===activities)?.price;
+  const firstMembershipAmount = proratedMembershipAmount(new Date(), monthlyMembershipAmount * 100) / 100;
   const amount = type==="class"
-    ? (plan==="payg" ? PAYG_PRICE * selectedDates.length : MEMBERSHIP_TIERS.find(t=>t.activities===activities)?.price)
+    ? (plan==="payg" ? PAYG_PRICE * selectedDates.length : firstMembershipAmount)
     : (plan==="deposit" ? session.deposit : session.price);
 
   async function handleConfirm() {
@@ -1212,6 +1215,9 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
                   <p className="text-xs text-stone-500 mt-0.5">£35/month for one weekly Zumba class</p>
                 </button>
                 {plan==="membership" && (<>
+                  <p className="text-xs text-stone-500 px-1">
+                    Your first payment is prorated for the remaining days this month. After that, £{monthlyMembershipAmount.toFixed(2)} is collected on the 1st of each month.
+                  </p>
                   <div className="grid grid-cols-2 gap-2 pl-1">
                     {MEMBERSHIP_TIERS.map(t => (
                       <button key={t.activities} onClick={() => changeActivities(t.activities)}
@@ -1280,7 +1286,7 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
               </>)}
 
               <div className="flex items-center justify-between rounded-xl bg-stone-50 px-4 py-3 mt-1">
-                <span className="text-sm text-stone-600">{plan === "membership" ? "Monthly payment" : "Due now"}</span>
+                <span className="text-sm text-stone-600">{plan === "membership" ? "Prorated first payment" : "Due now"}</span>
                 <span className="font-semibold text-base" style={{ color:INK }}>
                   £{typeof amount==="number" ? amount.toFixed(2) : amount}
                 </span>

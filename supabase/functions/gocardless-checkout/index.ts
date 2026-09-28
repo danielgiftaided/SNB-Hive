@@ -1,8 +1,9 @@
 import { corsHeaders, json } from "../_shared/http.ts";
+import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../_shared/membership.ts";
 
 const GC_API = Deno.env.get("GOCARDLESS_API_URL") || "https://api.gocardless.com";
 const GC_VERSION = "2015-07-06";
-const PRICES = { payg: 1000, membership: 3500 } as const;
+const PRICES = { payg: 1000, membership: MEMBERSHIP_MONTHLY_AMOUNT } as const;
 
 async function getBooking(id: string) {
   const url = Deno.env.get("SUPABASE_URL");
@@ -126,7 +127,14 @@ Deno.serve(async request => {
     const redirectUri = allowedRedirect(return_url, expectedOrigin, requestOrigin);
     const exitUri = allowedRedirect(exit_url, expectedOrigin, requestOrigin);
 
-    const metadata = { booking_id, payment_group_id: booking.payment_group_id || "", payment_plan: plan, session_id: "zumba" };
+    const firstPaymentAmount = plan === "membership" ? proratedMembershipAmount() : expectedAmount;
+    const metadata = {
+      booking_id,
+      payment_group_id: booking.payment_group_id || "",
+      payment_plan: plan,
+      session_id: "zumba",
+      first_payment_amount: String(firstPaymentAmount),
+    };
     const requestBody = plan === "payg"
       ? {
           payment_request: {
@@ -137,7 +145,15 @@ Deno.serve(async request => {
           mandate_request: { scheme: "bacs" },
           metadata,
         }
-      : { mandate_request: { scheme: "bacs" }, metadata };
+      : {
+          payment_request: {
+            amount: firstPaymentAmount,
+            currency: "GBP",
+            description: "SNB Hive Zumba membership - first month",
+          },
+          mandate_request: { scheme: "bacs" },
+          metadata,
+        };
 
     const billingRequest = await gc("/billing_requests", { billing_requests: requestBody });
     const flow = await gc("/billing_request_flows", {
