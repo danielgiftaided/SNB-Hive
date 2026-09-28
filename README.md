@@ -284,6 +284,21 @@ deployed even for existing member accounts. The admin page additionally needs
 If either function is missing or Resend is not configured, the app now reports
 an email-service/configuration error instead of a generic sign-in failure.
 
+If sign-in reports that the email service credentials need updating, confirm
+that `RESEND_API_KEY` is a current Resend API key (beginning with `re_`) in the
+**Supabase project's Edge Function secrets**, not only in Vercel. If the app
+reports that the sender is not verified, verify the `SENDER_EMAIL` domain in
+Resend. Secrets can be replaced and the functions redeployed with:
+
+```bash
+supabase secrets set RESEND_API_KEY=re_xxx SENDER_EMAIL=login@your-verified-domain.example
+supabase functions deploy send-email
+supabase functions deploy admin-auth
+```
+
+Also make sure `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set in
+Vercel and redeploy the site after changing either Vite variable.
+
 ---
 
 ## Tech stack
