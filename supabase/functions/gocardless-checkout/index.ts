@@ -113,7 +113,7 @@ Deno.serve(async request => {
       ? group.reduce((sum: number, row: Record<string, unknown>) => sum + Math.round(Number(row.amount) * 100), 0)
       : PRICES.membership;
     const validGroup = group.length > 0 && group.every((row: Record<string, unknown>) =>
-      row && row.session_id === "zumba" && row.status === "pending_payment" &&
+      row && row.session_id === "zumba" && row.status === "pending_checkout" &&
       (plan !== "payg" || Math.round(Number(row.amount) * 100) === PRICES.payg));
     if (!booking || !validGroup) {
       return json({ error: "Booking could not be verified" }, 400);

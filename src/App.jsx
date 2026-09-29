@@ -7,7 +7,7 @@ import {
   Paintbrush, UserPlus, Trash2
 } from "lucide-react";
 import storage, { supabase } from "./storage.js";
-import { bookingMatchesClassDate, classBookingDates, UNDATED_BOOKING } from "./booking-utils.js";
+import { bookingIsActive, bookingMatchesClassDate, classBookingDates, UNDATED_BOOKING } from "./booking-utils.js";
 import { proratedMembershipAmount } from "../supabase/functions/_shared/membership.ts";
 
 /* =====================================================================
@@ -288,6 +288,7 @@ const STATUS_META = {
   paid:            { label: "Paid",             bg: "#e46478", fg: "#f0e8cc", icon: Banknote },
   confirmed:       { label: "Booked",           bg: "#e46478", fg: "#f0e8cc", icon: Check },
   waitlisted:      { label: "Waitlisted",       bg: "#FBF3E3", fg: "#9A7426", icon: Hourglass },
+  pending_checkout:{ label: "Checkout not completed", bg: "#F5F5F4", fg: "#78716C", icon: Hourglass },
   pending_payment: { label: "Awaiting payment", bg: "#FBF3E3", fg: "#9A7426", icon: Hourglass },
   cancelled:       { label: "Cancelled",        bg: "#F3E7E5", fg: "#9B3A2E", icon: Ban },
 };
@@ -1074,16 +1075,19 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
       const base = {
         type, userId: currentUser.id, name: currentUser.name,
         email: currentUser.email, phone: currentUser.phone,
-        plan: planLabel, status: "pending_payment", createdAt: new Date().toISOString(),
+        plan: planLabel, status: type === "class" ? "pending_checkout" : "pending_payment", createdAt: new Date().toISOString(),
       };
 
       let bookingId = null;
       if (plan === "membership" && activities === 2) {
         const classes = DEFAULT_CLASSES.filter(c => selectedClasses.includes(c.id));
+        const paymentGroupId = uid();
+        bookingId = paymentGroupId;
+        pendingBookingId = paymentGroupId;
         for (let i = 0; i < classes.length; i++) {
           const cls = classes[i];
           await onConfirm({
-            ...base, id: uid(),
+            ...base, id: i === 0 ? paymentGroupId : uid(), paymentGroupId,
             sessionId: cls.id, sessionName: cls.name,
             amount: cls.id === session.id ? amount : 0,
           });
@@ -1118,16 +1122,6 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
       }
 
       if (type === "class") {
-        // Tell Shams about the booking as soon as it is recorded. Payment
-        // confirmation is sent separately by the signed GoCardless webhook.
-        await callEdgeFunction("send-email", {
-          type: "admin_booking",
-          user_name: currentUser.name, user_email: currentUser.email,
-          user_phone: currentUser.phone, session_name: session.name,
-          plan: planLabel, amount: String(amount), status: "pending_payment",
-          booking_dates: (plan === "payg" ? selectedDates : selectedDates.slice(0, 1)).map(formatBookingDate).join(", "),
-          booked_at: new Date().toLocaleString("en-GB"),
-        }).catch(error => console.error("[SNB booking admin notify FAILED]:", error.message));
         const checkout = await callEdgeFunction("gocardless-checkout", {
           booking_id: bookingId,
           plan,
@@ -1667,7 +1661,7 @@ function MyBookings({ bookings, currentUser, onCancel }) {
   const [confirmCancel, setConfirmCancel] = useState(null);
   const mine = bookings
     .filter(b => b.userId===currentUser.id || b.email===currentUser.email)
-    .filter(b => b.status !== "cancelled");
+    .filter(bookingIsActive);
   return (
     <div className="max-w-md mx-auto flex flex-col gap-3">
       {mine.length===0
@@ -1756,7 +1750,7 @@ function AdminDashboard({ bookings, onMarkPaid, onMarkPending, onCancel, onResto
     return true;
   }).slice().reverse();
 
-  const active       = bookings.filter(b => b.status!=="cancelled");
+  const active       = bookings.filter(bookingIsActive);
   const totalPaid    = active.filter(b=>b.status==="paid").reduce((s,b)=>s+Number(b.amount||0),0);
   const totalPending = active.filter(b=>b.status==="pending_payment").reduce((s,b)=>s+Number(b.amount||0),0);
   const classCount   = active.filter(b=>b.type==="class").length;
@@ -2393,7 +2387,7 @@ function AdminClassCard({ cls, bookings, onMoveBooking }) {
   const dates = classBookingDates(bookings, cls.id, fridayBookingDates());
   const [selectedDate, setSelectedDate] = useState(dates[0]);
   const clsBookings = bookings
-    .filter(b => b.sessionId === cls.id && b.status !== "cancelled")
+    .filter(b => b.sessionId === cls.id && bookingIsActive(b))
     .filter(b => !PAID_CLASS_IDS.has(cls.id) || bookingMatchesClassDate(b, selectedDate))
     .sort((a,b) => new Date(a.createdAt||0) - new Date(b.createdAt||0));
   const pct = Math.min(100, cls.capacity ? (clsBookings.length / cls.capacity) * 100 : 0);
@@ -2733,7 +2727,7 @@ function AdminPage() {
     return true;
   }).slice().reverse();
 
-  const active       = bookings.filter(b => b.status !== "cancelled");
+  const active       = bookings.filter(bookingIsActive);
   const totalPaid    = active.filter(b => b.status === "paid").reduce((s,b) => s + Number(b.amount||0), 0);
   const totalPending = active.filter(b => b.status === "pending_payment").reduce((s,b) => s + Number(b.amount||0), 0);
   const classCount   = active.filter(b => b.type === "class").length;
@@ -2787,7 +2781,7 @@ function AdminPage() {
             const count = key==="members" ? members.length
               : key==="classes" ? DEFAULT_CLASSES.length
               : key==="studio-hire" ? enquiries.length
-              : bookings.filter(b=>b.status!=="cancelled").length;
+              : bookings.filter(bookingIsActive).length;
             return (
               <button key={key} onClick={() => setAdminTab(key)}
                 className="ff-body text-sm font-medium px-5 py-1.5 rounded-full transition"
@@ -3112,11 +3106,11 @@ function BookingApp() {
   useIdleLogout(!!currentUser, handleSignOut, 30);
 
   function bookedCount(id) {
-    return bookings.filter(b => b.sessionId===id && b.status!=="cancelled").length;
+    return bookings.filter(b => b.sessionId===id && bookingIsActive(b)).length;
   }
   function getUserBookingType(id) {
     if (!currentUser) return null;
-    const b = bookings.find(b => b.sessionId===id && b.status!=="cancelled"
+    const b = bookings.find(b => b.sessionId===id && bookingIsActive(b)
       && (b.userId===currentUser.id || b.email===currentUser.email));
     if (!b) return null;
     const plan = (b.plan || "").toLowerCase();
