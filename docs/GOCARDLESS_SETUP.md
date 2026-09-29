@@ -331,6 +331,49 @@ If the popup still shows only the old generic message, confirm Vercel deployed
 the commit containing this troubleshooting section and redeploy
 `gocardless-checkout` before testing again.
 
+### Keep the checkout function in sync with the website
+
+The repository includes the **Deploy payment Edge Functions** GitHub Actions
+workflow. It deploys `gocardless-checkout` and `gocardless-webhook` whenever a
+change to either payment function or their shared modules reaches `main`. This
+prevents a newly deployed website from continuing to call an older checkout
+implementation—the situation reported in the popup as `legacy_edge_function`.
+
+Configure these once in **GitHub → Settings → Secrets and variables → Actions**:
+
+| Repository secret | Value |
+|---|---|
+| `SUPABASE_ACCESS_TOKEN` | A Supabase personal access token with access to the existing SNB Hive project. |
+| `SUPABASE_PROJECT_REF` | The existing project's reference from the Supabase dashboard URL or Project Settings. |
+
+After adding the secrets, open **GitHub → Actions → Deploy payment Edge
+Functions → Run workflow** to replace the currently deployed legacy function
+immediately. Confirm that both deploy steps pass before retrying the booking.
+Future payment-function changes deploy automatically after they are merged to
+`main`; a Vercel deployment by itself does not update Supabase Edge Functions.
+
+> **The workflow is not listed in the Actions tab yet:** GitHub only offers a
+> manually triggered workflow after its YAML file exists on the repository's
+> default branch. First merge the pull request that adds
+> `.github/workflows/deploy-payment-functions.yml` into `main`, then reload the
+> Actions tab. The merge itself triggers the first deployment because the
+> workflow watches changes to its own file. If the pull request or workflow
+> file is not visible on GitHub at all, the branch containing the commit has
+> not been pushed to that GitHub repository; push/publish the branch before
+> trying to merge it.
+
+To repair checkout immediately without waiting for the GitHub workflow, use a
+terminal in this repository after completing the CLI login and project-linking
+steps above:
+
+```bash
+npx supabase functions deploy gocardless-checkout
+npx supabase functions deploy gocardless-webhook
+```
+
+Successful CLI deployment and successful GitHub Actions deployment are
+equivalent; only one is required to replace the legacy function.
+
 Open **Supabase Dashboard → Edge Functions** and inspect the logs for both
 `gocardless-checkout` and `gocardless-webhook`.
 
