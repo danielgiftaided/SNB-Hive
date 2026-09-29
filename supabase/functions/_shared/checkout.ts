@@ -35,3 +35,16 @@ export function bookingRowsAreValid(
 ) {
   return bookingRowsValidationIssue(booking, rows, plan, paygAmount) === null;
 }
+
+// A membership amount is fixed by the Edge Function, rather than supplied by
+// the browser. If the browser's successful insert is not visible to the
+// service-role REST read yet, it is therefore safe to start the authorisation
+// flow after the lookup retries are exhausted. The signed webhook will attach
+// the payment to that same booking id once GoCardless fulfils the request.
+// PAYG must remain fail-closed because its total comes from the saved rows.
+export function canStartCheckoutAfterLookupFailure(
+  plan: CheckoutPlan,
+  issue: BookingValidationIssue,
+) {
+  return plan === "membership" && issue === "missing_booking";
+}
