@@ -11,7 +11,7 @@ async function rememberPayment(id: string, paymentGroupId: string, paymentId: st
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !serviceKey) throw new Error("Supabase function environment is not configured");
   const filter = paymentGroupId ? `payment_group_id=eq.${encodeURIComponent(paymentGroupId)}` : `id=eq.${encodeURIComponent(id)}`;
-  const response = await fetch(`${url}/rest/v1/bookings?${filter}&status=eq.pending_payment`, {
+  const response = await fetch(`${url}/rest/v1/bookings?${filter}&status=in.(pending_checkout,pending_payment)`, {
     method: "PATCH",
     headers: {
       apikey: serviceKey,
@@ -29,7 +29,7 @@ async function confirmPayment(paymentId: string) {
   if (!url || !serviceKey) throw new Error("Supabase function environment is not configured");
   const query = new URLSearchParams({
     gocardless_payment_id: `eq.${paymentId}`,
-    status: "eq.pending_payment",
+    status: "in.(pending_checkout,pending_payment)",
     select: "id,name,email,phone,session_name,plan,amount,booking_date",
   });
   const response = await fetch(`${url}/rest/v1/bookings?${query}`, {

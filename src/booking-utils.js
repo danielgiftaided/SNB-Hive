@@ -1,5 +1,12 @@
 export const UNDATED_BOOKING = "undated";
 
+// A checkout attempt is not a booking. GoCardless can leave the browser flow
+// before payment is authorised, so these rows exist only to let the server
+// validate checkout and must not reserve a place or appear to the customer.
+export function bookingIsActive(booking) {
+  return booking?.status !== "cancelled" && booking?.status !== "pending_checkout";
+}
+
 export function normalizedBookingDate(value) {
   if (!value) return "";
   const match = String(value).match(/^\d{4}-\d{2}-\d{2}/);
@@ -13,12 +20,12 @@ export function bookingMatchesClassDate(booking, selectedDate) {
 
 export function classBookingDates(bookings, sessionId, upcomingDates) {
   const dated = bookings
-    .filter(booking => booking.sessionId === sessionId && booking.status !== "cancelled")
+    .filter(booking => booking.sessionId === sessionId && bookingIsActive(booking))
     .map(booking => normalizedBookingDate(booking.bookingDate))
     .filter(Boolean);
   const dates = [...new Set([...upcomingDates, ...dated])].sort();
   const hasUndated = bookings.some(booking =>
-    booking.sessionId === sessionId && booking.status !== "cancelled" &&
+    booking.sessionId === sessionId && bookingIsActive(booking) &&
     !normalizedBookingDate(booking.bookingDate));
   return hasUndated ? [...dates, UNDATED_BOOKING] : dates;
 }
