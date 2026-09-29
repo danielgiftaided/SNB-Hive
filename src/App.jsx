@@ -1111,6 +1111,7 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
           ...base, id: bookingId,
           sessionId: session.id, sessionName: session.name,
           amount,
+          ...(type === "class" ? { bookingDate: selectedDates[0] } : {}),
           ...(ref ? { bankRef: ref } : {}),
         });
         if (ref) setBankRef(ref);
@@ -1124,7 +1125,7 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
           user_name: currentUser.name, user_email: currentUser.email,
           user_phone: currentUser.phone, session_name: session.name,
           plan: planLabel, amount: String(amount), status: "pending_payment",
-          booking_dates: plan === "payg" ? selectedDates.map(formatBookingDate).join(", ") : "",
+          booking_dates: (plan === "payg" ? selectedDates : selectedDates.slice(0, 1)).map(formatBookingDate).join(", "),
           booked_at: new Date().toLocaleString("en-GB"),
         }).catch(error => console.error("[SNB booking admin notify FAILED]:", error.message));
         const checkout = await callEdgeFunction("gocardless-checkout", {
@@ -1216,6 +1217,19 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
                   <p className="text-xs text-stone-500 mt-0.5">£35/month for one weekly Zumba class</p>
                 </button>
                 {plan==="membership" && (<>
+                  <fieldset className="rounded-xl border border-stone-200 p-3.5">
+                    <legend className="px-1 text-sm font-medium text-stone-700">Choose your first lesson date</legend>
+                    <p className="text-xs text-stone-400 mb-2">Your membership will be listed against this lesson in the admin portal.</p>
+                    <div className="flex flex-col gap-2">
+                      {availableDates.map(date => (
+                        <label key={date} className="flex items-center gap-2.5 rounded-lg bg-stone-50 px-3 py-2 text-sm cursor-pointer">
+                          <input type="radio" name="membership-start-date" checked={selectedDates[0] === date}
+                            onChange={() => setSelectedDates([date])}/>
+                          <span>{formatBookingDate(date)}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
                   <p className="text-xs text-stone-500 px-1">
                     Your first payment is prorated for the remaining days this month. After that, £{monthlyMembershipAmount.toFixed(2)} is collected on the 1st of each month.
                   </p>
