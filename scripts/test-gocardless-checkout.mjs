@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import { bookingRowsAreValid, bookingRowsValidationIssue } from "../supabase/functions/_shared/checkout.ts";
+import {
+  bookingRowsAreValid,
+  bookingRowsValidationIssue,
+  canStartCheckoutAfterLookupFailure,
+} from "../supabase/functions/_shared/checkout.ts";
 
 const membership = {
   id: "booking-1",
@@ -43,6 +47,21 @@ assert.equal(
   bookingRowsAreValid({ ...membership, amount: 10 }, [{ ...membership, amount: 10 }], "payg", 1000),
   true,
   "a correctly priced pay-as-you-go booking should remain valid",
+);
+assert.equal(
+  canStartCheckoutAfterLookupFailure("membership", "missing_booking"),
+  true,
+  "fixed-price membership checkout may survive delayed booking visibility",
+);
+assert.equal(
+  canStartCheckoutAfterLookupFailure("payg", "missing_booking"),
+  false,
+  "PAYG must remain fail-closed because its total comes from persisted bookings",
+);
+assert.equal(
+  canStartCheckoutAfterLookupFailure("membership", "wrong_status"),
+  false,
+  "an invalid persisted membership must not bypass verification",
 );
 
 console.log("PASS GoCardless checkout validates pending monthly memberships");

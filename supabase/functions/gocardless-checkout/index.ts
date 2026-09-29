@@ -1,6 +1,11 @@
 import { corsHeaders, json } from "../_shared/http.ts";
 import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../_shared/membership.ts";
-import { bookingRowsValidationIssue, type CheckoutPlan } from "../_shared/checkout.ts";
+import {
+  bookingRowsValidationIssue,
+  canStartCheckoutAfterLookupFailure,
+  type BookingValidationIssue,
+  type CheckoutPlan,
+} from "../_shared/checkout.ts";
 
 const GC_API = Deno.env.get("GOCARDLESS_API_URL") || "https://api.gocardless.com";
 const GC_VERSION = "2015-07-06";
@@ -50,7 +55,7 @@ const BOOKING_LOOKUP_DELAY_MS = 200;
 // briefly lag behind that completed browser write. Retry both a missing row
 // and an incomplete payment group rather than rejecting a valid checkout.
 async function getVerifiedBooking(id: string, plan: CheckoutPlan) {
-  let lastIssue = "missing_booking";
+  let lastIssue: BookingValidationIssue = "missing_booking";
   for (let attempt = 1; attempt <= BOOKING_LOOKUP_ATTEMPTS; attempt++) {
     const booking = await getBooking(id);
     // Memberships use the same payment-group lookup as PAYG. Keeping both
@@ -80,6 +85,21 @@ async function getVerifiedBooking(id: string, plan: CheckoutPlan) {
     if (attempt < BOOKING_LOOKUP_ATTEMPTS) {
       await new Promise(resolve => setTimeout(resolve, BOOKING_LOOKUP_DELAY_MS));
     }
+  }
+  // Unlike PAYG, membership pricing is not derived from the booking row. A
+  // just-created row can occasionally remain invisible to the function's
+  // PostgREST connection beyond the retry window even though the browser
+  // insert completed. Let that narrow case continue with the stable booking
+  // id; do not relax validation for rows that were found but are invalid.
+  if (canStartCheckoutAfterLookupFailure(plan, lastIssue)) {
+    console.warn("Starting fixed-price membership checkout before booking lookup became visible", {
+      booking_id: id,
+      attempts: BOOKING_LOOKUP_ATTEMPTS,
+    });
+    return {
+      booking: { id, payment_group_id: id },
+      group: [] as Record<string, unknown>[],
+    };
   }
   return { error: lastIssue };
 }
