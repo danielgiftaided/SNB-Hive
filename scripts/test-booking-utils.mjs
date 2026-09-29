@@ -29,5 +29,7 @@ assert.equal(bookingMatchesClassDate(bookings[4], "2026-10-02"), false);
 assert.equal(bookingIsActive(bookings[0]), true);
 assert.equal(bookingIsActive(bookings[5]), false);
 assert.equal(bookingIsActive(bookings[6]), false);
+assert.equal(bookingIsActive({ type: "class", status: "pending_payment" }), false);
+assert.equal(bookingIsActive({ type: "class", status: "pending_payment", gocardlessPaymentId: "PM123" }), true);
 
 console.log("PASS bookings only match their recorded lesson date");

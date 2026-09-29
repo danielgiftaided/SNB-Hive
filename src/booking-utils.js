@@ -4,7 +4,17 @@ export const UNDATED_BOOKING = "undated";
 // before payment is authorised, so these rows exist only to let the server
 // validate checkout and must not reserve a place or appear to the customer.
 export function bookingIsActive(booking) {
-  return booking?.status !== "cancelled" && booking?.status !== "pending_checkout";
+  if (!booking || booking.status === "cancelled" || booking.status === "pending_checkout") return false;
+
+  // Class rows are written before the browser is sent to GoCardless. Older
+  // checkout deployments require pending_payment rather than pending_checkout,
+  // so distinguish a completed checkout by the payment reference which the
+  // signed webhook adds when the billing request is fulfilled.
+  if (booking.type === "class" && booking.status === "pending_payment") {
+    return Boolean(booking.gocardlessPaymentId);
+  }
+
+  return true;
 }
 
 export function normalizedBookingDate(value) {

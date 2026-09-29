@@ -112,8 +112,13 @@ Deno.serve(async request => {
     const expectedAmount = plan === "payg"
       ? group.reduce((sum: number, row: Record<string, unknown>) => sum + Math.round(Number(row.amount) * 100), 0)
       : PRICES.membership;
+    // Accept the original pending_payment value as well as pending_checkout so
+    // frontend and Edge Function deployments can be rolled out independently.
+    // Both values are pre-payment states; the signed webhook remains solely
+    // responsible for confirming the booking as paid.
     const validGroup = group.length > 0 && group.every((row: Record<string, unknown>) =>
-      row && row.session_id === "zumba" && row.status === "pending_checkout" &&
+      row && row.session_id === "zumba" &&
+      (row.status === "pending_checkout" || row.status === "pending_payment") &&
       (plan !== "payg" || Math.round(Number(row.amount) * 100) === PRICES.payg));
     if (!booking || !validGroup) {
       return json({ error: "Booking could not be verified" }, 400);

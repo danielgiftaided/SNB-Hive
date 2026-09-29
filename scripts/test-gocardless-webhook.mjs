@@ -15,10 +15,10 @@ assert.match(source, /gocardless_payment_id: `eq\.\$\{paymentId\}`/,
   "confirmed payments must be matched to their booking by GoCardless payment ID");
 assert.match(source, /status: "in\.\(pending_checkout,pending_payment\)"/,
   "only an unconfirmed checkout may trigger a confirmation email");
-assert.match(checkoutSource, /row\.status === "pending_checkout"/,
-  "checkout must only accept a provisional, non-booking row");
-assert.match(appSource, /status: type === "class" \? "pending_checkout" : "pending_payment"/,
-  "paid classes must remain provisional until GoCardless confirms payment");
+assert.match(checkoutSource, /row\.status === "pending_checkout" \|\| row\.status === "pending_payment"/,
+  "checkout must support both provisional statuses during staggered deployments");
+assert.match(appSource, /plan: planLabel, status: "pending_payment"/,
+  "paid classes must remain compatible with existing checkout deployments");
 assert.match(appSource, /id: i === 0 \? paymentGroupId : uid\(\), paymentGroupId/,
   "multi-class memberships must share a payment group and valid checkout ID");
 
