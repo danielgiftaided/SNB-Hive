@@ -1075,7 +1075,10 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
       const base = {
         type, userId: currentUser.id, name: currentUser.name,
         email: currentUser.email, phone: currentUser.phone,
-        plan: planLabel, status: type === "class" ? "pending_checkout" : "pending_payment", createdAt: new Date().toISOString(),
+        // Keep the pre-authorisation status compatible with checkout functions
+        // deployed before pending_checkout was introduced. The row is still
+        // hidden until the webhook attaches a GoCardless payment reference.
+        plan: planLabel, status: "pending_payment", createdAt: new Date().toISOString(),
       };
 
       let bookingId = null;
