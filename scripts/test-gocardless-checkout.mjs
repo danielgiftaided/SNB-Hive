@@ -29,9 +29,19 @@ assert.equal(
   "checkout diagnostics should identify an incorrect PAYG amount",
 );
 assert.equal(
-  bookingRowsAreValid(membership, [{ ...membership, id: "booking-2", amount: 0 }], "membership", 1000),
+  bookingRowsAreValid(membership, [membership, { ...membership, id: "booking-2", session_id: "yoga", amount: 0 }], "membership", 1000),
   true,
-  "a membership payment group should use the same validation path as pay as you go",
+  "a two-activity membership should accept its non-Zumba second class",
+);
+assert.equal(
+  bookingRowsValidationIssue({ ...membership, session_id: "yoga" }, [{ ...membership, session_id: "yoga" }], "membership", 1000),
+  "wrong_session",
+  "membership checkout must still be anchored by a Zumba booking",
+);
+assert.equal(
+  bookingRowsValidationIssue(membership, [membership, { ...membership, id: "booking-2", session_id: "yoga" }], "payg", 1000),
+  "wrong_session",
+  "PAYG must reject a payment group containing a different session",
 );
 assert.equal(
   bookingRowsAreValid({ ...membership, status: "cancelled" }, [{ ...membership, status: "cancelled" }], "membership", 1000),

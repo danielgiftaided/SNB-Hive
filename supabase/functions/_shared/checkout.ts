@@ -17,7 +17,15 @@ export function bookingRowsValidationIssue(
 ): BookingValidationIssue | null {
   if (!booking) return "missing_booking";
   if (rows.length === 0) return "missing_payment_group";
-  if (rows.some(row => !row || row.session_id !== "zumba")) return "wrong_session";
+  // Checkout is only initiated from the Zumba booking. A two-activity
+  // membership deliberately puts the member's second class in the same
+  // payment group, so requiring every row to have the Zumba session id makes
+  // that valid group impossible to verify. PAYG rows, on the other hand, are
+  // all individual Zumba dates and must remain restricted to that session.
+  if (booking.session_id !== "zumba") return "wrong_session";
+  if (plan === "payg" && rows.some(row => !row || row.session_id !== "zumba")) {
+    return "wrong_session";
+  }
   if (rows.some(row => !(row.status === "pending_checkout" || row.status === "pending_payment"))) {
     return "wrong_status";
   }
