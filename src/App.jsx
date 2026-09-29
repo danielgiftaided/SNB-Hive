@@ -1111,6 +1111,10 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
       } else {
         bookingId = uid();
         pendingBookingId = bookingId;
+        // Use the same payment-group contract as PAYG for memberships. This
+        // lets checkout and the webhook find the provisional row consistently,
+        // while bookingIsActive keeps it hidden until payment is confirmed.
+        const paymentGroupId = type === "class" ? bookingId : null;
         // A short, unique reference the person includes on their bank
         // transfer, so it can be matched back to this booking manually.
         const ref = type === "retreat" ? bookingId.slice(0, 8).toUpperCase() : null;
@@ -1118,7 +1122,7 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
           ...base, id: bookingId,
           sessionId: session.id, sessionName: session.name,
           amount,
-          ...(type === "class" ? { bookingDate: selectedDates[0] } : {}),
+          ...(type === "class" ? { bookingDate: selectedDates[0], paymentGroupId } : {}),
           ...(ref ? { bankRef: ref } : {}),
         });
         if (ref) setBankRef(ref);

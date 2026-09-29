@@ -52,8 +52,12 @@ const BOOKING_LOOKUP_DELAY_MS = 200;
 async function getVerifiedBooking(id: string, plan: CheckoutPlan) {
   for (let attempt = 1; attempt <= BOOKING_LOOKUP_ATTEMPTS; attempt++) {
     const booking = await getBooking(id);
-    const group = plan === "payg" && booking?.payment_group_id
-      ? await getPaymentGroup(booking.payment_group_id)
+    // Memberships use the same payment-group lookup as PAYG. Keeping both
+    // checkout paths on one contract avoids treating a successfully persisted
+    // membership row as unverifiable, and gives the webhook the same stable
+    // key to update after GoCardless fulfils the billing request.
+    const group = booking?.payment_group_id
+      ? await getPaymentGroup(String(booking.payment_group_id))
       : booking ? [booking] : [];
 
     if (bookingRowsAreValid(booking, group, plan, PRICES.payg)) {

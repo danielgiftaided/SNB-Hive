@@ -6,12 +6,18 @@ const membership = {
   session_id: "zumba",
   status: "pending_payment",
   amount: 12.25,
+  payment_group_id: "booking-1",
 };
 
 assert.equal(
   bookingRowsAreValid(membership, [membership], "membership", 1000),
   true,
   "a prorated monthly membership should be accepted while awaiting checkout",
+);
+assert.equal(
+  bookingRowsAreValid(membership, [{ ...membership, id: "booking-2", amount: 0 }], "membership", 1000),
+  true,
+  "a membership payment group should use the same validation path as pay as you go",
 );
 assert.equal(
   bookingRowsAreValid({ ...membership, status: "cancelled" }, [{ ...membership, status: "cancelled" }], "membership", 1000),
