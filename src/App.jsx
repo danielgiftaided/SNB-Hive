@@ -2388,7 +2388,7 @@ function StudioHireForm({ currentUser }) {
 
 /* ---- ADMIN PAGE (accessed at /admin — never linked from the user site) ---- */
 
-function AdminClassCard({ cls, bookings }) {
+function AdminClassCard({ cls, bookings, onMoveBooking }) {
   const Icon = ICONS[cls.icon] || Sparkles;
   const dates = classBookingDates(bookings, cls.id, fridayBookingDates());
   const [selectedDate, setSelectedDate] = useState(dates[0]);
@@ -2451,12 +2451,23 @@ function AdminClassCard({ cls, bookings }) {
             <p className="ff-body text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">Registered</p>
             <div className="flex flex-col divide-y divide-stone-50">
               {clsBookings.map((b, i) => (
-                <div key={b.id} className="flex items-center justify-between py-2">
+                <div key={b.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                   <div className="flex items-center gap-2">
                     <span className="ff-body text-xs text-stone-400 w-5 text-right shrink-0">{i+1}.</span>
                     <span className="ff-body text-sm font-medium" style={{ color: INK }}>{b.name}</span>
                   </div>
-                  <span className="ff-body text-xs text-stone-400 truncate ml-2">{b.email}</span>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="ff-body text-xs text-stone-400 truncate">{b.email}</span>
+                    {PAID_CLASS_IDS.has(cls.id) && (
+                      <label className="sr-only" htmlFor={`move-booking-${b.id}`}>Move {b.name} to another date</label>
+                    )}
+                    {PAID_CLASS_IDS.has(cls.id) && (
+                      <input id={`move-booking-${b.id}`} type="date" value={b.bookingDate || ""}
+                        onChange={event => onMoveBooking(b.id, event.target.value || UNDATED_BOOKING)}
+                        title={`Move ${b.name} to another lesson date`}
+                        className="ff-body max-w-36 rounded-lg border border-stone-200 bg-white px-2 py-1 text-xs text-stone-600"/>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -2595,6 +2606,14 @@ function AdminPage() {
 
   async function updateStatus(id, status) {
     const next = bookings.map(b => b.id === id ? { ...b, status } : b);
+    setBookings(next);
+    await storage.set("bookings", next);
+  }
+
+  async function moveBooking(id, bookingDate) {
+    const next = bookings.map(booking => booking.id === id
+      ? { ...booking, bookingDate: bookingDate === UNDATED_BOOKING ? null : bookingDate }
+      : booking);
     setBookings(next);
     await storage.set("bookings", next);
   }
@@ -2955,7 +2974,7 @@ function AdminPage() {
         {/* ── CLASSES TAB ── */}
         {adminTab === "classes" && (
           <div className="grid sm:grid-cols-2 gap-4">
-            {DEFAULT_CLASSES.map(cls => <AdminClassCard key={cls.id} cls={cls} bookings={bookings}/>)}
+            {DEFAULT_CLASSES.map(cls => <AdminClassCard key={cls.id} cls={cls} bookings={bookings} onMoveBooking={moveBooking}/>) }
           </div>
         )}
 

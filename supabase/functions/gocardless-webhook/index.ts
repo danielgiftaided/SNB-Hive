@@ -6,12 +6,33 @@ function formatBookingDate(input: unknown) {
     .format(new Date(`${String(input)}T12:00:00Z`));
 }
 
-async function confirmBooking(id: string, paymentGroupId = "", paidAmount?: number) {
+async function rememberPayment(id: string, paymentGroupId: string, paymentId: string) {
   const url = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !serviceKey) throw new Error("Supabase function environment is not configured");
   const filter = paymentGroupId ? `payment_group_id=eq.${encodeURIComponent(paymentGroupId)}` : `id=eq.${encodeURIComponent(id)}`;
-  const response = await fetch(`${url}/rest/v1/bookings?${filter}&status=eq.pending_payment&select=id,name,email,phone,session_name,plan,amount,booking_date`, {
+  const response = await fetch(`${url}/rest/v1/bookings?${filter}&status=eq.pending_payment`, {
+    method: "PATCH",
+    headers: {
+      apikey: serviceKey,
+      Authorization: `Bearer ${serviceKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ gocardless_payment_id: paymentId }),
+  });
+  if (!response.ok) throw new Error("GoCardless payment reference update failed");
+}
+
+async function confirmPayment(paymentId: string) {
+  const url = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !serviceKey) throw new Error("Supabase function environment is not configured");
+  const query = new URLSearchParams({
+    gocardless_payment_id: `eq.${paymentId}`,
+    status: "eq.pending_payment",
+    select: "id,name,email,phone,session_name,plan,amount,booking_date",
+  });
+  const response = await fetch(`${url}/rest/v1/bookings?${query}`, {
     method: "PATCH",
     headers: {
       apikey: serviceKey,
@@ -19,7 +40,7 @@ async function confirmBooking(id: string, paymentGroupId = "", paidAmount?: numb
       "Content-Type": "application/json",
       Prefer: "return=representation",
     },
-    body: JSON.stringify({ status: "paid", ...(paidAmount === undefined ? {} : { amount: paidAmount / 100 }) }),
+    body: JSON.stringify({ status: "paid" }),
   });
   if (!response.ok) throw new Error("Booking status update failed");
   const rows = await response.json();
@@ -96,6 +117,14 @@ Deno.serve(async request => {
   try {
     const payload = JSON.parse(rawBody);
     for (const event of payload.events || []) {
+      if (event.resource_type === "payments" && event.action === "confirmed") {
+        const paymentId = event.links?.payment;
+        if (!paymentId) continue;
+        const booking = await confirmPayment(paymentId);
+        if (booking) await sendPaymentConfirmation(booking);
+        continue;
+      }
+
       if (event.resource_type !== "billing_requests" || event.action !== "fulfilled") continue;
       const billingRequestId = event.links?.billing_request;
       if (!billingRequestId) continue;
@@ -103,6 +132,10 @@ Deno.serve(async request => {
       const billingRequest = result.billing_requests;
       const bookingId = billingRequest.metadata?.booking_id;
       if (!bookingId) continue;
+
+      const paymentId = billingRequest.links?.payment_request;
+      if (!paymentId) throw new Error("Fulfilled billing request has no payment reference");
+      await rememberPayment(bookingId, billingRequest.metadata?.payment_group_id || "", paymentId);
 
       if (billingRequest.metadata?.payment_plan === "membership" && billingRequest.links?.mandate) {
         // Idempotency key makes retries of the same webhook safe.
@@ -123,14 +156,9 @@ Deno.serve(async request => {
         });
       }
 
-      // The conditional update makes webhook retries idempotent: only the
-      // first fulfilled event moves the booking and sends the two emails.
-      const firstPaymentAmount = Number(billingRequest.metadata?.first_payment_amount);
-      const paidAmount = Number.isInteger(firstPaymentAmount) && firstPaymentAmount > 0
-        ? firstPaymentAmount
-        : undefined;
-      const booking = await confirmBooking(bookingId, billingRequest.metadata?.payment_group_id || "", paidAmount);
-      if (booking) await sendPaymentConfirmation(booking);
+      // A fulfilled billing request only means that the mandate/payment setup
+      // completed. The booking remains awaiting payment until GoCardless sends
+      // the separate, signed payments/confirmed event handled above.
     }
     return new Response("ok", { status: 200 });
   } catch (error) {
