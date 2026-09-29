@@ -171,8 +171,14 @@ For example, generate the password hash locally (replace both example values):
 node -e "const c=require('node:crypto'); console.log(c.createHash('sha256').update('YOUR_SALT'+'YOUR_PASSWORD').digest('hex'))"
 supabase secrets set ADMIN_EMAIL=you@example.com ADMIN_PASSWORD_HASH=THE_HASH ADMIN_PASSWORD_SALT=YOUR_SALT ADMIN_MFA_SECRET=ANOTHER_LONG_RANDOM_VALUE RESEND_API_KEY=re_xxx SENDER_EMAIL=shams@snbhive.com
 supabase functions deploy admin-auth
-supabase functions deploy send-email
+supabase functions deploy send-email --no-verify-jwt
 ```
+
+The app uses its own member sessions rather than Supabase Auth, so `send-email`
+must be deployed without Supabase JWT verification. The function sends booking
+cancellation confirmations to both the member and `ADMIN_EMAIL` (which defaults
+to `shams@snbhive.com`). Keep `RESEND_API_KEY` and the verified `SENDER_EMAIL`
+configured as Supabase secrets.
 
 There is deliberately no default admin password in the browser bundle.
 

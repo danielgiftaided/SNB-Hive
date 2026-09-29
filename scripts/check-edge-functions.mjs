@@ -22,6 +22,7 @@ for (const file of functions) {
 }
 
 const emailFunction = await readFile("supabase/functions/send-email/index.ts", "utf8");
+const supabaseConfig = await readFile("supabase/config.toml", "utf8");
 const cancellationChecks = [
   ['the cancellation email type', 'case "booking_cancelled"'],
   ["the member cancellation confirmation", "const customer ="],
@@ -35,6 +36,13 @@ for (const [description, expected] of cancellationChecks) {
   } else {
     console.log(`PASS send-email includes ${description}`);
   }
+}
+
+if (!/\[functions\.send-email\]\s+verify_jwt\s*=\s*false/.test(supabaseConfig)) {
+  console.error("FAIL send-email must allow calls from the app's non-Supabase user sessions");
+  failed = true;
+} else {
+  console.log("PASS send-email accepts calls from app user sessions");
 }
 
 if (failed) {
