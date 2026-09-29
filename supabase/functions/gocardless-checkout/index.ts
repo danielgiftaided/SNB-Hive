@@ -1,6 +1,6 @@
 import { corsHeaders, json } from "../_shared/http.ts";
 import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../_shared/membership.ts";
-import { bookingRowsAreValid, type CheckoutPlan } from "../_shared/checkout.ts";
+import { bookingRowsValidationIssue, type CheckoutPlan } from "../_shared/checkout.ts";
 
 const GC_API = Deno.env.get("GOCARDLESS_API_URL") || "https://api.gocardless.com";
 const GC_VERSION = "2015-07-06";
@@ -50,6 +50,7 @@ const BOOKING_LOOKUP_DELAY_MS = 200;
 // briefly lag behind that completed browser write. Retry both a missing row
 // and an incomplete payment group rather than rejecting a valid checkout.
 async function getVerifiedBooking(id: string, plan: CheckoutPlan) {
+  let lastIssue = "missing_booking";
   for (let attempt = 1; attempt <= BOOKING_LOOKUP_ATTEMPTS; attempt++) {
     const booking = await getBooking(id);
     // Memberships use the same payment-group lookup as PAYG. Keeping both
@@ -60,9 +61,11 @@ async function getVerifiedBooking(id: string, plan: CheckoutPlan) {
       ? await getPaymentGroup(String(booking.payment_group_id))
       : booking ? [booking] : [];
 
-    if (bookingRowsAreValid(booking, group, plan, PRICES.payg)) {
+    const issue = bookingRowsValidationIssue(booking, group, plan, PRICES.payg);
+    if (!issue) {
       return { booking, group };
     }
+    lastIssue = issue;
 
     console.warn("Booking not ready for checkout", {
       booking_id: id,
@@ -72,12 +75,13 @@ async function getVerifiedBooking(id: string, plan: CheckoutPlan) {
       group_size: group.length,
       statuses: group.map((row: Record<string, unknown>) => row.status),
       session_ids: group.map((row: Record<string, unknown>) => row.session_id),
+      validation_issue: issue,
     });
     if (attempt < BOOKING_LOOKUP_ATTEMPTS) {
       await new Promise(resolve => setTimeout(resolve, BOOKING_LOOKUP_DELAY_MS));
     }
   }
-  return null;
+  return { error: lastIssue };
 }
 
 async function gc(path: string, body: unknown) {
@@ -147,8 +151,10 @@ Deno.serve(async request => {
     }
 
     const verified = await getVerifiedBooking(booking_id, plan as CheckoutPlan);
-    if (!verified) {
-      return json({ error: "Booking could not be verified" }, 400);
+    if ("error" in verified) {
+      return json({
+        error: `Booking could not be verified (${verified.error}). Check the gocardless-checkout log for this attempt.`,
+      }, 400);
     }
     const { booking, group } = verified;
     const expectedAmount = plan === "payg"

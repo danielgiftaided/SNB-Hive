@@ -342,10 +342,36 @@ Common causes are:
 | `Invalid redirect origin: expected …, received …` | Compare the two public origins. Set `APP_URL` to the received origin only when it is the intended production/customer-facing domain. Check `https` and `www`; never allow-list a random preview domain just to bypass the check. |
 | `Invalid redirect URL` | The app sent a missing or malformed return/exit URL. Confirm Vercel deployed the latest merged frontend commit and hard-refresh the production site. |
 | `Invalid APP_URL: …` | Set `APP_URL` to the valid `https://` production/customer-facing origin, then redeploy checkout. |
-| `Booking could not be verified` | The saved booking is not Zumba, is no longer pending, or its amount does not match £10/£35. |
+| `Booking could not be verified (…)` | Deploy the current checkout function, then use the reason in parentheses and the matching function log; the saved booking is missing or has an unexpected group, session, status, or PAYG amount. |
 | Webhook shows `Invalid signature` | The secret belongs to a different endpoint/environment or was copied incorrectly. |
 | Booking stays at **Awaiting payment** | Check the webhook endpoint delivery in GoCardless, then inspect `gocardless-webhook` logs. |
 | Sandbox request reaches the live API | `GOCARDLESS_API_URL` must be `https://api-sandbox.gocardless.com`. |
+
+#### Does “Booking could not be verified” require SQL?
+
+Usually, **no**. This message means the checkout function could read the saved
+booking, but rejected one of its values. The current function adds a reason in
+parentheses (`missing_booking`, `missing_payment_group`, `wrong_session`,
+`wrong_status`, or `wrong_amount`) and writes the same reason to its log. Deploy
+the current function before testing again:
+
+```bash
+npx supabase functions deploy gocardless-checkout
+```
+
+Only run the repair migration when the original save error or function log says
+that `booking_date`, `payment_group_id`, or `gocardless_payment_id` is missing.
+In that case, use `npx supabase db push`, or run the complete migration in the
+SQL Editor as described above. Do not run an `update bookings ...` statement to
+force a row to `pending_payment` or change its amount: checkout deliberately
+verifies these server-side values before asking GoCardless to take payment.
+
+If the deployed function reports one of the validation reasons, retry once and
+then open **Supabase Dashboard → Edge Functions → gocardless-checkout → Logs**.
+The `Booking not ready for checkout` entry contains `validation_issue`, status,
+session, and group size. Those fields determine whether the production website
+is stale or whether the booking write needs investigation; no database secret
+or access token is needed to diagnose it.
 
 Do not mark the webhook as working merely because checkout returned to the app.
 The return page is customer-facing confirmation; the signed webhook is what
