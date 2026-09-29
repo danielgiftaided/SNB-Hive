@@ -5,6 +5,8 @@ type BookingRow = Record<string, unknown>;
 export type BookingValidationIssue =
   | "missing_booking"
   | "missing_payment_group"
+  | "wrong_payment_group"
+  | "wrong_plan"
   | "wrong_session"
   | "wrong_status"
   | "wrong_amount";
@@ -17,6 +19,14 @@ export function bookingRowsValidationIssue(
 ): BookingValidationIssue | null {
   if (!booking) return "missing_booking";
   if (rows.length === 0) return "missing_payment_group";
+  if (booking.payment_group_id !== booking.id || rows.some(row => row?.payment_group_id !== booking.payment_group_id)) {
+    return "wrong_payment_group";
+  }
+  const expectedPlan = plan === "membership" ? "membership" : "pay as you go";
+  if (typeof booking.plan !== "string" || !booking.plan.toLowerCase().includes(expectedPlan) ||
+      rows.some(row => typeof row?.plan !== "string" || !row.plan.toLowerCase().includes(expectedPlan))) {
+    return "wrong_plan";
+  }
   // Checkout is only initiated from the Zumba booking. A two-activity
   // membership deliberately puts the member's second class in the same
   // payment group, so requiring every row to have the Zumba session id makes

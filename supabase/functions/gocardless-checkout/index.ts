@@ -10,6 +10,7 @@ import {
 const GC_API = Deno.env.get("GOCARDLESS_API_URL") || "https://api.gocardless.com";
 const GC_VERSION = "2015-07-06";
 const PRICES = { payg: 1000, membership: MEMBERSHIP_MONTHLY_AMOUNT } as const;
+const CHECKOUT_VERSION = "single-membership-v2";
 
 async function getBooking(id: string) {
   const url = Deno.env.get("SUPABASE_URL");
@@ -173,6 +174,9 @@ Deno.serve(async request => {
     const verified = await getVerifiedBooking(booking_id, plan as CheckoutPlan);
     if ("error" in verified) {
       return json({
+        code: "BOOKING_VERIFICATION_FAILED",
+        reason: verified.error,
+        checkout_version: CHECKOUT_VERSION,
         error: `Booking could not be verified (${verified.error}). Check the gocardless-checkout log for this attempt.`,
       }, 400);
     }
@@ -226,7 +230,7 @@ Deno.serve(async request => {
       },
     });
 
-    return json({ authorisation_url: flow.billing_request_flows.authorisation_url });
+    return json({ authorisation_url: flow.billing_request_flows.authorisation_url, checkout_version: CHECKOUT_VERSION });
   } catch (error) {
     console.error(error);
     const message = error instanceof Error ? error.message : "GoCardless could not start checkout";

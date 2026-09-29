@@ -9,6 +9,7 @@ import {
 import storage, { supabase } from "./storage.js";
 import { bookingIsActive, bookingMatchesClassDate, classBookingDates, UNDATED_BOOKING } from "./booking-utils.js";
 import { proratedMembershipAmount } from "../supabase/functions/_shared/membership.ts";
+import { checkoutErrorDetail, singleMembershipBooking } from "./checkout.js";
 
 /* =====================================================================
    CONFIG — edit these to customise the app.
@@ -1118,13 +1119,15 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
         // A short, unique reference the person includes on their bank
         // transfer, so it can be matched back to this booking manually.
         const ref = type === "retreat" ? bookingId.slice(0, 8).toUpperCase() : null;
-        await onConfirm({
-          ...base, id: bookingId,
-          sessionId: session.id, sessionName: session.name,
-          amount,
-          ...(type === "class" ? { bookingDate: selectedDates[0], paymentGroupId } : {}),
-          ...(ref ? { bankRef: ref } : {}),
-        });
+        await onConfirm(type === "class" && plan === "membership"
+          ? singleMembershipBooking({ base, bookingId, session, amount, bookingDate: selectedDates[0] })
+          : {
+              ...base, id: bookingId,
+              sessionId: session.id, sessionName: session.name,
+              amount,
+              ...(type === "class" ? { bookingDate: selectedDates[0], paymentGroupId } : {}),
+              ...(ref ? { bankRef: ref } : {}),
+            });
         if (ref) setBankRef(ref);
       }
 
@@ -1143,7 +1146,7 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
       setStep(2);
     } catch (err) {
       if (pendingBookingId) await onPaymentFailure?.(pendingBookingId);
-      const detail = err instanceof Error ? err.message : "Unknown checkout error";
+      const detail = checkoutErrorDetail(err);
       setError(`Couldn't start GoCardless checkout. No payment was taken — ${detail}`);
     }
     finally { setSaving(false); }
