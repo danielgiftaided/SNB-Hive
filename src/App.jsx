@@ -158,6 +158,7 @@ async function callEdgeFunction(name, data) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      "apikey": key,
       "Authorization": "Bearer " + key,
     },
     body: JSON.stringify(data),
@@ -1197,12 +1198,11 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
                     <span className="font-semibold text-sm">Pay as you go</span>
                     {plan==="payg" && <Check size={16} style={{ color:TEAL }}/>}
                   </div>
-                  <p className="text-xs text-stone-500 mt-0.5">£{PAYG_PRICE.toFixed(2)} for this single session</p>
+                  <p className="text-xs text-stone-500 mt-0.5">£{PAYG_PRICE.toFixed(2)} per session</p>
                 </button>
                 {plan==="payg" && (
                   <fieldset className="rounded-xl border border-stone-200 p-3.5">
                     <legend className="px-1 text-sm font-medium text-stone-700">Choose one or more lesson dates</legend>
-                    <p className="text-xs text-stone-400 mb-2">The next four available Fridays are always shown.</p>
                     <div className="flex flex-col gap-2">
                       {availableDates.map(date => (
                         <label key={date} className="flex items-center gap-2.5 rounded-lg bg-stone-50 px-3 py-2 text-sm cursor-pointer">
@@ -1659,6 +1659,8 @@ function getSessionInfo(sessionId) {
 
 function MyBookings({ bookings, currentUser, onCancel }) {
   const [confirmCancel, setConfirmCancel] = useState(null);
+  const [cancelling, setCancelling] = useState(null);
+  const [cancelNotice, setCancelNotice] = useState("");
   const mine = bookings
     .filter(b => b.userId===currentUser.id || b.email===currentUser.email)
     .filter(bookingIsActive);
@@ -1667,11 +1669,11 @@ function MyBookings({ bookings, currentUser, onCancel }) {
       {mine.length===0
         ? <div className="text-center py-12">
             <p className="text-sm text-stone-500">No bookings yet.</p>
-            <p className="text-xs text-stone-400 mt-1">Book a taster session to see it here.</p>
           </div>
         : mine.slice().reverse().map(b => {
           const cls = getSessionInfo(b.sessionId);
           const Icon = cls ? (ICONS[cls.icon] || Sparkles) : Sparkles;
+          const isTaster = (b.plan || "").toLowerCase().includes("taster");
           return (
             <div key={b.id} className="bg-white rounded-xl border border-stone-200 p-4 flex gap-3 items-start">
               {cls && (
@@ -1694,16 +1696,24 @@ function MyBookings({ bookings, currentUser, onCancel }) {
                 )}
                 {confirmCancel === b.id ? (
                   <div className="mt-2 flex items-center gap-2">
-                    <p className="text-xs text-stone-500">Cancel this taster?</p>
-                    <button onClick={() => { onCancel(b.id); setConfirmCancel(null); }}
-                      className="ff-body text-xs font-semibold text-red-600 hover:underline">Yes</button>
-                    <button onClick={() => setConfirmCancel(null)}
+                    <p className="text-xs text-stone-500">Cancel this {isTaster ? "taster" : "class"}?</p>
+                    <button onClick={async () => {
+                      setCancelling(b.id);
+                      const emailSent = await onCancel(b.id);
+                      setCancelNotice(emailSent
+                        ? "Booking cancelled. Confirmation emails have been sent."
+                        : "Booking cancelled, but we couldn't send the confirmation email. Please contact Shams if you need confirmation.");
+                      setCancelling(null);
+                      setConfirmCancel(null);
+                    }} disabled={cancelling === b.id}
+                      className="ff-body text-xs font-semibold text-red-600 hover:underline disabled:opacity-50">{cancelling === b.id ? "Cancelling…" : "Yes"}</button>
+                    <button onClick={() => setConfirmCancel(null)} disabled={cancelling === b.id}
                       className="ff-body text-xs text-stone-400 hover:underline">No</button>
                   </div>
                 ) : (
                   <button onClick={() => setConfirmCancel(b.id)}
                     className="ff-body mt-2 text-xs text-stone-400 hover:text-red-500 hover:underline transition">
-                    Cancel booking
+                    Cancel {isTaster ? "taster" : "class"}
                   </button>
                 )}
               </div>
@@ -1711,6 +1721,7 @@ function MyBookings({ bookings, currentUser, onCancel }) {
           );
         })
       }
+      {cancelNotice && <p role="status" className="text-center text-xs text-stone-500">{cancelNotice}</p>}
     </div>
   );
 }
@@ -3195,17 +3206,23 @@ function BookingApp() {
     if (!booking) return;
     const session = getSessionInfo(booking.sessionId);
     await persist(bookings.map(b => b.id===id ? {...b, status:"cancelled"} : b));
-    callEdgeFunction("send-email", {
-      type: "booking_cancelled",
-      to_email: booking.email || currentUser.email,
-      to_name: booking.name || currentUser.name,
-      user_name: booking.name || currentUser.name,
-      user_email: booking.email || currentUser.email,
-      user_phone: booking.phone || currentUser.phone,
-      session_name: booking.sessionName,
-      booking_date: booking.bookingDate ? formatBookingDate(booking.bookingDate) : [session?.day, session?.time].filter(Boolean).join(" · ") || "Not specified",
-      cancelled_at: new Date().toLocaleString("en-GB"),
-    }).catch(error => console.error("[SNB cancellation email FAILED]:", error.message));
+    try {
+      await callEdgeFunction("send-email", {
+        type: "booking_cancelled",
+        to_email: booking.email || currentUser.email,
+        to_name: booking.name || currentUser.name,
+        user_name: booking.name || currentUser.name,
+        user_email: booking.email || currentUser.email,
+        user_phone: booking.phone || currentUser.phone,
+        session_name: booking.sessionName,
+        booking_date: booking.bookingDate ? formatBookingDate(booking.bookingDate) : [session?.day, session?.time].filter(Boolean).join(" · ") || "Not specified",
+        cancelled_at: new Date().toLocaleString("en-GB"),
+      });
+      return true;
+    } catch (error) {
+      console.error("[SNB cancellation email FAILED]:", error.message);
+      return false;
+    }
   }
   async function joinWaitlist(cls) {
     if (!currentUser) return;

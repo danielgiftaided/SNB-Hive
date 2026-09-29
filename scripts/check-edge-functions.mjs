@@ -21,6 +21,22 @@ for (const file of functions) {
   }
 }
 
+const emailFunction = await readFile("supabase/functions/send-email/index.ts", "utf8");
+const cancellationChecks = [
+  ['the cancellation email type', 'case "booking_cancelled"'],
+  ["the member cancellation confirmation", "const customer ="],
+  ["the admin cancellation notification", "const admin = { to: ADMIN_EMAIL"],
+];
+
+for (const [description, expected] of cancellationChecks) {
+  if (!emailFunction.includes(expected)) {
+    console.error(`FAIL send-email is missing ${description}`);
+    failed = true;
+  } else {
+    console.log(`PASS send-email includes ${description}`);
+  }
+}
+
 if (failed) {
   console.error("Update to the latest repository version before deploying the Edge Functions.");
   process.exit(1);
