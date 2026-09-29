@@ -36,7 +36,7 @@ assert.equal(membership.session_id, "zumba");
 assert.equal(membership.plan, "Membership — 1 class");
 assert.equal(membership.status, "pending_payment");
 assert.equal(membership.booking_date, "2026-10-02");
-assert.equal(membership.amount, 33.87);
+assert.equal(membership.amount, 35);
 assert.equal(persistedGroup.length, 1);
 
 assert.equal(

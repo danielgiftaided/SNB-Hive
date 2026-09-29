@@ -1235,7 +1235,7 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
                     </div>
                   </fieldset>
                   <p className="text-xs text-stone-500 px-1">
-                    Your first payment is prorated for the remaining days this month. After that, £{monthlyMembershipAmount.toFixed(2)} is collected on the 1st of each month.
+                    Your first payment covers the weekly lessons remaining in your first month. After that, £{monthlyMembershipAmount.toFixed(2)} is collected on the 1st of each month.
                   </p>
 
                   {activities === 2 && (
