@@ -3,6 +3,7 @@ import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../_shared/
 import {
   bookingRowsValidationIssue,
   canStartCheckoutAfterLookupFailure,
+  checkoutMetadata,
   type BookingValidationIssue,
   type CheckoutPlan,
 } from "../_shared/checkout.ts";
@@ -194,13 +195,7 @@ Deno.serve(async request => {
     const exitUri = allowedRedirect(exit_url, expectedOrigin, requestOrigin);
 
     const firstPaymentAmount = plan === "membership" ? proratedMembershipAmount() : expectedAmount;
-    const metadata = {
-      booking_id,
-      payment_group_id: booking.payment_group_id || "",
-      payment_plan: plan,
-      session_id: "zumba",
-      first_payment_amount: String(firstPaymentAmount),
-    };
+    const metadata = checkoutMetadata(booking_id, booking.payment_group_id, plan as CheckoutPlan);
     const requestBody = plan === "payg"
       ? {
           payment_request: {

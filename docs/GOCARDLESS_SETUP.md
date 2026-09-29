@@ -381,6 +381,7 @@ Common causes are:
 
 | Symptom | Check |
 |---|---|
+| HTTP 422 with `No more than 3 properties are allowed` | An outdated `gocardless-checkout` function is deployed. The corrected billing request sends only `booking_id`, `payment_group_id`, and `payment_plan`; redeploy it with `npx supabase functions deploy gocardless-checkout`. |
 | `GoCardless is not configured` | `GOCARDLESS_ACCESS_TOKEN` is missing from Supabase secrets. |
 | `Invalid redirect origin: expected …, received …` | Compare the two public origins. Set `APP_URL` to the received origin only when it is the intended production/customer-facing domain. Check `https` and `www`; never allow-list a random preview domain just to bypass the check. |
 | `Invalid redirect URL` | The app sent a missing or malformed return/exit URL. Confirm Vercel deployed the latest merged frontend commit and hard-refresh the production site. |

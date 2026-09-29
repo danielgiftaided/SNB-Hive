@@ -1,5 +1,17 @@
 export type CheckoutPlan = "payg" | "membership";
 
+export function checkoutMetadata(
+  bookingId: string,
+  paymentGroupId: unknown,
+  plan: CheckoutPlan,
+) {
+  return {
+    booking_id: bookingId,
+    payment_group_id: String(paymentGroupId || ""),
+    payment_plan: plan,
+  };
+}
+
 type BookingRow = Record<string, unknown>;
 
 export type BookingValidationIssue =
