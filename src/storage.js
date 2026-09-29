@@ -31,6 +31,7 @@ const SNAKE = {
   classSize:       "class_size",
   bookingDate:     "booking_date",
   paymentGroupId:  "payment_group_id",
+  gocardlessPaymentId: "gocardless_payment_id",
   workshopType:    "workshop_type",
   otherType:       "other_type",
   numPeople:       "num_people",
