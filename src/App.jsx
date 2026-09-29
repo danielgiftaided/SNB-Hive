@@ -1024,7 +1024,8 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
   const pickerReady      = !needsClassPicker || selectedClasses.length === 2;
 
   const monthlyMembershipAmount = MEMBERSHIP_TIERS.find(t=>t.activities===activities)?.price;
-  const firstMembershipAmount = proratedMembershipAmount(new Date(), monthlyMembershipAmount * 100) / 100;
+  const membershipStartDate = new Date(`${selectedDates[0]}T12:00:00Z`);
+  const firstMembershipAmount = proratedMembershipAmount(membershipStartDate, monthlyMembershipAmount * 100) / 100;
   const amount = type==="class"
     ? (plan==="payg" ? PAYG_PRICE * selectedDates.length : firstMembershipAmount)
     : (plan==="deposit" ? session.deposit : session.price);
@@ -1223,7 +1224,6 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
                 {plan==="membership" && (<>
                   <fieldset className="rounded-xl border border-stone-200 p-3.5">
                     <legend className="px-1 text-sm font-medium text-stone-700">Choose your first lesson date</legend>
-                    <p className="text-xs text-stone-400 mb-2">Your membership will be listed against this lesson in the admin portal.</p>
                     <div className="flex flex-col gap-2">
                       {availableDates.map(date => (
                         <label key={date} className="flex items-center gap-2.5 rounded-lg bg-stone-50 px-3 py-2 text-sm cursor-pointer">
@@ -1237,16 +1237,6 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
                   <p className="text-xs text-stone-500 px-1">
                     Your first payment is prorated for the remaining days this month. After that, £{monthlyMembershipAmount.toFixed(2)} is collected on the 1st of each month.
                   </p>
-                  <div className="grid grid-cols-2 gap-2 pl-1">
-                    {MEMBERSHIP_TIERS.map(t => (
-                      <button key={t.activities} onClick={() => changeActivities(t.activities)}
-                        className="rounded-lg border px-3 py-2 text-xs font-medium text-left transition"
-                        style={{ borderColor:activities===t.activities?GOLD:"#E7E2D5", backgroundColor:activities===t.activities?"#FBF3E3":"#fff" }}>
-                        {t.activities} class{t.activities>1?"es":""}<br/>
-                        <span className="font-semibold">£{t.price}/mo</span>
-                      </button>
-                    ))}
-                  </div>
 
                   {activities === 2 && (
                     <div className="rounded-xl border border-stone-200 p-3.5">
@@ -2964,36 +2954,6 @@ function AdminPage() {
         {/* ── MEMBERS TAB ── */}
         {adminTab === "members" && (
           <div className="flex flex-col gap-4">
-        {/* Send notification */}
-        <div className="bg-white rounded-xl border border-stone-200 p-5 shadow-sm flex flex-col gap-3">
-          <p className="ff-body text-sm font-semibold flex items-center gap-2" style={{ color: INK }}>
-            <Bell size={15}/> Send notification to all members
-          </p>
-          <input value={notifSubject} onChange={e => setNSubject(e.target.value)}
-            placeholder="Subject — e.g. New class added!"
-            className="ff-body w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"/>
-          <textarea value={notifMessage} onChange={e => setNMessage(e.target.value)}
-            placeholder="Your message to all members…" rows={4}
-            className="ff-body w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 resize-none"/>
-          {notifStatus === "not_configured" && (
-            <p className="ff-body text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
-              Email not configured — deploy the Supabase Edge Function and add secrets.
-            </p>
-          )}
-          {notifStatus.startsWith("sending_") && (() => {
-            const [,sent,total] = notifStatus.split("_");
-            return <p className="ff-body text-xs text-stone-500">Sending… {sent} of {total}</p>;
-          })()}
-          {notifStatus === "sent"  && <p className="ff-body text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2">✓ Notification sent to all members!</p>}
-          {notifStatus === "error" && <p className="ff-body text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">Failed — please try again.</p>}
-          <button onClick={handleSendBlast}
-            disabled={notifStatus==="sending"||!notifSubject.trim()||!notifMessage.trim()}
-            className="ff-body inline-flex items-center justify-center gap-2 font-semibold text-sm py-2.5 rounded-full disabled:opacity-50"
-            style={{ backgroundColor: TEAL, color: "#fff" }}>
-            {notifStatus.startsWith("sending") ? <Loader2 size={14} className="animate-spin"/> : <><Send size={14}/> Send to all members</>}
-          </button>
-        </div>
-
             <div className="flex items-center gap-2">
               <div className="relative flex-1 max-w-xs">
                 <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400"/>
@@ -3034,6 +2994,36 @@ function AdminPage() {
                   </div>
                 ))
               }
+            </div>
+
+            {/* Send notification */}
+            <div className="bg-white rounded-xl border border-stone-200 p-5 shadow-sm flex flex-col gap-3">
+              <p className="ff-body text-sm font-semibold flex items-center gap-2" style={{ color: INK }}>
+                <Bell size={15}/> Send notification to all members
+              </p>
+              <input value={notifSubject} onChange={e => setNSubject(e.target.value)}
+                placeholder="Subject — e.g. New class added!"
+                className="ff-body w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"/>
+              <textarea value={notifMessage} onChange={e => setNMessage(e.target.value)}
+                placeholder="Your message to all members…" rows={4}
+                className="ff-body w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 resize-none"/>
+              {notifStatus === "not_configured" && (
+                <p className="ff-body text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
+                  Email not configured — deploy the Supabase Edge Function and add secrets.
+                </p>
+              )}
+              {notifStatus.startsWith("sending_") && (() => {
+                const [,sent,total] = notifStatus.split("_");
+                return <p className="ff-body text-xs text-stone-500">Sending… {sent} of {total}</p>;
+              })()}
+              {notifStatus === "sent"  && <p className="ff-body text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2">✓ Notification sent to all members!</p>}
+              {notifStatus === "error" && <p className="ff-body text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">Failed — please try again.</p>}
+              <button onClick={handleSendBlast}
+                disabled={notifStatus==="sending"||!notifSubject.trim()||!notifMessage.trim()}
+                className="ff-body inline-flex items-center justify-center gap-2 font-semibold text-sm py-2.5 rounded-full disabled:opacity-50"
+                style={{ backgroundColor: TEAL, color: "#fff" }}>
+                {notifStatus.startsWith("sending") ? <Loader2 size={14} className="animate-spin"/> : <><Send size={14}/> Send to all members</>}
+              </button>
             </div>
           </div>
         )}
