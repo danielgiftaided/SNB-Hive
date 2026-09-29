@@ -86,6 +86,15 @@ function messagesFor(p: Payload): Message[] {
       return [{ to: ADMIN_EMAIL, subject: `🐝 New member: ${value(p.user_name)}`, html: shell("A new member joined SNB Hive", `${value(p.user_name)} just joined SNB Hive`, paragraph("A new member has created an account.") + details([["Name", p.user_name], ["Email", p.user_email], ["Mobile", p.user_phone], ["Joined", p.signup_time]])) }];
     case "admin_booking":
       return [{ to: ADMIN_EMAIL, subject: `🐝 New class booking: ${value(p.user_name)} — ${value(p.session_name)}`, html: shell("A member booked a class", `New booking for ${value(p.session_name)}`, paragraph("A member has just booked a class. Their details are below.") + details([...bookingRows(p), ["Status", p.status], ["Booked", p.booked_at]])) }];
+    case "booking_cancelled": {
+      const cancellationDetails: [string, unknown][] = [
+        ["Member", p.user_name], ["Email", p.user_email], ["Phone", p.user_phone],
+        ["Class", p.session_name], ["Lesson date", p.booking_date], ["Cancelled", p.cancelled_at],
+      ];
+      const customer = { to, subject: `Your ${value(p.session_name)} booking has been cancelled`, html: shell("Your booking has been cancelled", "Booking cancellation confirmed", paragraph(`Hi ${value(p.to_name, "there")}, this email confirms that you cancelled your booking. Your place in ${value(p.session_name)} is no longer reserved.`) + details(cancellationDetails.slice(3))) };
+      const admin = { to: ADMIN_EMAIL, subject: `Booking cancelled: ${value(p.user_name)} — ${value(p.session_name)}`, html: shell("A member cancelled a booking", `${value(p.user_name)} cancelled ${value(p.session_name)}`, paragraph("A member has just cancelled their booking. Their details are below.") + details(cancellationDetails)) };
+      return [customer, admin];
+    }
     case "confirm_taster":
       return [{ to, subject: `Your ${value(p.session_name)} booking is confirmed! 🐝`, html: shell("Your class booking is confirmed", `You're booked for ${value(p.session_name)}!`, paragraph(`Hi ${value(p.to_name, "there")}, your place is confirmed. We can't wait to see you!`) + details([["Class", p.session_name], ["When", `${value(p.day)} · ${value(p.time)}`], ["Venue", p.venue], ["What to bring", p.what_to_bring]])), attachments: calendarAttachment(p) }];
     case "confirm_workshop": {
