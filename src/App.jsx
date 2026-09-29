@@ -7,6 +7,7 @@ import {
   Paintbrush, UserPlus, Trash2
 } from "lucide-react";
 import storage, { supabase } from "./storage.js";
+import { bookingMatchesClassDate, classBookingDates, UNDATED_BOOKING } from "./booking-utils.js";
 import { proratedMembershipAmount } from "../supabase/functions/_shared/membership.ts";
 
 /* =====================================================================
@@ -2375,11 +2376,11 @@ function StudioHireForm({ currentUser }) {
 
 function AdminClassCard({ cls, bookings }) {
   const Icon = ICONS[cls.icon] || Sparkles;
-  const dates = fridayBookingDates();
+  const dates = classBookingDates(bookings, cls.id, fridayBookingDates());
   const [selectedDate, setSelectedDate] = useState(dates[0]);
   const clsBookings = bookings
     .filter(b => b.sessionId === cls.id && b.status !== "cancelled")
-    .filter(b => !PAID_CLASS_IDS.has(cls.id) || b.bookingDate === selectedDate)
+    .filter(b => !PAID_CLASS_IDS.has(cls.id) || bookingMatchesClassDate(b, selectedDate))
     .sort((a,b) => new Date(a.createdAt||0) - new Date(b.createdAt||0));
   const pct = Math.min(100, cls.capacity ? (clsBookings.length / cls.capacity) * 100 : 0);
   const full = clsBookings.length >= cls.capacity;
@@ -2412,7 +2413,9 @@ function AdminClassCard({ cls, bookings }) {
             Lesson date
             <select value={selectedDate} onChange={event => setSelectedDate(event.target.value)}
               className="mt-1.5 block w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm font-normal text-stone-700">
-              {dates.map(date => <option key={date} value={date}>{formatBookingDate(date)}</option>)}
+              {dates.map(date => <option key={date} value={date}>
+                {date === UNDATED_BOOKING ? "Date not recorded" : formatBookingDate(date)}
+              </option>)}
             </select>
           </label>
         )}
@@ -2483,19 +2486,37 @@ function AdminPage() {
   // main user-facing app, arguably even more important here.
   useIdleLogout(unlocked, handleAdminSignOut, 30);
 
-  // Load bookings + members + studio hire enquiries once unlocked
+  // Load admin data when unlocked, then keep bookings in sync with webhook
+  // updates (including automatic GoCardless payment confirmations).
   useEffect(() => {
     if (!unlocked) return;
+    let active = true;
+    const reloadBookings = async () => {
+      const next = await storage.get("bookings");
+      if (active) setBookings(next || []);
+    };
     setLoading(true);
     Promise.all([
-      storage.get("bookings"),
+      reloadBookings(),
       storage.get("snb_users"),
       storage.get("studio_hire_enquiries"),
-    ]).then(([b, u, e]) => {
-      setBookings(b || []);
+    ]).then(([, u, e]) => {
+      if (!active) return;
       setMembers(u || []);
       setEnquiries(e || []);
     }).finally(() => setLoading(false));
+    const unsubscribe = storage.subscribeToBookings(reloadBookings);
+    const refresh = () => { if (document.visibilityState === "visible") reloadBookings(); };
+    const refreshTimer = window.setInterval(refresh, 15000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      active = false;
+      unsubscribe();
+      window.clearInterval(refreshTimer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, [unlocked]);
 
   function handleAdminSignOut() {

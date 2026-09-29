@@ -51,6 +51,14 @@ const localRemove = key => localStorage.removeItem(key);
 // ── Main adapter ──────────────────────────────────────────────────────────────
 const storage = {
 
+  subscribeToBookings(onChange) {
+    const channel = supabase
+      .channel(`bookings-${Math.random().toString(36).slice(2)}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, onChange)
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  },
+
   async get(key) {
     // Login session and verification codes → localStorage (per-device)
     if (key === "snb_session" || key.startsWith("vc_")) return localGet(key);
