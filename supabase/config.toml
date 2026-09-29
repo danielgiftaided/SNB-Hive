@@ -3,3 +3,10 @@ verify_jwt = false
 
 [functions.admin-auth]
 verify_jwt = false
+
+# Members authenticate with the app's own session rather than Supabase Auth.
+# Allow the browser to invoke the mailer with the public project key; otherwise
+# Supabase rejects cancellation requests before the function can send either
+# the member confirmation or the admin notification.
+[functions.send-email]
+verify_jwt = false
