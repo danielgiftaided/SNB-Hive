@@ -8,6 +8,7 @@
     "build":   "vite build",
     "preview": "vite preview",
     "check:edge-functions": "node scripts/check-edge-functions.mjs",
+    "test:gocardless-checkout": "node scripts/test-gocardless-checkout.mjs",
     "test:gocardless-webhook": "node scripts/test-gocardless-webhook.mjs",
     "test:booking-utils": "node scripts/test-booking-utils.mjs",
     "test:membership-proration": "node scripts/test-membership-proration.mjs"

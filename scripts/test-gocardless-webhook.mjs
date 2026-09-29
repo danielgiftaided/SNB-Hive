@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const source = await readFile("supabase/functions/gocardless-webhook/index.ts", "utf8");
-const checkoutSource = await readFile("supabase/functions/gocardless-checkout/index.ts", "utf8");
+const checkoutValidationSource = await readFile("supabase/functions/_shared/checkout.ts", "utf8");
 const appSource = await readFile("src/App.jsx", "utf8");
 const confirmedHandler = source.indexOf('event.resource_type === "payments" && event.action === "confirmed"');
 const fulfilledHandler = source.indexOf('event.resource_type !== "billing_requests" || event.action !== "fulfilled"');
@@ -15,7 +15,7 @@ assert.match(source, /gocardless_payment_id: `eq\.\$\{paymentId\}`/,
   "confirmed payments must be matched to their booking by GoCardless payment ID");
 assert.match(source, /status: "in\.\(pending_checkout,pending_payment\)"/,
   "only an unconfirmed checkout may trigger a confirmation email");
-assert.match(checkoutSource, /row\.status === "pending_checkout" \|\| row\.status === "pending_payment"/,
+assert.match(checkoutValidationSource, /row\.status === "pending_checkout" \|\| row\.status === "pending_payment"/,
   "checkout must support both provisional statuses during staggered deployments");
 assert.match(appSource, /plan: planLabel, status: "pending_payment"/,
   "paid classes must remain compatible with existing checkout deployments");
