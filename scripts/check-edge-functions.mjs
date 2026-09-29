@@ -23,6 +23,7 @@ for (const file of functions) {
 
 const emailFunction = await readFile("supabase/functions/send-email/index.ts", "utf8");
 const supabaseConfig = await readFile("supabase/config.toml", "utf8");
+const deploymentWorkflow = await readFile(".github/workflows/deploy-payment-functions.yml", "utf8");
 const cancellationChecks = [
   ['the cancellation email type', 'case "booking_cancelled"'],
   ["the member cancellation confirmation", "const customer ="],
@@ -43,6 +44,20 @@ if (!/\[functions\.send-email\]\s+verify_jwt\s*=\s*false/.test(supabaseConfig)) 
   failed = true;
 } else {
   console.log("PASS send-email accepts calls from app user sessions");
+}
+
+const deploymentChecks = [
+  ["redeploys when send-email changes", '- "supabase/functions/send-email/**"'],
+  ["deploys the send-email function", "supabase functions deploy send-email --no-verify-jwt"],
+];
+
+for (const [description, expected] of deploymentChecks) {
+  if (!deploymentWorkflow.includes(expected)) {
+    console.error(`FAIL deployment workflow ${description}`);
+    failed = true;
+  } else {
+    console.log(`PASS deployment workflow ${description}`);
+  }
 }
 
 if (failed) {

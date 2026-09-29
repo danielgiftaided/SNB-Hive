@@ -178,7 +178,11 @@ The app uses its own member sessions rather than Supabase Auth, so `send-email`
 must be deployed without Supabase JWT verification. The function sends booking
 cancellation confirmations to both the member and `ADMIN_EMAIL` (which defaults
 to `shams@snbhive.com`). Keep `RESEND_API_KEY` and the verified `SENDER_EMAIL`
-configured as Supabase secrets.
+configured as Supabase secrets. Once the `SUPABASE_ACCESS_TOKEN` and
+`SUPABASE_PROJECT_REF` repository secrets are configured, pushes to `main` that
+change the email function automatically deploy the new version through GitHub
+Actions. This prevents the deployed mailer from falling behind the email types
+used by the app.
 
 There is deliberately no default admin password in the browser bundle.
 
