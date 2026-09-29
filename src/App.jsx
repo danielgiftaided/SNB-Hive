@@ -322,6 +322,32 @@ function StatusBadge({ status }) {
   );
 }
 
+function BookingActions({ booking, onStatusChange }) {
+  const isCancelled = booking.status === "cancelled";
+
+  return (
+    <select
+      aria-label={`Actions for ${booking.name || "booking"}`}
+      value=""
+      onChange={event => {
+        if (event.target.value) onStatusChange(booking.id, event.target.value);
+      }}
+      className="ff-body rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-xs text-stone-600 focus:outline-none focus:ring-2"
+      style={{ "--tw-ring-color": TEAL }}
+    >
+      <option value="" disabled>Actions</option>
+      {isCancelled ? (
+        <option value="pending_payment">Restore</option>
+      ) : (
+        <>
+          <option value="paid" disabled={booking.status === "paid"}>Paid</option>
+          <option value="cancelled">Cancelled</option>
+        </>
+      )}
+    </select>
+  );
+}
+
 function CapacityRing({ booked, capacity, color }) {
   const pct = Math.min(1, capacity ? booked / capacity : 0);
   const r = 22, c = 2 * Math.PI * r;
@@ -2504,7 +2530,7 @@ function AdminPage() {
   const [members, setMembers]     = useState([]);
   const [enquiries, setEnquiries] = useState([]);
   const [loading, setLoading]     = useState(false);
-  const [adminTab, setAdminTab]   = useState("bookings");
+  const [adminTab, setAdminTab]   = useState("members");
   const [statusFilter, setFilter] = useState("all");
   const [query, setQuery]         = useState("");
   const [memberQuery, setMQuery]  = useState("");
@@ -2721,11 +2747,6 @@ function AdminPage() {
             </div>
           </>)}
 
-          <p className="ff-body text-xs text-center mt-2 rounded-lg px-2 py-1.5"
-             style={{ backgroundColor: import.meta.env.VITE_SUPABASE_URL ? "#E9F1EC" : "#F3E7E5",
-                      color: import.meta.env.VITE_SUPABASE_URL ? "#1F4A42" : "#9B3A2E" }}>
-            {import.meta.env.VITE_SUPABASE_URL ? "✓ Supabase connected" : "✗ VITE_SUPABASE_URL missing — check Vercel env vars & redeploy"}
-          </p>
         </div>
       </div>
     </div>
@@ -2788,7 +2809,7 @@ function AdminPage() {
 
         {/* Tab navigation */}
         <div className="flex gap-1 bg-stone-100 rounded-full p-1 w-fit">
-          {[["bookings","Bookings"],["members","Members"],["classes","Classes"],["studio-hire","Studio Hire"]].map(([key, label]) => {
+          {[["members","Members"],["bookings","Bookings"],["classes","Classes"],["studio-hire","Studio Hire"]].map(([key, label]) => {
             const count = key==="members" ? members.length
               : key==="classes" ? DEFAULT_CLASSES.length
               : key==="studio-hire" ? enquiries.length
@@ -2893,25 +2914,8 @@ function AdminPage() {
                           {hasValidBookedOn ? bookedOn.toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" }) : "—"}
                         </td>
                         <td className="px-3 py-3">
-                          <div className="flex gap-1 justify-end">
-                            {b.status === "pending_payment" && (
-                              <button onClick={() => updateStatus(b.id,"paid")} title="Mark paid"
-                                className="p-1.5 rounded-lg hover:bg-stone-100" style={{ color: TEAL }}>
-                                <Check size={15}/>
-                              </button>
-                            )}
-                            {b.status === "paid" && (
-                              <button onClick={() => updateStatus(b.id,"pending_payment")} title="Undo"
-                                className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400">
-                                <Undo2 size={15}/>
-                              </button>
-                            )}
-                            {b.status !== "cancelled"
-                              ? <button onClick={() => updateStatus(b.id,"cancelled")} title="Cancel"
-                                  className="p-1.5 rounded-lg hover:bg-stone-100 text-red-400"><Ban size={15}/></button>
-                              : <button onClick={() => updateStatus(b.id,"pending_payment")} title="Restore"
-                                  className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400"><RotateCcw size={15}/></button>
-                            }
+                          <div className="flex justify-end">
+                            <BookingActions booking={b} onStatusChange={updateStatus}/>
                           </div>
                         </td>
                       </tr>
@@ -2943,13 +2947,7 @@ function AdminPage() {
                       </div>
                       <div className="flex items-center justify-between border-t border-stone-100 pt-2">
                         <p className="ff-body text-xs text-stone-500">Booked {bookedOn && !Number.isNaN(bookedOn.getTime()) ? bookedOn.toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" }) : "—"}</p>
-                        <div className="flex gap-1">
-                          {b.status === "pending_payment" && <button onClick={() => updateStatus(b.id,"paid")} title="Mark paid" className="p-1.5 rounded-lg hover:bg-stone-100" style={{ color: TEAL }}><Check size={15}/></button>}
-                          {b.status === "paid" && <button onClick={() => updateStatus(b.id,"pending_payment")} title="Undo" className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400"><Undo2 size={15}/></button>}
-                          {b.status !== "cancelled"
-                            ? <button onClick={() => updateStatus(b.id,"cancelled")} title="Cancel" className="p-1.5 rounded-lg hover:bg-stone-100 text-red-400"><Ban size={15}/></button>
-                            : <button onClick={() => updateStatus(b.id,"pending_payment")} title="Restore" className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400"><RotateCcw size={15}/></button>}
-                        </div>
+                        <BookingActions booking={b} onStatusChange={updateStatus}/>
                       </div>
                     </div>
                   );
