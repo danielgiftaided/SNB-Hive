@@ -21,5 +21,13 @@ assert.match(appSource, /plan: planLabel, status: "pending_payment"/,
   "paid classes must remain compatible with existing checkout deployments");
 assert.match(appSource, /id: i === 0 \? paymentGroupId : uid\(\), paymentGroupId/,
   "multi-class memberships must share a payment group and valid checkout ID");
+assert.match(source, /billingRequest\.metadata\?\.booking_id/,
+  "the webhook must locate a booking from billing-request metadata");
+assert.match(source, /billingRequest\.metadata\?\.payment_group_id/,
+  "the webhook must update the complete booking group from billing-request metadata");
+assert.match(source, /billingRequest\.metadata\?\.payment_plan === "membership"/,
+  "the webhook must use billing-request metadata to create membership subscriptions");
+assert.match(source, /await gc\("\/subscriptions"/,
+  "fulfilled monthly membership billing requests must still create a subscription");
 
 console.log("PASS booking email waits for a confirmed GoCardless payment and is idempotent");

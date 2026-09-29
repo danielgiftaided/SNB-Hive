@@ -3,6 +3,7 @@ import {
   bookingRowsAreValid,
   bookingRowsValidationIssue,
   canStartCheckoutAfterLookupFailure,
+  checkoutMetadata,
 } from "../supabase/functions/_shared/checkout.ts";
 import { checkoutErrorDetail, singleMembershipBooking } from "../src/checkout.js";
 import { bookingRowsForUpsert } from "../src/storage-shape.js";
@@ -17,6 +18,18 @@ const browserMembership = singleMembershipBooking({
 });
 const [membership] = bookingRowsForUpsert([browserMembership]);
 const persistedGroup = [membership];
+
+const membershipMetadata = checkoutMetadata("booking-1", "group-1", "membership");
+assert.deepEqual(membershipMetadata, {
+  booking_id: "booking-1",
+  payment_group_id: "group-1",
+  payment_plan: "membership",
+});
+assert.equal(
+  Object.keys(membershipMetadata).length,
+  3,
+  "billing-request metadata must stay within GoCardless's three-property limit",
+);
 
 assert.equal(membership.id, membership.payment_group_id);
 assert.equal(membership.session_id, "zumba");
