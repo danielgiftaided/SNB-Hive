@@ -227,6 +227,9 @@ create table bookings (
   plan         text,
   amount       numeric,
   status       text default 'pending_payment',
+  booking_date date,
+  payment_group_id text,
+  gocardless_payment_id text,
   created_at   timestamptz default now()
 );
 

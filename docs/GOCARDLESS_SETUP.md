@@ -108,6 +108,18 @@ npx supabase projects list
 
 The intended project should have a marker beside it.
 
+Apply the repository's database migrations to that project before deploying or
+testing the payment functions:
+
+```bash
+npx supabase db push
+```
+
+Do not skip this command. The booking flow writes `booking_date` and
+`payment_group_id`, and the webhook records `gocardless_payment_id`. Deploying
+the website without applying the migrations causes checkout to stop before any
+payment is taken.
+
 ## 3. Create a GoCardless sandbox access token
 
 1. Sign in to the **GoCardless sandbox dashboard** (not the live dashboard).
@@ -258,6 +270,18 @@ create a second subscription for the same booking.
 ## 7. Check logs if a test does not work
 
 ### Checkout does not open and the booking popup shows an error
+
+If the reason says `Could not find the 'booking_date' column of 'bookings' in
+the schema cache`, the live database has not received the booking migrations.
+From the linked repository, run:
+
+```bash
+npx supabase db push
+```
+
+Wait a few seconds for the API schema to reload, then retry the booking. The
+latest repair migration explicitly reloads the PostgREST schema cache. Do not
+manually mark the migration as applied without running its SQL.
 
 The popup now shows the safe reason returned by `gocardless-checkout`. Copy
 that reason (for example, `Invalid redirect origin: expected
