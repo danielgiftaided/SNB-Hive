@@ -2849,18 +2849,20 @@ function AdminPage() {
           ) : filtered.length === 0 ? (
             <p className="ff-body text-sm text-stone-400 text-center py-16">No bookings match this filter.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1100px] border-collapse text-left">
+            <div>
+              <table className="hidden sm:table w-full table-fixed border-collapse text-left">
+                <colgroup>
+                  <col className="w-[24%]"/><col className="w-[25%]"/><col className="w-[10%]"/>
+                  <col className="w-[14%]"/><col className="w-[15%]"/><col className="w-[12%]"/>
+                </colgroup>
                 <thead className="bg-stone-50 border-b border-stone-200">
                   <tr className="ff-body text-xs font-semibold text-stone-500">
-                    <th scope="col" className="px-4 py-3">Name</th>
-                    <th scope="col" className="px-4 py-3">Email address</th>
-                    <th scope="col" className="px-4 py-3">Phone number</th>
-                    <th scope="col" className="px-4 py-3">Booking</th>
-                    <th scope="col" className="px-4 py-3 text-right">Amount</th>
-                    <th scope="col" className="px-4 py-3">Status</th>
-                    <th scope="col" className="px-4 py-3">Booked on</th>
-                    <th scope="col" className="px-4 py-3 text-right">Actions</th>
+                    <th scope="col" className="px-3 py-3">Member</th>
+                    <th scope="col" className="px-3 py-3">Booking</th>
+                    <th scope="col" className="px-2 py-3 text-right">Amount</th>
+                    <th scope="col" className="px-3 py-3">Status</th>
+                    <th scope="col" className="px-3 py-3">Booked on</th>
+                    <th scope="col" className="px-3 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
@@ -2870,24 +2872,26 @@ function AdminPage() {
                     const hasValidBookedOn = bookedOn && !Number.isNaN(bookedOn.getTime());
                     return (
                       <tr key={b.id} className="hover:bg-stone-50 transition align-middle">
-                        <td className="ff-body font-medium text-sm px-4 py-3" style={{ color: INK }}>{b.name || "—"}</td>
-                        <td className="ff-body text-sm text-stone-600 px-4 py-3">{b.email || "—"}</td>
-                        <td className="ff-body text-sm text-stone-600 px-4 py-3 whitespace-nowrap">{b.phone || "—"}</td>
-                        <td className="px-4 py-3 min-w-[190px]">
+                        <td className="px-3 py-3 min-w-0">
+                          <p className="ff-body font-medium text-sm truncate" style={{ color: INK }}>{b.name || "—"}</p>
+                          <p className="ff-body text-xs text-stone-500 truncate" title={b.email}>{b.email || "—"}</p>
+                          <p className="ff-body text-xs text-stone-400 truncate">{b.phone || "—"}</p>
+                        </td>
+                        <td className="px-3 py-3 min-w-0">
                           <p className="ff-body text-sm font-medium">{b.sessionName || "—"}</p>
                           {session?.day && session?.time && (
                             <p className="ff-body text-xs text-stone-500">{session.day} · {session.time}</p>
                           )}
                           <p className="ff-body text-xs text-stone-400 mt-0.5">{b.plan}</p>
                         </td>
-                        <td className="ff-body text-sm font-semibold px-4 py-3 text-right whitespace-nowrap">
+                        <td className="ff-body text-sm font-semibold px-2 py-3 text-right whitespace-nowrap">
                           £{typeof b.amount === "number" ? b.amount.toFixed(2) : b.amount}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap"><StatusBadge status={b.status}/></td>
-                        <td className="ff-body text-sm text-stone-600 px-4 py-3 whitespace-nowrap">
+                        <td className="px-3 py-3"><StatusBadge status={b.status}/></td>
+                        <td className="ff-body text-xs text-stone-600 px-3 py-3">
                           {hasValidBookedOn ? bookedOn.toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" }) : "—"}
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-3 py-3">
                           <div className="flex gap-1 justify-end">
                             {b.status === "pending_payment" && (
                               <button onClick={() => updateStatus(b.id,"paid")} title="Mark paid"
@@ -2914,10 +2918,52 @@ function AdminPage() {
                   })}
                 </tbody>
               </table>
+              <div className="sm:hidden divide-y divide-stone-100">
+                {filtered.map(b => {
+                  const session = getSessionInfo(b.sessionId);
+                  const bookedOn = b.createdAt ? new Date(b.createdAt) : null;
+                  return (
+                    <div key={b.id} className="p-4 flex flex-col gap-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="ff-body font-semibold text-sm truncate" style={{ color: INK }}>{b.name || "—"}</p>
+                          <p className="ff-body text-xs text-stone-500 break-all">{b.email || "—"}</p>
+                          <p className="ff-body text-xs text-stone-400">{b.phone || "—"}</p>
+                        </div>
+                        <StatusBadge status={b.status}/>
+                      </div>
+                      <div className="flex justify-between gap-3">
+                        <div>
+                          <p className="ff-body text-sm font-medium">{b.sessionName || "—"}</p>
+                          {session?.day && session?.time && <p className="ff-body text-xs text-stone-500">{session.day} · {session.time}</p>}
+                          <p className="ff-body text-xs text-stone-400">{b.plan}</p>
+                        </div>
+                        <p className="ff-body text-sm font-semibold whitespace-nowrap">£{typeof b.amount === "number" ? b.amount.toFixed(2) : b.amount}</p>
+                      </div>
+                      <div className="flex items-center justify-between border-t border-stone-100 pt-2">
+                        <p className="ff-body text-xs text-stone-500">Booked {bookedOn && !Number.isNaN(bookedOn.getTime()) ? bookedOn.toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" }) : "—"}</p>
+                        <div className="flex gap-1">
+                          {b.status === "pending_payment" && <button onClick={() => updateStatus(b.id,"paid")} title="Mark paid" className="p-1.5 rounded-lg hover:bg-stone-100" style={{ color: TEAL }}><Check size={15}/></button>}
+                          {b.status === "paid" && <button onClick={() => updateStatus(b.id,"pending_payment")} title="Undo" className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400"><Undo2 size={15}/></button>}
+                          {b.status !== "cancelled"
+                            ? <button onClick={() => updateStatus(b.id,"cancelled")} title="Cancel" className="p-1.5 rounded-lg hover:bg-stone-100 text-red-400"><Ban size={15}/></button>
+                            : <button onClick={() => updateStatus(b.id,"pending_payment")} title="Restore" className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400"><RotateCcw size={15}/></button>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
 
+
+        </> /* end bookings tab */}
+
+        {/* ── MEMBERS TAB ── */}
+        {adminTab === "members" && (
+          <div className="flex flex-col gap-4">
         {/* Send notification */}
         <div className="bg-white rounded-xl border border-stone-200 p-5 shadow-sm flex flex-col gap-3">
           <p className="ff-body text-sm font-semibold flex items-center gap-2" style={{ color: INK }}>
@@ -2948,11 +2994,6 @@ function AdminPage() {
           </button>
         </div>
 
-        </> /* end bookings tab */}
-
-        {/* ── MEMBERS TAB ── */}
-        {adminTab === "members" && (
-          <div className="flex flex-col gap-4">
             <div className="flex items-center gap-2">
               <div className="relative flex-1 max-w-xs">
                 <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400"/>
@@ -3160,7 +3201,21 @@ function BookingApp() {
     setCurrentUser(null); setBookings([]);
   }
   async function cancelMyBooking(id) {
+    const booking = bookings.find(b => b.id === id);
+    if (!booking) return;
+    const session = getSessionInfo(booking.sessionId);
     await persist(bookings.map(b => b.id===id ? {...b, status:"cancelled"} : b));
+    callEdgeFunction("send-email", {
+      type: "booking_cancelled",
+      to_email: booking.email || currentUser.email,
+      to_name: booking.name || currentUser.name,
+      user_name: booking.name || currentUser.name,
+      user_email: booking.email || currentUser.email,
+      user_phone: booking.phone || currentUser.phone,
+      session_name: booking.sessionName,
+      booking_date: booking.bookingDate ? formatBookingDate(booking.bookingDate) : [session?.day, session?.time].filter(Boolean).join(" · ") || "Not specified",
+      cancelled_at: new Date().toLocaleString("en-GB"),
+    }).catch(error => console.error("[SNB cancellation email FAILED]:", error.message));
   }
   async function joinWaitlist(cls) {
     if (!currentUser) return;
