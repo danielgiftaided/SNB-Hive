@@ -19,7 +19,7 @@ async function getBooking(id: string) {
   if (!url || !serviceKey) throw new Error("Supabase function environment is not configured");
   const query = new URLSearchParams({
     id: `eq.${id}`,
-    select: "id,session_id,plan,amount,status,payment_group_id",
+    select: "id,session_id,plan,amount,status,payment_group_id,booking_date",
     limit: "1",
   });
   const response = await fetch(`${url}/rest/v1/bookings?${query}`, {
@@ -43,7 +43,7 @@ async function getPaymentGroup(groupId: string) {
   const url = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !serviceKey) throw new Error("Supabase function environment is not configured");
-  const query = new URLSearchParams({ payment_group_id: `eq.${groupId}`, select: "id,session_id,plan,amount,status,payment_group_id" });
+  const query = new URLSearchParams({ payment_group_id: `eq.${groupId}`, select: "id,session_id,plan,amount,status,payment_group_id,booking_date" });
   const response = await fetch(`${url}/rest/v1/bookings?${query}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
   if (!response.ok) throw new Error("Booking group lookup failed");
   return await response.json();
@@ -194,7 +194,12 @@ Deno.serve(async request => {
     const redirectUri = allowedRedirect(return_url, expectedOrigin, requestOrigin);
     const exitUri = allowedRedirect(exit_url, expectedOrigin, requestOrigin);
 
-    const firstPaymentAmount = plan === "membership" ? proratedMembershipAmount() : expectedAmount;
+    const membershipStartDate = booking.booking_date
+      ? new Date(`${booking.booking_date}T12:00:00Z`)
+      : new Date();
+    const firstPaymentAmount = plan === "membership"
+      ? proratedMembershipAmount(membershipStartDate)
+      : expectedAmount;
     const metadata = checkoutMetadata(booking_id, booking.payment_group_id, plan as CheckoutPlan);
     const requestBody = plan === "payg"
       ? {
