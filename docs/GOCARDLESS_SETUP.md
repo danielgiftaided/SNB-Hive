@@ -283,6 +283,32 @@ Wait a few seconds for the API schema to reload, then retry the booking. The
 latest repair migration explicitly reloads the PostgREST schema cache. Do not
 manually mark the migration as applied without running its SQL.
 
+If `npx supabase db push` is unavailable, repair the live project directly:
+
+1. Open **Supabase Dashboard → SQL Editor → New query** for the same project
+   used by `VITE_SUPABASE_URL`.
+2. Paste the complete contents of
+   `supabase/migrations/20261001000000_ensure_booking_checkout_schema.sql` and
+   choose **Run**.
+3. Run this verification query. It must return all three rows before testing
+   checkout again:
+
+   ```sql
+   select column_name
+   from information_schema.columns
+   where table_schema = 'public'
+     and table_name = 'bookings'
+     and column_name in (
+       'booking_date',
+       'payment_group_id',
+       'gocardless_payment_id'
+     )
+   order by column_name;
+   ```
+
+Redeploying the website or Edge Functions alone cannot add database columns;
+the migration SQL must run against the live database.
+
 The popup now shows the safe reason returned by `gocardless-checkout`. Copy
 that reason (for example, `Invalid redirect origin: expected
 https://book.snbhive.com, received https://www.snbhive.com`, `Booking lookup
