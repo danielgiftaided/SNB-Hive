@@ -2849,49 +2849,71 @@ function AdminPage() {
           ) : filtered.length === 0 ? (
             <p className="ff-body text-sm text-stone-400 text-center py-16">No bookings match this filter.</p>
           ) : (
-            <div className="divide-y divide-stone-100">
-              {filtered.map(b => {
-                const session = getSessionInfo(b.sessionId);
-                return (
-                <div key={b.id} className="flex flex-wrap items-center gap-3 px-4 py-3 hover:bg-stone-50 transition">
-                  <div className="min-w-[160px] flex-1">
-                    <p className="ff-body font-medium text-sm" style={{ color: INK }}>{b.name}</p>
-                    <p className="ff-body text-xs text-stone-400">{b.email}{b.phone ? ` · ${b.phone}` : ""}</p>
-                  </div>
-                  <div className="min-w-[140px] flex-1">
-                    <p className="ff-body text-sm font-medium">{b.sessionName}</p>
-                    {session?.day && session?.time && (
-                      <p className="ff-body text-xs text-stone-500">{session.day} · {session.time}</p>
-                    )}
-                    <p className="ff-body text-xs text-stone-400 mt-0.5">{b.plan}</p>
-                  </div>
-                  <div className="ff-body text-sm font-semibold w-16 text-right">
-                    £{typeof b.amount === "number" ? b.amount.toFixed(2) : b.amount}
-                  </div>
-                  <StatusBadge status={b.status}/>
-                  <div className="flex gap-1 ml-auto">
-                    {b.status === "pending_payment" && (
-                      <button onClick={() => updateStatus(b.id,"paid")} title="Mark paid"
-                        className="p-1.5 rounded-lg hover:bg-stone-100" style={{ color: TEAL }}>
-                        <Check size={15}/>
-                      </button>
-                    )}
-                    {b.status === "paid" && (
-                      <button onClick={() => updateStatus(b.id,"pending_payment")} title="Undo"
-                        className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400">
-                        <Undo2 size={15}/>
-                      </button>
-                    )}
-                    {b.status !== "cancelled"
-                      ? <button onClick={() => updateStatus(b.id,"cancelled")} title="Cancel"
-                          className="p-1.5 rounded-lg hover:bg-stone-100 text-red-400"><Ban size={15}/></button>
-                      : <button onClick={() => updateStatus(b.id,"pending_payment")} title="Restore"
-                          className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400"><RotateCcw size={15}/></button>
-                    }
-                  </div>
-                </div>
-                );
-              })}
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1100px] border-collapse text-left">
+                <thead className="bg-stone-50 border-b border-stone-200">
+                  <tr className="ff-body text-xs font-semibold text-stone-500">
+                    <th scope="col" className="px-4 py-3">Name</th>
+                    <th scope="col" className="px-4 py-3">Email address</th>
+                    <th scope="col" className="px-4 py-3">Phone number</th>
+                    <th scope="col" className="px-4 py-3">Booking</th>
+                    <th scope="col" className="px-4 py-3 text-right">Amount</th>
+                    <th scope="col" className="px-4 py-3">Status</th>
+                    <th scope="col" className="px-4 py-3">Booked on</th>
+                    <th scope="col" className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {filtered.map(b => {
+                    const session = getSessionInfo(b.sessionId);
+                    const bookedOn = b.createdAt ? new Date(b.createdAt) : null;
+                    const hasValidBookedOn = bookedOn && !Number.isNaN(bookedOn.getTime());
+                    return (
+                      <tr key={b.id} className="hover:bg-stone-50 transition align-middle">
+                        <td className="ff-body font-medium text-sm px-4 py-3" style={{ color: INK }}>{b.name || "—"}</td>
+                        <td className="ff-body text-sm text-stone-600 px-4 py-3">{b.email || "—"}</td>
+                        <td className="ff-body text-sm text-stone-600 px-4 py-3 whitespace-nowrap">{b.phone || "—"}</td>
+                        <td className="px-4 py-3 min-w-[190px]">
+                          <p className="ff-body text-sm font-medium">{b.sessionName || "—"}</p>
+                          {session?.day && session?.time && (
+                            <p className="ff-body text-xs text-stone-500">{session.day} · {session.time}</p>
+                          )}
+                          <p className="ff-body text-xs text-stone-400 mt-0.5">{b.plan}</p>
+                        </td>
+                        <td className="ff-body text-sm font-semibold px-4 py-3 text-right whitespace-nowrap">
+                          £{typeof b.amount === "number" ? b.amount.toFixed(2) : b.amount}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap"><StatusBadge status={b.status}/></td>
+                        <td className="ff-body text-sm text-stone-600 px-4 py-3 whitespace-nowrap">
+                          {hasValidBookedOn ? bookedOn.toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" }) : "—"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-1 justify-end">
+                            {b.status === "pending_payment" && (
+                              <button onClick={() => updateStatus(b.id,"paid")} title="Mark paid"
+                                className="p-1.5 rounded-lg hover:bg-stone-100" style={{ color: TEAL }}>
+                                <Check size={15}/>
+                              </button>
+                            )}
+                            {b.status === "paid" && (
+                              <button onClick={() => updateStatus(b.id,"pending_payment")} title="Undo"
+                                className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400">
+                                <Undo2 size={15}/>
+                              </button>
+                            )}
+                            {b.status !== "cancelled"
+                              ? <button onClick={() => updateStatus(b.id,"cancelled")} title="Cancel"
+                                  className="p-1.5 rounded-lg hover:bg-stone-100 text-red-400"><Ban size={15}/></button>
+                              : <button onClick={() => updateStatus(b.id,"pending_payment")} title="Restore"
+                                  className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400"><RotateCcw size={15}/></button>
+                            }
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
