@@ -13,6 +13,7 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
+import { bookingRowsForUpsert, toCamel, toSnake } from "./storage-shape.js";
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -20,30 +21,6 @@ const supabase = createClient(
 );
 
 // ── Column name mapping (JS camelCase ↔ database snake_case) ─────────────────
-const SNAKE = {
-  passwordHash:    "password_hash",
-  createdAt:       "created_at",
-  sessionId:       "session_id",
-  sessionName:     "session_name",
-  userId:          "user_id",
-  fitnessType:     "fitness_type",
-  sessionsPerWeek: "sessions_per_week",
-  classSize:       "class_size",
-  bookingDate:     "booking_date",
-  paymentGroupId:  "payment_group_id",
-  gocardlessPaymentId: "gocardless_payment_id",
-  workshopType:    "workshop_type",
-  otherType:       "other_type",
-  numPeople:       "num_people",
-};
-const CAMEL = Object.fromEntries(Object.entries(SNAKE).map(([k, v]) => [v, k]));
-
-const toSnake = obj =>
-  Object.fromEntries(Object.entries(obj).map(([k, v]) => [SNAKE[k] || k, v]));
-
-const toCamel = obj =>
-  Object.fromEntries(Object.entries(obj).map(([k, v]) => [CAMEL[k] || k, v]));
-
 // ── localStorage helpers (session + verification codes only) ──────────────────
 const localGet    = key => { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : null; } catch { return null; } };
 const localSet    = (key, val) => { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} };
@@ -109,7 +86,7 @@ const storage = {
     // Bookings → upsert into Supabase
     if (key === "bookings") {
       if (!value?.length) return;
-      const rows = value.map(toSnake);
+      const rows = bookingRowsForUpsert(value);
       const { error } = await supabase.from("bookings").upsert(rows);
       if (error) { console.error("[storage] set bookings:", error.message); throw new Error(error.message); }
       return;
