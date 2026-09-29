@@ -1,5 +1,6 @@
 import { corsHeaders, json } from "../_shared/http.ts";
 import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../_shared/membership.ts";
+import { bookingRowsAreValid, type CheckoutPlan } from "../_shared/checkout.ts";
 
 const GC_API = Deno.env.get("GOCARDLESS_API_URL") || "https://api.gocardless.com";
 const GC_VERSION = "2015-07-06";
@@ -39,6 +40,40 @@ async function getPaymentGroup(groupId: string) {
   const response = await fetch(`${url}/rest/v1/bookings?${query}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
   if (!response.ok) throw new Error("Booking group lookup failed");
   return await response.json();
+}
+
+const BOOKING_LOOKUP_ATTEMPTS = 5;
+const BOOKING_LOOKUP_DELAY_MS = 200;
+
+// The browser saves the pending booking immediately before calling this
+// function. In hosted Supabase projects, the Edge Function's REST lookup can
+// briefly lag behind that completed browser write. Retry both a missing row
+// and an incomplete payment group rather than rejecting a valid checkout.
+async function getVerifiedBooking(id: string, plan: CheckoutPlan) {
+  for (let attempt = 1; attempt <= BOOKING_LOOKUP_ATTEMPTS; attempt++) {
+    const booking = await getBooking(id);
+    const group = plan === "payg" && booking?.payment_group_id
+      ? await getPaymentGroup(booking.payment_group_id)
+      : booking ? [booking] : [];
+
+    if (bookingRowsAreValid(booking, group, plan, PRICES.payg)) {
+      return { booking, group };
+    }
+
+    console.warn("Booking not ready for checkout", {
+      booking_id: id,
+      plan,
+      attempt,
+      found: Boolean(booking),
+      group_size: group.length,
+      statuses: group.map((row: Record<string, unknown>) => row.status),
+      session_ids: group.map((row: Record<string, unknown>) => row.session_id),
+    });
+    if (attempt < BOOKING_LOOKUP_ATTEMPTS) {
+      await new Promise(resolve => setTimeout(resolve, BOOKING_LOOKUP_DELAY_MS));
+    }
+  }
+  return null;
 }
 
 async function gc(path: string, body: unknown) {
@@ -107,22 +142,14 @@ Deno.serve(async request => {
       return json({ error: "This payment option is not available" }, 400);
     }
 
-    const booking = await getBooking(booking_id);
-    const group = plan === "payg" && booking?.payment_group_id ? await getPaymentGroup(booking.payment_group_id) : [booking];
+    const verified = await getVerifiedBooking(booking_id, plan as CheckoutPlan);
+    if (!verified) {
+      return json({ error: "Booking could not be verified" }, 400);
+    }
+    const { booking, group } = verified;
     const expectedAmount = plan === "payg"
       ? group.reduce((sum: number, row: Record<string, unknown>) => sum + Math.round(Number(row.amount) * 100), 0)
       : PRICES.membership;
-    // Accept the original pending_payment value as well as pending_checkout so
-    // frontend and Edge Function deployments can be rolled out independently.
-    // Both values are pre-payment states; the signed webhook remains solely
-    // responsible for confirming the booking as paid.
-    const validGroup = group.length > 0 && group.every((row: Record<string, unknown>) =>
-      row && row.session_id === "zumba" &&
-      (row.status === "pending_checkout" || row.status === "pending_payment") &&
-      (plan !== "payg" || Math.round(Number(row.amount) * 100) === PRICES.payg));
-    if (!booking || !validGroup) {
-      return json({ error: "Booking could not be verified" }, 400);
-    }
 
     // Validate both browser-provided redirects against the configured public
     // origin before creating anything in GoCardless. The request Origin header
