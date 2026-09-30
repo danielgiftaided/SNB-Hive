@@ -4,8 +4,10 @@ The app is already configured to offer these choices when a customer presses
 **Book** on Zumba:
 
 - **Pay as you go:** £10, collected once by Direct Debit
-- **Monthly membership:** a prorated first payment for the remaining calendar
-  days in the joining month, then £35 on the 1st of each month by Direct Debit
+- **Monthly membership:** a prorated first payment for the remaining weekly
+  lessons in the joining month, calculated at one quarter of the monthly price
+  per lesson even in five-Friday months, then £35 on the 1st of each month by
+  Direct Debit
 
 The customer chooses an option in the booking popup and is then redirected to
 GoCardless to enter and authorise her bank details. Bank details and the

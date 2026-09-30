@@ -13,8 +13,8 @@ const browserMembership = singleMembershipBooking({
   base: { plan: "Membership — 1 class", status: "pending_payment" },
   bookingId: "booking-1",
   session: { id: "zumba", name: "Zumba" },
-  amount: proratedMembershipAmount(new Date("2026-10-02T12:00:00Z")) / 100,
-  bookingDate: "2026-10-02",
+  amount: proratedMembershipAmount(new Date("2026-10-09T12:00:00Z")) / 100,
+  bookingDate: "2026-10-09",
 });
 const [membership] = bookingRowsForUpsert([browserMembership]);
 const persistedGroup = [membership];
@@ -35,7 +35,7 @@ assert.equal(membership.id, membership.payment_group_id);
 assert.equal(membership.session_id, "zumba");
 assert.equal(membership.plan, "Membership — 1 class");
 assert.equal(membership.status, "pending_payment");
-assert.equal(membership.booking_date, "2026-10-02");
+assert.equal(membership.booking_date, "2026-10-09");
 assert.equal(membership.amount, 35);
 assert.equal(persistedGroup.length, 1);
 

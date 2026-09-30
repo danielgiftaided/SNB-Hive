@@ -4,7 +4,8 @@ import { proratedMembershipAmount } from "../supabase/functions/_shared/membersh
 const octoberLessonDates = ["2026-10-02", "2026-10-09", "2026-10-16", "2026-10-23", "2026-10-30"];
 assert.deepEqual(
   octoberLessonDates.map(date => proratedMembershipAmount(new Date(`${date}T12:00:00Z`))),
-  [3500, 2800, 2100, 1400, 700],
+  [4375, 3500, 2625, 1750, 875],
+  "a five-Friday month must still use the four-lesson monthly rate",
 );
 
 const novemberLessonDates = ["2026-11-06", "2026-11-13", "2026-11-20", "2026-11-27"];
@@ -15,8 +16,8 @@ assert.deepEqual(
 
 assert.equal(
   proratedMembershipAmount(new Date("2026-10-16T12:00:00Z"), 7000),
-  4200,
+  5250,
   "the same lesson-based calculation applies to the two-activity tier",
 );
 
-console.log("PASS membership proration uses the remaining weekly lessons in the first month");
+console.log("PASS membership proration always uses a four-lesson month");
