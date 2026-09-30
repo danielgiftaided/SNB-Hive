@@ -78,6 +78,16 @@ const MEMBERSHIP_TIERS = [{ activities: 1, price: 35 }];
 
 const PAYG_PRICE = 10;
 
+// Keep the currently bookable Zumba block explicit so Pay As You Go and
+// membership customers are always offered the same lesson dates. The chosen
+// membership date also drives the first-payment proration calculation below.
+const ZUMBA_BOOKING_DATES = [
+  "2026-10-09",
+  "2026-10-16",
+  "2026-10-23",
+  "2026-10-30",
+];
+
 const DEFAULT_RETREATS = [
   { id: "retreat-1", name: "Women's Wellness Retreat", location: "Surrey Hills", dates: "Fri 18 – Sun 20 Sept", price: 950, deposit: 300, capacity: 15 },
 ];
@@ -1024,7 +1034,7 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
   const [saving, setSaving]       = useState(false);
   const [bankRef, setBankRef]     = useState("");
   const [error, setError]         = useState("");
-  const availableDates = fridayBookingDates();
+  const availableDates = session.id === "zumba" ? ZUMBA_BOOKING_DATES : fridayBookingDates();
   const [selectedDates, setSelectedDates] = useState([availableDates[0]]);
 
   function toggleDate(date) {
@@ -2421,7 +2431,8 @@ function StudioHireForm({ currentUser }) {
 
 function AdminClassCard({ cls, bookings, onMoveBooking }) {
   const Icon = ICONS[cls.icon] || Sparkles;
-  const dates = classBookingDates(bookings, cls.id, fridayBookingDates());
+  const upcomingDates = cls.id === "zumba" ? ZUMBA_BOOKING_DATES : fridayBookingDates();
+  const dates = classBookingDates(bookings, cls.id, upcomingDates);
   const [selectedDate, setSelectedDate] = useState(dates[0]);
   const clsBookings = bookings
     .filter(b => b.sessionId === cls.id && bookingIsActive(b))
