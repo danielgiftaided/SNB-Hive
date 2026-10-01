@@ -9,6 +9,7 @@ import {
 import storage, { supabase } from "./storage.js";
 import { bookingIsActive, bookingMatchesClassDate, classBookingDates, UNDATED_BOOKING } from "./booking-utils.js";
 import { proratedMembershipAmount } from "../supabase/functions/_shared/membership.ts";
+import { membershipDatesFrom } from "../supabase/functions/_shared/membership-bookings.ts";
 import { checkoutErrorDetail, singleMembershipBooking } from "./checkout.js";
 
 /* =====================================================================
@@ -1157,8 +1158,16 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
         // A short, unique reference the person includes on their bank
         // transfer, so it can be matched back to this booking manually.
         const ref = type === "retreat" ? bookingId.slice(0, 8).toUpperCase() : null;
+        const membershipDates = membershipDatesFrom(selectedDates[0], availableDates);
         await onConfirm(type === "class" && plan === "membership"
-          ? singleMembershipBooking({ base, bookingId, session, amount, bookingDate: selectedDates[0] })
+          ? membershipDates.map((bookingDate, index) => singleMembershipBooking({
+              base,
+              bookingId: index === 0 ? bookingId : uid(),
+              session,
+              amount: index === 0 ? amount : 0,
+              bookingDate,
+              paymentGroupId: bookingId,
+            }))
           : {
               ...base, id: bookingId,
               sessionId: session.id, sessionName: session.name,
@@ -1791,7 +1800,8 @@ function AdminDashboard({ bookings, onMarkPaid, onMarkPending, onCancel, onResto
     }
   }
 
-  const filtered = bookings.filter(b => {
+  const visibleBookings = bookings.filter(bookingIsActive);
+  const filtered = visibleBookings.filter(b => {
     if (statusFilter!=="all" && b.status!==statusFilter) return false;
     if (query && !(`${b.name} ${b.email} ${b.sessionName}`.toLowerCase().includes(query.toLowerCase()))) return false;
     return true;
@@ -2764,7 +2774,8 @@ function AdminPage() {
   );
 
   // ── Dashboard ─────────────────────────────────────────────────────────
-  const filtered = bookings.filter(b => {
+  const visibleBookings = bookings.filter(bookingIsActive);
+  const filtered = visibleBookings.filter(b => {
     if (statusFilter !== "all" && b.status !== statusFilter) return false;
     if (query && !(`${b.name} ${b.email} ${b.sessionName}`.toLowerCase().includes(query.toLowerCase()))) return false;
     return true;
@@ -2862,7 +2873,7 @@ function AdminPage() {
             </div>
             <button onClick={() => {
               const headers = ["Name","Email","Phone","Session","Date","Time","Plan","Amount","Status","Booked at"];
-              const rows = bookings.map(b => {
+              const rows = visibleBookings.map(b => {
                 const session = getSessionInfo(b.sessionId);
                 return [b.name,b.email,b.phone,b.sessionName,session?.day||"",session?.time||"",b.plan,b.amount,b.status,b.createdAt];
               });
