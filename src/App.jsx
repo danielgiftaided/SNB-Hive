@@ -3153,6 +3153,13 @@ function BookingApp() {
   const [workshopModal, setWorkshopModal]   = useState(null);
   const [showPilatesEnquiry, setShowPilatesEnquiry] = useState(false);
   const [waitlistConfirmation, setWaitlistConfirmation] = useState(null);
+  const customerTabs = [
+    { id:"classes", label:"Classes", shortLabel:"Classes", icon:Dumbbell },
+    { id:"retreats", label:"Retreats", shortLabel:"Retreats", icon:Sparkles },
+    { id:"studio-hire", label:"Studio Hire", shortLabel:"Hire", icon:MapPin },
+    { id:"bookings", label:"My bookings", shortLabel:"Bookings", icon:Calendar },
+    { id:"account", label:"Account", shortLabel:"Account", icon:ShieldCheck },
+  ];
 
   // Restore session on load — check expiry
   useEffect(() => {
@@ -3268,18 +3275,18 @@ function BookingApp() {
     <div className="min-h-screen w-full" style={{ backgroundColor:BG }}>
       <Fonts/>
 
-      <header className="sticky top-0 z-30 border-b border-stone-200" style={{ backgroundColor:BG }}>
+      <header className="mobile-safe-top sticky top-0 z-30 border-b border-stone-200" style={{ backgroundColor:BG }}>
         <div className="max-w-3xl mx-auto px-4 py-2 flex items-center justify-between gap-3">
           <div className="shrink-0 flex items-center gap-2">
             <img src={LOGO} alt="SNB Hive" style={{ height:"56px" }} onError={e => { e.target.style.display = "none"; }}/>
             <p className="ff-body text-xs text-stone-500 hidden sm:block">{BRAND.tagline}</p>
           </div>
           <div className="flex items-center gap-2">
-            <nav className="flex gap-1 bg-stone-200 rounded-full p-1">
-              {[["classes","Classes"],["retreats","Retreats"],["studio-hire","Studio Hire"],["bookings","My bookings"],["account","Account"]].map(([k,label]) => (
-                <button key={k} onClick={() => setTab(k)}
+            <nav aria-label="Main navigation" className="hidden md:flex gap-1 bg-stone-200 rounded-full p-1">
+              {customerTabs.map(({ id, label }) => (
+                <button key={id} onClick={() => setTab(id)} aria-current={tab===id ? "page" : undefined}
                   className="ff-body text-sm font-medium px-3.5 py-1.5 rounded-full transition"
-                  style={{ backgroundColor:tab===k?"#fff":"transparent", color:tab===k?INK:"#6B6457", boxShadow:tab===k?"0 1px 2px rgba(0,0,0,0.08)":"none" }}>
+                  style={{ backgroundColor:tab===id?"#fff":"transparent", color:tab===id?INK:"#6B6457", boxShadow:tab===id?"0 1px 2px rgba(0,0,0,0.08)":"none" }}>
                   {label}
                 </button>
               ))}
@@ -3294,7 +3301,7 @@ function BookingApp() {
 
 
 
-      <main className="max-w-3xl mx-auto px-4 py-6">
+      <main className="mobile-content-padding max-w-3xl mx-auto px-4 py-6">
         {loading
           ? <div className="flex justify-center py-20"><Loader2 className="animate-spin text-stone-400"/></div>
           : tab==="classes"
@@ -3384,6 +3391,27 @@ function BookingApp() {
                   : <MyBookings bookings={bookings} currentUser={currentUser} onCancel={cancelMyBooking}/>
         }
       </main>
+
+      <nav aria-label="Main navigation" className="mobile-safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-stone-200 bg-white/95 shadow-[0_-4px_18px_rgba(27,43,38,0.08)] backdrop-blur md:hidden">
+        <div className="mx-auto grid max-w-lg grid-cols-5 px-1 pt-1.5">
+          {customerTabs.map(({ id, shortLabel, icon:TabIcon }) => {
+            const active = tab === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setTab(id)}
+                aria-current={active ? "page" : undefined}
+                className="ff-body flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[11px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px]"
+                style={{ color:active ? TEAL : "#78716C", backgroundColor:active ? "#FCECEF" : "transparent", outlineColor:TEAL }}
+              >
+                <TabIcon size={20} strokeWidth={active ? 2.4 : 1.8} aria-hidden="true"/>
+                <span className="w-full truncate">{shortLabel}</span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
 
 
 
