@@ -1,3 +1,5 @@
+import { fridayDatesInMonth } from "../_shared/membership-bookings.ts";
+
 const GC_API = Deno.env.get("GOCARDLESS_API_URL") || "https://api.gocardless.com";
 
 function formatBookingDate(input: unknown) {
@@ -49,6 +51,76 @@ async function confirmPayment(paymentId: string) {
     ...rows[0],
     amount: rows.reduce((sum: number, row: Record<string, unknown>) => sum + Number(row.amount || 0), 0),
     booking_dates: rows.map((row: Record<string, unknown>) => formatBookingDate(row.booking_date)).filter(Boolean).join(", "),
+  };
+}
+
+async function enrollRecurringMembership(paymentId: string, subscriptionId: string) {
+  const url = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !serviceKey) throw new Error("Supabase function environment is not configured");
+
+  // Subscription payments have fresh payment IDs, so find their original
+  // booking through subscription metadata rather than expecting that ID on an
+  // existing row.
+  const [{ subscriptions: subscription }, { payments: payment }] = await Promise.all([
+    gc(`/subscriptions/${subscriptionId}`),
+    gc(`/payments/${paymentId}`),
+  ]);
+  const bookingId = subscription?.metadata?.booking_id;
+  if (!bookingId) return null;
+
+  const existingQuery = new URLSearchParams({
+    gocardless_payment_id: `eq.${paymentId}`,
+    select: "id",
+    limit: "1",
+  });
+  const existingResponse = await fetch(`${url}/rest/v1/bookings?${existingQuery}`, {
+    headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+  });
+  if (!existingResponse.ok) throw new Error("Recurring booking lookup failed");
+  if ((await existingResponse.json()).length) return null;
+
+  const anchorQuery = new URLSearchParams({
+    payment_group_id: `eq.${bookingId}`,
+    select: "user_id,name,email,phone,session_id,session_name,plan",
+    limit: "1",
+  });
+  const anchorResponse = await fetch(`${url}/rest/v1/bookings?${anchorQuery}`, {
+    headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+  });
+  if (!anchorResponse.ok) throw new Error("Membership booking lookup failed");
+  const [anchor] = await anchorResponse.json();
+  if (!anchor) return null;
+
+  const chargeDate = String(payment?.charge_date || new Date().toISOString().slice(0, 10));
+  const dates = fridayDatesInMonth(chargeDate);
+  const paymentGroupId = crypto.randomUUID();
+  const rows = dates.map((bookingDate, index) => ({
+    ...anchor,
+    id: index === 0 ? paymentGroupId : crypto.randomUUID(),
+    type: "class",
+    booking_date: bookingDate,
+    payment_group_id: paymentGroupId,
+    gocardless_payment_id: paymentId,
+    amount: index === 0 ? Number(payment?.amount || subscription?.amount || 0) / 100 : 0,
+    status: "paid",
+    created_at: new Date().toISOString(),
+  }));
+  const insertResponse = await fetch(`${url}/rest/v1/bookings`, {
+    method: "POST",
+    headers: {
+      apikey: serviceKey,
+      Authorization: `Bearer ${serviceKey}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    },
+    body: JSON.stringify(rows),
+  });
+  if (!insertResponse.ok) throw new Error("Recurring membership enrolment failed");
+  return {
+    ...anchor,
+    amount: Number(payment?.amount || subscription?.amount || 0) / 100,
+    booking_dates: dates.map(formatBookingDate).join(", "),
   };
 }
 
@@ -120,7 +192,10 @@ Deno.serve(async request => {
       if (event.resource_type === "payments" && event.action === "confirmed") {
         const paymentId = event.links?.payment;
         if (!paymentId) continue;
-        const booking = await confirmPayment(paymentId);
+        let booking = await confirmPayment(paymentId);
+        if (!booking && event.links?.subscription) {
+          booking = await enrollRecurringMembership(paymentId, event.links.subscription);
+        }
         if (booking) await sendPaymentConfirmation(booking);
         continue;
       }

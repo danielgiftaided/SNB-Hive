@@ -1,4 +1,4 @@
-export function singleMembershipBooking({ base, bookingId, session, amount, bookingDate }) {
+export function singleMembershipBooking({ base, bookingId, session, amount, bookingDate, paymentGroupId = bookingId }) {
   return {
     ...base,
     id: bookingId,
@@ -6,7 +6,7 @@ export function singleMembershipBooking({ base, bookingId, session, amount, book
     sessionName: session.name,
     amount,
     bookingDate,
-    paymentGroupId: bookingId,
+    paymentGroupId,
   };
 }
 

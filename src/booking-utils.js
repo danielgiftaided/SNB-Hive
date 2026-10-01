@@ -6,13 +6,12 @@ export const UNDATED_BOOKING = "undated";
 export function bookingIsActive(booking) {
   if (!booking || booking.status === "cancelled" || booking.status === "pending_checkout") return false;
 
-  // Class rows are written before the browser is sent to GoCardless. Older
-  // checkout deployments require pending_payment rather than pending_checkout,
-  // so distinguish a completed checkout by the payment reference which the
-  // signed webhook adds when the billing request is fulfilled.
-  if (booking.type === "class" && booking.status === "pending_payment") {
-    return Boolean(booking.gocardlessPaymentId);
-  }
+  // A GoCardless payment reference is attached when the mandate/checkout is
+  // fulfilled, which can happen before any money is collected. Only the
+  // payments/confirmed webhook changes a paid class to `paid`, so every
+  // pending class must remain invisible regardless of whether it has a
+  // payment reference.
+  if (booking.type === "class" && booking.status === "pending_payment") return false;
 
   return true;
 }

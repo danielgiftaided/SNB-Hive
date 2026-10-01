@@ -8,6 +8,7 @@ import {
 import { checkoutErrorDetail, singleMembershipBooking } from "../src/checkout.js";
 import { bookingRowsForUpsert } from "../src/storage-shape.js";
 import { proratedMembershipAmount } from "../supabase/functions/_shared/membership.ts";
+import { fridayDatesInMonth, membershipDatesFrom } from "../supabase/functions/_shared/membership-bookings.ts";
 
 const browserMembership = singleMembershipBooking({
   base: { plan: "Membership — 1 class", status: "pending_payment" },
@@ -17,6 +18,13 @@ const browserMembership = singleMembershipBooking({
   bookingDate: "2026-10-09",
 });
 const [membership] = bookingRowsForUpsert([browserMembership]);
+
+assert.deepEqual(fridayDatesInMonth("2026-11-01"), ["2026-11-06", "2026-11-13", "2026-11-20", "2026-11-27"]);
+assert.deepEqual(
+  membershipDatesFrom("2026-10-16", ["2026-10-09", "2026-10-16", "2026-10-23", "2026-10-30"]),
+  ["2026-10-16", "2026-10-23", "2026-10-30"],
+  "an initial membership must enrol every remaining class in its first month",
+);
 const persistedGroup = [membership];
 
 const membershipMetadata = checkoutMetadata("booking-1", "group-1", "membership");
