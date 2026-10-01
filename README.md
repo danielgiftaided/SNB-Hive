@@ -3,6 +3,13 @@
 A custom booking app for fitness classes (Zumba, Boxing, Yoga, Strength & Conditioning)
 and women's wellness retreats. Built with React + Vite + Tailwind CSS.
 
+## Mobile app
+
+The staged plan for turning this web app into downloadable iOS and Android
+apps is in [`docs/MOBILE_APP_PLAN.md`](docs/MOBILE_APP_PLAN.md). It describes
+the shared-code Capacitor approach, the work order, release gates, and the
+decisions that must be made before native projects are generated.
+
 ---
 
 ## Project file structure

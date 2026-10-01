@@ -7,3 +7,27 @@ html, body, #root {
   min-height: 100vh;
   background-color: #F5F3EC;
 }
+
+/*
+ * Keep mobile controls clear of device notches and home indicators. These
+ * values resolve to zero in ordinary browsers, so the existing desktop layout
+ * is unchanged.
+ */
+.mobile-safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.mobile-safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Reserve space for the fixed customer navigation on small screens. */
+.mobile-content-padding {
+  padding-bottom: calc(6.5rem + env(safe-area-inset-bottom, 0px));
+}
+
+@media (min-width: 768px) {
+  .mobile-content-padding {
+    padding-bottom: 1.5rem;
+  }
+}
