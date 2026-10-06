@@ -58,7 +58,7 @@ const DEFAULT_CLASSES = [
   { id: "boxfit", name: "BoxFit", tagline: "Boxing-inspired fitness", day: "Thursday 1 October 2026", time: "13:00–14:00", capacity: 18, icon: "flame", color: "#D06B4F", bookingKind: "taster",
     venue: "6 Dispensary Lane, London E8 1FT", venueMap: "https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT", whatToBring: "Bring boxing gloves and pads if you have them. Wear comfortable workout clothes and trainers. Bring a water bottle", icsStart: "20261001T120000",
     icsEnd: "20261001T130000", description: "A high-energy boxing-inspired fitness taster combining cardio, conditioning and boxing drills. Suitable for beginners and all fitness levels."},
-  { id:"self_defence", name:"Self Defence", tagline:"Intensive 3-week course", day:"October 2026 start", time:"Wednesdays, 12:00–14:00", capacity:20, icon:"shield", color:"#6F596E", bookingKind:"waitlist",
+  { id:"self_defence", name:"Self Defence", tagline:"Intensive 3-week course", day:"November 2026 start", time:"Wednesdays, 12:00–14:00", capacity:11, icon:"shield", color:"#6F596E", bookingKind:"waitlist",
     venue:"6 Dispensary Lane, London E8 1FT", venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
     details:["2-hour session each week for 3 weeks", "£90 per person", "Limited spaces available"], description:"Join the waiting list for our intensive three-week self defence course, starting in October." },
 ];
