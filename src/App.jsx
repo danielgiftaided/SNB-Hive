@@ -60,7 +60,7 @@ const DEFAULT_CLASSES = [
     icsEnd: "20261001T130000", description: "A high-energy boxing-inspired fitness taster combining cardio, conditioning and boxing drills. Suitable for beginners and all fitness levels."},
   { id:"self_defence", name:"Self Defence", tagline:"Intensive 3-week course", day:"November 2026 start", time:"Wednesdays, 12:00–14:00", capacity:11, icon:"shield", color:"#6F596E", bookingKind:"waitlist",
     venue:"6 Dispensary Lane, London E8 1FT", venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
-    details:["2-hour session each week for 3 weeks", "£90 per person", "Limited spaces available"], description:"Join the waiting list for our intensive three-week self defence course, starting in October." },
+    details:["2-hour session each week for 3 weeks", "£90 per person", "Limited spaces available"], description:"Join us in November." },
 ];
 
 // Zumba launches with one monthly membership tier.
