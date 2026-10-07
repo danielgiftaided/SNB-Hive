@@ -1,4 +1,6 @@
-import { fridayDatesInMonth } from "../_shared/membership-bookings.ts";
+import { weeklyDatesInMonth } from "../_shared/membership-bookings.ts";
+import { classPaymentConfig } from "../_shared/class-config.ts";
+import { MEMBERSHIP_MONTHLY_AMOUNT } from "../_shared/membership.ts";
 
 const GC_API = Deno.env.get("GOCARDLESS_API_URL") || "https://api.gocardless.com";
 
@@ -32,7 +34,7 @@ async function confirmPayment(paymentId: string) {
   const query = new URLSearchParams({
     gocardless_payment_id: `eq.${paymentId}`,
     status: "in.(pending_checkout,pending_payment)",
-    select: "id,name,email,phone,session_name,plan,amount,booking_date",
+    select: "id,name,email,phone,session_name,plan,amount,booking_date,gocardless_payment_id",
   });
   const response = await fetch(`${url}/rest/v1/bookings?${query}`, {
     method: "PATCH",
@@ -45,7 +47,17 @@ async function confirmPayment(paymentId: string) {
     body: JSON.stringify({ status: "paid" }),
   });
   if (!response.ok) throw new Error("Booking status update failed");
-  const rows = await response.json();
+  let rows = await response.json();
+  // Failed receipt delivery remains retryable after the payment becomes Paid.
+  if (!rows.length) {
+    query.set("status", "eq.paid");
+    query.set("payment_confirmation_sent_at", "is.null");
+    const unsent = await fetch(`${url}/rest/v1/bookings?${query}`, {
+      headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+    });
+    if (!unsent.ok) throw new Error("Payment confirmation lookup failed");
+    rows = await unsent.json();
+  }
   if (!rows.length) return null;
   return {
     ...rows[0],
@@ -82,7 +94,7 @@ async function enrollRecurringMembership(paymentId: string, subscriptionId: stri
 
   const anchorQuery = new URLSearchParams({
     payment_group_id: `eq.${bookingId}`,
-    select: "user_id,name,email,phone,session_id,session_name,plan",
+    select: "user_id,name,email,phone,session_id,session_name,plan,booking_date",
     limit: "1",
   });
   const anchorResponse = await fetch(`${url}/rest/v1/bookings?${anchorQuery}`, {
@@ -93,7 +105,9 @@ async function enrollRecurringMembership(paymentId: string, subscriptionId: stri
   if (!anchor) return null;
 
   const chargeDate = String(payment?.charge_date || new Date().toISOString().slice(0, 10));
-  const dates = fridayDatesInMonth(chargeDate);
+  const session = classPaymentConfig(anchor.session_id);
+  if (!session || session.weekday === null) throw new Error("Membership class schedule is not configured");
+  const dates = weeklyDatesInMonth(chargeDate, session.weekday);
   const paymentGroupId = crypto.randomUUID();
   const rows = dates.map((bookingDate, index) => ({
     ...anchor,
@@ -119,6 +133,7 @@ async function enrollRecurringMembership(paymentId: string, subscriptionId: stri
   if (!insertResponse.ok) throw new Error("Recurring membership enrolment failed");
   return {
     ...anchor,
+    gocardless_payment_id: paymentId,
     amount: Number(payment?.amount || subscription?.amount || 0) / 100,
     booking_dates: dates.map(formatBookingDate).join(", "),
   };
@@ -141,6 +156,13 @@ async function sendPaymentConfirmation(booking: Record<string, unknown>) {
     console.error("Payment confirmation email failed", response.status, await response.text());
     throw new Error("Payment confirmation email failed");
   }
+  const query = new URLSearchParams({ gocardless_payment_id: `eq.${booking.gocardless_payment_id}` });
+  const marked = await fetch(`${url}/rest/v1/bookings?${query}`, {
+    method: "PATCH",
+    headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ payment_confirmation_sent_at: new Date().toISOString() }),
+  });
+  if (!marked.ok) throw new Error("Payment confirmation tracking failed");
 }
 
 function hex(bytes: ArrayBuffer) {
@@ -213,19 +235,29 @@ Deno.serve(async request => {
       await rememberPayment(bookingId, billingRequest.metadata?.payment_group_id || "", paymentId);
 
       if (billingRequest.metadata?.payment_plan === "membership" && billingRequest.links?.mandate) {
+        const url = Deno.env.get("SUPABASE_URL");
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        const query = new URLSearchParams({ id: `eq.${bookingId}`, select: "session_id", limit: "1" });
+        const response = await fetch(`${url}/rest/v1/bookings?${query}`, {
+          headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+        });
+        if (!response.ok) throw new Error("Membership class lookup failed");
+        const [anchor] = await response.json();
+        const session = classPaymentConfig(anchor?.session_id);
+        if (!session) throw new Error("Membership class is not configured");
         // Idempotency key makes retries of the same webhook safe.
         await gc("/subscriptions", {
           method: "POST",
-          headers: { "Idempotency-Key": `zumba-membership-${bookingId}` },
+          headers: { "Idempotency-Key": `${anchor.session_id}-membership-${bookingId}` },
           body: JSON.stringify({
             subscriptions: {
-              amount: 3500,
+              amount: MEMBERSHIP_MONTHLY_AMOUNT,
               currency: "GBP",
-              name: "SNB Hive Zumba monthly membership",
+              name: `SNB Hive ${session.name} monthly membership`,
               interval_unit: "monthly",
               day_of_month: 1,
               links: { mandate: billingRequest.links.mandate },
-              metadata: { booking_id: bookingId, session_id: "zumba" },
+              metadata: { booking_id: bookingId, session_id: anchor.session_id },
             },
           }),
         });

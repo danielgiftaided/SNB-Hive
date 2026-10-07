@@ -31,7 +31,7 @@ assert.match(source, /await gc\("\/subscriptions"/,
   "fulfilled monthly membership billing requests must still create a subscription");
 assert.match(source, /enrollRecurringMembership\(paymentId, event\.links\.subscription\)/,
   "each confirmed recurring subscription payment must enrol the member in that month");
-assert.match(source, /fridayDatesInMonth\(chargeDate\)/,
+assert.match(source, /weeklyDatesInMonth\(chargeDate, session.weekday\)/,
   "recurring memberships must create a booking for every class date in the paid month");
 
 console.log("PASS booking email waits for a confirmed GoCardless payment and is idempotent");

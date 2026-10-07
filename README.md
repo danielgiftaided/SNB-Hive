@@ -1,7 +1,11 @@
 # SNB Hive — Booking System
 
-A custom booking app for fitness classes (Zumba, Boxing, Yoga, Strength & Conditioning)
+A custom booking app for fitness classes (Zumba, BoxFit, Self Defence, Strength & Conditioning)
 and women's wellness retreats. Built with React + Vite + Tailwind CSS.
+
+Current class booking rules and deployment steps for the paid Zumba taster,
+paused BoxFit and Self Defence bank transfers are in
+[`docs/CLASS_BOOKING_CHANGES.md`](docs/CLASS_BOOKING_CHANGES.md).
 
 ## Mobile app
 

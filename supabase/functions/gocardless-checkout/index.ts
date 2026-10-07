@@ -1,5 +1,6 @@
 import { corsHeaders, json } from "../_shared/http.ts";
 import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../_shared/membership.ts";
+import { classPaymentConfig, PAYG_AMOUNT } from "../_shared/class-config.ts";
 import {
   bookingRowsValidationIssue,
   canStartCheckoutAfterLookupFailure,
@@ -10,8 +11,8 @@ import {
 
 const GC_API = Deno.env.get("GOCARDLESS_API_URL") || "https://api.gocardless.com";
 const GC_VERSION = "2015-07-06";
-const PRICES = { payg: 1000, membership: MEMBERSHIP_MONTHLY_AMOUNT } as const;
-const CHECKOUT_VERSION = "single-membership-v2";
+const PRICES = { payg: PAYG_AMOUNT, membership: MEMBERSHIP_MONTHLY_AMOUNT } as const;
+const CHECKOUT_VERSION = "class-payments-v3";
 
 async function getBooking(id: string) {
   const url = Deno.env.get("SUPABASE_URL");
@@ -19,7 +20,7 @@ async function getBooking(id: string) {
   if (!url || !serviceKey) throw new Error("Supabase function environment is not configured");
   const query = new URLSearchParams({
     id: `eq.${id}`,
-    select: "id,session_id,plan,amount,status,payment_group_id,booking_date",
+    select: "id,session_id,plan,amount,status,payment_group_id,booking_date,gocardless_payment_id",
     limit: "1",
   });
   const response = await fetch(`${url}/rest/v1/bookings?${query}`, {
@@ -43,7 +44,7 @@ async function getPaymentGroup(groupId: string) {
   const url = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !serviceKey) throw new Error("Supabase function environment is not configured");
-  const query = new URLSearchParams({ payment_group_id: `eq.${groupId}`, select: "id,session_id,plan,amount,status,payment_group_id,booking_date" });
+  const query = new URLSearchParams({ payment_group_id: `eq.${groupId}`, select: "id,session_id,plan,amount,status,payment_group_id,booking_date,gocardless_payment_id" });
   const response = await fetch(`${url}/rest/v1/bookings?${query}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
   if (!response.ok) throw new Error("Booking group lookup failed");
   return await response.json();
@@ -106,7 +107,7 @@ async function getVerifiedBooking(id: string, plan: CheckoutPlan) {
   return { error: lastIssue };
 }
 
-async function gc(path: string, body: unknown) {
+async function gc(path: string, body: unknown, idempotencyKey: string) {
   const token = Deno.env.get("GOCARDLESS_ACCESS_TOKEN");
   if (!token) throw new Error("GoCardless is not configured");
   const response = await fetch(`${GC_API}${path}`, {
@@ -115,10 +116,26 @@ async function gc(path: string, body: unknown) {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
       "GoCardless-Version": GC_VERSION,
+      "Idempotency-Key": idempotencyKey,
     },
     body: JSON.stringify(body),
   });
   const result = await response.json();
+  // GoCardless returns 409 (not a replayed 201) for an existing idempotency
+  // key. Recover its canonical resource, as the official SDK does, so an
+  // interrupted class checkout can resume without creating another charge.
+  if (response.status === 409) {
+    const conflict = result.error?.errors?.find((error: { reason?: string; links?: { conflicting_resource_id?: string } }) =>
+      error.reason === "idempotent_creation_conflict");
+    const resourceId = conflict?.links?.conflicting_resource_id;
+    if (resourceId) {
+      const existing = await fetch(`${GC_API}${path}/${encodeURIComponent(resourceId)}`, {
+        headers: { Authorization: `Bearer ${token}`, "GoCardless-Version": GC_VERSION },
+      });
+      if (!existing.ok) throw new Error("GoCardless could not resume checkout");
+      return await existing.json();
+    }
+  }
   if (!response.ok) {
     console.error("GoCardless API error", response.status, result);
     throw new Error("GoCardless could not start checkout");
@@ -168,7 +185,8 @@ Deno.serve(async request => {
 
   try {
     const { booking_id, plan, session_id, return_url, exit_url } = await request.json();
-    if (!booking_id || session_id !== "zumba" || !(plan in PRICES)) {
+    const session = classPaymentConfig(session_id);
+    if (!booking_id || !session || !session.dates.length || !Object.hasOwn(PRICES, plan)) {
       return json({ error: "This payment option is not available" }, 400);
     }
 
@@ -182,7 +200,15 @@ Deno.serve(async request => {
       }, 400);
     }
     const { booking, group } = verified;
-    const expectedAmount = plan === "payg"
+    if ((booking.session_id && booking.session_id !== session_id) ||
+        group.some((row: Record<string, unknown>) => row.session_id === session_id &&
+          !session.dates.includes(String(row.booking_date)))) {
+      return json({ error: "This lesson date is not available" }, 400);
+    }
+    if (group.some((row: Record<string, unknown>) => row.gocardless_payment_id)) {
+      return json({ error: "Payment has already been set up for this booking" }, 400);
+    }
+    const expectedAmount = plan !== "membership"
       ? group.reduce((sum: number, row: Record<string, unknown>) => sum + Math.round(Number(row.amount) * 100), 0)
       : PRICES.membership;
 
@@ -201,12 +227,12 @@ Deno.serve(async request => {
       ? proratedMembershipAmount(membershipStartDate)
       : expectedAmount;
     const metadata = checkoutMetadata(booking_id, booking.payment_group_id, plan as CheckoutPlan);
-    const requestBody = plan === "payg"
+    const requestBody = plan !== "membership"
       ? {
           payment_request: {
             amount: expectedAmount,
             currency: "GBP",
-            description: "SNB Hive Zumba class",
+            description: `SNB Hive ${session.name} class`,
           },
           mandate_request: { scheme: "bacs" },
           metadata,
@@ -215,20 +241,20 @@ Deno.serve(async request => {
           payment_request: {
             amount: firstPaymentAmount,
             currency: "GBP",
-            description: "SNB Hive Zumba membership - first month",
+            description: `SNB Hive ${session.name} membership - first month`,
           },
           mandate_request: { scheme: "bacs" },
           metadata,
         };
 
-    const billingRequest = await gc("/billing_requests", { billing_requests: requestBody });
+    const billingRequest = await gc("/billing_requests", { billing_requests: requestBody }, `class-checkout-${booking_id}`);
     const flow = await gc("/billing_request_flows", {
       billing_request_flows: {
         redirect_uri: redirectUri,
         exit_uri: exitUri,
         links: { billing_request: billingRequest.billing_requests.id },
       },
-    });
+    }, `class-flow-${booking_id}`);
 
     return json({ authorisation_url: flow.billing_request_flows.authorisation_url, checkout_version: CHECKOUT_VERSION });
   } catch (error) {
