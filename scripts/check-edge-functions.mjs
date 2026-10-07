@@ -27,7 +27,7 @@ const deploymentWorkflow = await readFile(".github/workflows/deploy-payment-func
 const cancellationChecks = [
   ['the cancellation email type', 'case "booking_cancelled"'],
   ["the member cancellation confirmation", "const customer ="],
-  ["the admin cancellation notification", "const admin = { to: ADMIN_EMAIL"],
+  ["the admin cancellation notification", "const admin = { to: BOOKING_EMAIL"],
 ];
 
 for (const [description, expected] of cancellationChecks) {

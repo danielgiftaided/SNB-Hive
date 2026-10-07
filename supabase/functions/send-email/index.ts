@@ -1,8 +1,10 @@
 import { corsHeaders, json } from "../_shared/http.ts";
+import { CLASS_BANK_ACCOUNT } from "../_shared/class-config.ts";
 
 const RESEND_API = "https://api.resend.com/emails";
 const SENDER_EMAIL = Deno.env.get("SENDER_EMAIL") || "shams@snbhive.com";
 const ADMIN_EMAIL = Deno.env.get("ADMIN_EMAIL") || "shams@snbhive.com";
+const BOOKING_EMAIL = "shams@snbhive.com";
 const LOGO_URL = Deno.env.get("EMAIL_LOGO_URL") || "https://snbhive.com/logo-email.png";
 
 type Payload = Record<string, unknown>;
@@ -85,27 +87,37 @@ function messagesFor(p: Payload): Message[] {
     case "admin":
       return [{ to: ADMIN_EMAIL, subject: `🐝 New member: ${value(p.user_name)}`, html: shell("A new member joined SNB Hive", `${value(p.user_name)} just joined SNB Hive`, paragraph("A new member has created an account.") + details([["Name", p.user_name], ["Email", p.user_email], ["Mobile", p.user_phone], ["Joined", p.signup_time]])) }];
     case "admin_booking":
-      return [{ to: ADMIN_EMAIL, subject: `🐝 New class booking: ${value(p.user_name)} — ${value(p.session_name)}`, html: shell("A member booked a class", `New booking for ${value(p.session_name)}`, paragraph("A member has just booked a class. Their details are below.") + details([...bookingRows(p), ["Status", p.status], ["Booked", p.booked_at]])) }];
+      return [{ to: BOOKING_EMAIL, subject: `🐝 New class booking: ${value(p.user_name)} — ${value(p.session_name)}`, html: shell("A member booked a class", `New booking for ${value(p.session_name)}`, paragraph("A member has just booked a class. Their details are below.") + details([...bookingRows(p), ["Status", p.status], ["Booked", p.booked_at]])) }];
+    case "bank_transfer_booking": {
+      const kind = value(p.plan).toLowerCase().includes("taster") ? "taster" : "course";
+      const transfer = details([
+        ["Account name", CLASS_BANK_ACCOUNT.accountName], ["Account number", CLASS_BANK_ACCOUNT.accountNumber],
+        ["Sort code", CLASS_BANK_ACCOUNT.sortCode], ["Reference", p.user_name ?? p.to_name],
+      ]);
+      const customer = { to, subject: `Booking received — ${value(p.session_name)} (awaiting bank transfer)`, html: shell("Your booking is saved", "Your place is reserved — please pay by bank transfer", paragraph(`Hi ${value(p.to_name, "there")}, please transfer £${value(p.amount)} using your name as the reference. Your booking is awaiting payment until we receive your transfer.`) + details([...bookingRows(p), ["Time", p.time], ["Venue", p.venue]]) + transfer) };
+      const admin = { to: BOOKING_EMAIL, subject: `New ${kind} booking: ${value(p.user_name)} — ${value(p.session_name)}`, html: shell(`A member booked a ${kind}`, "Booking — awaiting bank transfer", details([...bookingRows(p), ["Status", p.status], ["Transfer reference", p.user_name]])) };
+      return [customer, admin];
+    }
     case "booking_cancelled": {
       const cancellationDetails: [string, unknown][] = [
         ["Member", p.user_name], ["Email", p.user_email], ["Phone", p.user_phone],
         ["Class", p.session_name], ["Lesson date", p.booking_date], ["Cancelled", p.cancelled_at],
       ];
-      const customer = { to, subject: `Your ${value(p.session_name)} booking has been cancelled`, html: shell("Your booking has been cancelled", "Booking cancellation confirmed", paragraph(`Hi ${value(p.to_name, "there")}, this email confirms that you cancelled your booking. Your place in ${value(p.session_name)} is no longer reserved.`) + details(cancellationDetails.slice(3))) };
-      const admin = { to: ADMIN_EMAIL, subject: `Booking cancelled: ${value(p.user_name)} — ${value(p.session_name)}`, html: shell("A member cancelled a booking", `${value(p.user_name)} cancelled ${value(p.session_name)}`, paragraph("A member has just cancelled their booking. Their details are below.") + details(cancellationDetails)) };
+      const customer = { to, subject: `Your ${value(p.session_name)} booking has been cancelled`, html: shell("Your booking has been cancelled", "Booking cancellation confirmed", paragraph(`Hi ${value(p.to_name, "there")}, this email confirms that your booking has been cancelled. Your place in ${value(p.session_name)} is no longer reserved.`) + details(cancellationDetails.slice(3))) };
+      const admin = { to: BOOKING_EMAIL, subject: `Booking cancelled: ${value(p.user_name)} — ${value(p.session_name)}`, html: shell("A booking was cancelled", `${value(p.session_name)} booking cancelled`, paragraph("A booking has just been cancelled. Their details are below.") + details(cancellationDetails)) };
       return [customer, admin];
     }
     case "confirm_taster":
       return [{ to, subject: `Your ${value(p.session_name)} booking is confirmed! 🐝`, html: shell("Your class booking is confirmed", `You're booked for ${value(p.session_name)}!`, paragraph(`Hi ${value(p.to_name, "there")}, your place is confirmed. We can't wait to see you!`) + details([["Class", p.session_name], ["When", `${value(p.day)} · ${value(p.time)}`], ["Venue", p.venue], ["What to bring", p.what_to_bring]])), attachments: calendarAttachment(p) }];
     case "confirm_workshop": {
       const customer = { to, subject: `You're in — ${value(p.session_name)} is booked! 🎨🐝`, html: shell("Your workshop booking is confirmed", `You're coming to ${value(p.session_name)}!`, paragraph(`Hi ${value(p.to_name, "there")}, your workshop place is confirmed. Payment instructions: £${value(p.price)} to SNB Hive Ltd, sort code 04-06-05, account 33053251.`) + details([["Workshop", p.session_name], ["When", `${value(p.day)} · ${value(p.time)}`], ["Venue", p.venue], ["People", p.num_people]])), attachments: calendarAttachment(p) };
-      const admin = { to: ADMIN_EMAIL, subject: `🎨 New workshop booking: ${value(p.to_name)} — ${value(p.session_name)}`, html: shell("A workshop was booked", `New booking for ${value(p.session_name)}`, details([["Name", p.to_name], ["Email", p.to_email], ["People", p.num_people], ["Total", `£${value(p.price)}`], ["Guests", p.guests]])) };
+      const admin = { to: BOOKING_EMAIL, subject: `🎨 New workshop booking: ${value(p.to_name)} — ${value(p.session_name)}`, html: shell("A workshop was booked", `New booking for ${value(p.session_name)}`, details([["Name", p.to_name], ["Email", p.to_email], ["People", p.num_people], ["Total", `£${value(p.price)}`], ["Guests", p.guests]])) };
       return [customer, admin];
     }
     case "payment_confirmation": {
       const plan = value(p.plan);
-      const customer = { to, subject: `Payment and booking confirmed — ${value(p.session_name)} 🐝`, html: shell("Your payment and class booking are confirmed", "Payment successful — you're booked!", paragraph(`Hi ${value(p.name, "there")}, thank you! Your ${plan.toLowerCase().includes("membership") ? "membership" : "pay as you go lesson booking"} and payment have both been confirmed in this email.`) + details(bookingRows(p))) };
-      const admin = { to: ADMIN_EMAIL, subject: `💳 Payment confirmed: ${value(p.name)} — ${value(p.session_name)}`, html: shell("A class payment was confirmed", "Payment received", paragraph("This booking has automatically moved to Paid in the admin portal.") + details(bookingRows(p))) };
+      const customer = { to, subject: `Payment and booking confirmed — ${value(p.session_name)} 🐝`, html: shell("Your payment and class booking are confirmed", "Payment successful — you're booked!", paragraph(`Hi ${value(p.name, "there")}, thank you! Your ${plan.toLowerCase().includes("membership") ? "membership" : plan.toLowerCase().includes("taster") ? "taster booking" : plan.toLowerCase().includes("bank transfer") ? "course booking" : "pay as you go lesson booking"} and payment have both been confirmed in this email.`) + details(bookingRows(p))) };
+      const admin = { to: BOOKING_EMAIL, subject: `💳 Payment confirmed: ${value(p.name)} — ${value(p.session_name)}`, html: shell("A class payment was confirmed", "Payment received", paragraph("This booking is now marked Paid in the admin portal.") + details(bookingRows(p))) };
       return [customer, admin];
     }
     case "blast":
@@ -115,13 +127,13 @@ function messagesFor(p: Payload): Message[] {
   }
 }
 
-async function send(message: Message) {
+async function send(message: Message, idempotencyKey?: string) {
   const key = Deno.env.get("RESEND_API_KEY");
   if (!key) throw new Error("RESEND_API_KEY is not configured");
   if (!message.to) throw new Error("Recipient email is required");
   const response = await fetch(RESEND_API, {
     method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}) },
     body: JSON.stringify({ from: `Shams B <${SENDER_EMAIL}>`, to: [message.to], reply_to: ADMIN_EMAIL, subject: message.subject, html: message.html, ...(message.attachments?.length ? { attachments: message.attachments } : {}) }),
   });
   if (!response.ok) throw new Error(`Resend ${response.status}: ${await response.text()}`);
@@ -133,7 +145,7 @@ Deno.serve(async request => {
   try {
     const payload = await request.json();
     const messages = messagesFor(payload);
-    await Promise.all(messages.map(send));
+    await Promise.all(messages.map((message, index) => send(message, payload.type === "payment_confirmation" && payload.gocardless_payment_id ? `payment-${value(payload.gocardless_payment_id)}-${index}` : undefined)));
     console.log(`[send-email] sent type=${value(payload.type)} messages=${messages.length}`);
     return json({ success: true });
   } catch (error) {

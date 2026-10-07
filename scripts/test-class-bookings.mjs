@@ -1,0 +1,169 @@
+import assert from "node:assert/strict";
+import { CLASS_PAYMENTS, TASTER_AMOUNT, SELF_DEFENCE_DATES } from "../supabase/functions/_shared/class-config.ts";
+import { bookingRowsValidationIssue } from "../supabase/functions/_shared/checkout.ts";
+import { weeklyDatesInMonth } from "../supabase/functions/_shared/membership-bookings.ts";
+import { proratedMembershipAmount } from "../supabase/functions/_shared/membership.ts";
+import { bookingIsActive, userTasterBooking, tasterBookingUsed } from "../src/booking-utils.js";
+
+const member = { id:"member-1", name:"Test Member", email:"member@example.test" };
+const pending = { id:"taster-1", sessionId:"zumba", userId:member.id, email:member.email, plan:"Taster (bank transfer)", type:"class", status:"pending_payment" };
+assert.equal(TASTER_AMOUNT, 500);
+assert.equal(tasterBookingUsed(pending), true);
+assert.equal(tasterBookingUsed({...pending, plan:"Taster", status:"pending_checkout"}), false);
+for (const status of ["paid", "confirmed", "cancelled"]) {
+  const booking = { ...pending, status };
+  assert.equal(tasterBookingUsed(userTasterBooking([booking], member, "zumba")), true);
+}
+assert.equal(tasterBookingUsed({ ...pending, gocardlessPaymentId:"PM1" }), true);
+assert.equal(userTasterBooking([{...pending,email:" MEMBER@EXAMPLE.TEST ",userId:"old-id"}],member,"zumba").id,"taster-1");
+assert.equal(userTasterBooking([pending],{...member,id:"other",email:"other@example.test"},"zumba"), null);
+assert.equal(userTasterBooking([pending],member,"boxfit"), null);
+assert.equal(bookingIsActive(pending),true);
+assert.equal(bookingIsActive({...pending,plan:"Pay as you go"}),false);
+assert.equal(bookingIsActive({...pending,plan:"Course (bank transfer)"}),true);
+assert.deepEqual(SELF_DEFENCE_DATES.map(date=>new Date(`${date}T12:00:00Z`).getUTCDay()),[3,3,3]);
+assert.deepEqual(weeklyDatesInMonth("2026-11-01",4),["2026-11-05","2026-11-12","2026-11-19","2026-11-26"]);
+assert.equal(proratedMembershipAmount(new Date("2026-10-15T12:00:00Z")),2625);
+const row = { id:"class-1",session_id:"zumba",plan:"Pay as you go",amount:10,status:"pending_payment",payment_group_id:"class-1",booking_date:"2026-10-16" };
+assert.equal(bookingRowsValidationIssue(row,[row],"payg",1000),null);
+assert.equal(bookingRowsValidationIssue({...row,amount:5},[{...row,amount:5}],"payg",1000),"wrong_amount");
+assert.equal(bookingRowsValidationIssue({...row,plan:"Taster (bank transfer)"},[{...row,plan:"Taster (bank transfer)"}],"payg",1000),"wrong_plan");
+console.log("PASS bank-transfer taster eligibility/visibility, ordinary class checkout validation and weekly proration");
+
+// Run the real Edge Function handlers with HTTP/provider fixtures. No live
+// emails, payments, credentials or customer data are used.
+let handler;
+const settings = { ADMIN_EMAIL:"other-admin@example.test", RESEND_API_KEY:"test-resend-key", SUPABASE_URL:"https://fixture.supabase.test", SUPABASE_SERVICE_ROLE_KEY:"test-service-key", GOCARDLESS_ACCESS_TOKEN:"test-gc-key", GOCARDLESS_WEBHOOK_SECRET:"test-webhook-key", GOCARDLESS_API_URL:"https://fixture.gocardless.test", APP_URL:"https://app.example.test" };
+globalThis.Deno = { env:{get:name=>settings[name]}, serve:fn=>{handler=fn;} };
+const json = (data,status=200)=>new Response(JSON.stringify(data),{status,headers:{"content-type":"application/json"}});
+const post = payload=>new Request("https://fixture.supabase.test/functions/v1/test",{method:"POST",body:JSON.stringify(payload),headers:{"content-type":"application/json"}});
+const originalFetch = globalThis.fetch;
+try {
+  await import("../supabase/functions/send-email/index.ts");
+  const emailHandler = handler;
+  let emails=[], emailHeaders=[];
+  globalThis.fetch=async (url,init)=>{assert.equal(url,"https://api.resend.com/emails");emails.push(JSON.parse(init.body));emailHeaders.push(init.headers);return json({id:"email-1"});};
+  for (const type of ["bank_transfer_booking","payment_confirmation","booking_cancelled"]) {
+    emails=[];
+    const result=await emailHandler(post({type,to_email:member.email,to_name:member.name,email:member.email,name:member.name,user_email:member.email,user_name:member.name,session_name:type==="bank_transfer_booking"?"Self Defence":"Zumba taster",plan:type==="bank_transfer_booking"?"Course (bank transfer)":"Taster (bank transfer)",gocardless_payment_id:type==="payment_confirmation"?"PM1":undefined,amount:type==="bank_transfer_booking"?90:5,booking_dates:SELF_DEFENCE_DATES.join(", "),booking_date:"Friday 16 October 2026"}));
+    assert.equal(result.status,200);
+    assert.deepEqual(emails.map(email=>email.to[0]).sort(),[member.email,"shams@snbhive.com"].sort());
+    if(type==="bank_transfer_booking") {
+      for(const value of ["SNB Hive LTD","33053251","040605",member.name,"£90",...SELF_DEFENCE_DATES]) assert.ok(emails[0].html.includes(value),value);
+      assert.match(emails[0].subject,/awaiting bank transfer/);
+    }
+    if(type==="payment_confirmation") { assert.ok(emails.every(email=>email.html.includes("£5"))); assert.equal(emailHeaders.at(-1)["Idempotency-Key"],"payment-PM1-1"); }
+    if(type==="booking_cancelled") assert.ok(emails.every(email=>email.subject.includes("cancelled")));
+  }
+  emails=[];
+  assert.equal((await emailHandler(post({type:"bank_transfer_booking",to_email:member.email,to_name:member.name,user_name:member.name,user_email:member.email,session_name:"Zumba taster",plan:"Taster (bank transfer)",amount:5,booking_dates:"Friday 23 October 2026",time:"12:00–13:00"}))).status,200);
+  assert.deepEqual(emails.map(email=>email.to[0]).sort(),[member.email,"shams@snbhive.com"].sort());
+  for(const entry of ["£5","33053251","040605",member.name,"23 October 2026"]) assert.ok(emails[0].html.includes(entry),entry);
+  assert.match(emails[1].subject,/taster booking/);
+  globalThis.fetch=async()=>json({error:"fixture provider unavailable"},503);
+  assert.equal((await emailHandler(post({type:"booking_cancelled",to_email:member.email,session_name:"Zumba taster"}))).status,500);
+  console.log("PASS actual mail handler sends course/taster confirmations and cancellations to member + Shams, and reports failures");
+
+  await import("../supabase/functions/gocardless-checkout/index.ts");
+  const checkoutHandler=handler;
+  let booking={...row}, calls=[], recoveries=[], paymentAttempts=0, flowAttempts=0;
+  globalThis.fetch=async (input,init={})=>{
+    const url=new URL(input);
+    if(url.pathname==="/rest/v1/bookings") return json([booking]);
+    if (url.pathname==="/billing_requests/BR1") {recoveries.push(url.pathname);return json({billing_requests:{id:"BR1"}});}
+    if (url.pathname==="/billing_request_flows/F1") {recoveries.push(url.pathname);return json({billing_request_flows:{authorisation_url:"https://pay.example.test/BR1"}});}
+    calls.push({path:url.pathname,body:JSON.parse(init.body),headers:init.headers});
+    const conflict=id=>json({error:{type:"invalid_state",errors:[{reason:"idempotent_creation_conflict",links:{conflicting_resource_id:id}}]}},409);
+    if(url.pathname==="/billing_requests" && paymentAttempts++===1) return conflict("BR1");
+    if(url.pathname==="/billing_request_flows" && flowAttempts++===1) return conflict("F1");
+    if(url.pathname==="/billing_requests") return json({billing_requests:{id:"BR1"}});
+    if(url.pathname==="/billing_request_flows") return json({billing_request_flows:{authorisation_url:"https://pay.example.test/BR1"}});
+    throw new Error(`Unexpected fetch ${url.pathname}`);
+  };
+  const checkoutPayload={booking_id:row.id,session_id:"zumba",plan:"payg",return_url:"https://app.example.test/payment-complete",exit_url:"https://app.example.test/"};
+  assert.equal((await checkoutHandler(post({...checkoutPayload,plan:"taster"}))).status,400);
+  assert.equal(calls.length,0,"tasters must never reach GoCardless");
+  assert.equal((await checkoutHandler(post(checkoutPayload))).status,200);
+  assert.equal(calls[0].body.billing_requests.payment_request.amount,1000);
+  assert.equal(calls[0].body.billing_requests.metadata.payment_plan,"payg");
+  assert.equal(Object.keys(calls[0].body.billing_requests.metadata).length,3);
+  assert.match(calls[0].body.billing_requests.payment_request.description,/Zumba class/);
+  assert.equal((await checkoutHandler(post(checkoutPayload))).status,200);
+  assert.equal(calls[0].headers["Idempotency-Key"],calls[2].headers["Idempotency-Key"]);
+  assert.equal(calls[1].headers["Idempotency-Key"],calls[3].headers["Idempotency-Key"]);
+  assert.deepEqual(recoveries,["/billing_requests/BR1","/billing_request_flows/F1"],"real GoCardless 409 retries must recover existing resources");
+  const before=calls.length;
+  booking={...row,booking_date:"2026-12-25"};
+  assert.equal((await checkoutHandler(post(checkoutPayload))).status,400);
+  booking={...row,gocardless_payment_id:"PM1"};
+  assert.equal((await checkoutHandler(post(checkoutPayload))).status,400);
+  assert.equal(calls.length,before,"invalid/used class bookings must not reach payment provider");
+  assert.equal((await checkoutHandler(post({...checkoutPayload,session_id:"boxfit",plan:"payg"}))).status,400);
+  CLASS_PAYMENTS.boxfit.dates.push("2026-10-15"); CLASS_PAYMENTS.boxfit.weekday=4;
+  booking={...row,session_id:"boxfit",plan:"Membership — 1 class",booking_date:"2026-10-15",amount:26.25};
+  calls=[];
+  assert.equal((await checkoutHandler(post({...checkoutPayload,session_id:"boxfit",plan:"membership"}))).status,200);
+  assert.equal(calls[0].body.billing_requests.payment_request.amount,2625);
+  assert.match(calls[0].body.billing_requests.payment_request.description,/BoxFit membership/);
+  console.log("PASS actual checkout handler: rejects GoCardless tasters, safe PAYG retries, unavailable dates, paused BoxFit and shared membership proration");
+
+  await import("../supabase/functions/gocardless-webhook/index.ts");
+  const webhookHandler=handler;
+  let plan="payg",confirmed=false,receiptMarked=false,failReceipt=false,subscriptions=[],notices=[],enrolments=[];
+  const paidRow={id:row.id,session_name:"Zumba",name:member.name,email:member.email,plan:"Pay as you go",amount:10,booking_date:row.booking_date,gocardless_payment_id:"PM1"};
+  globalThis.fetch=async(input,init={})=>{
+    const url=new URL(input);
+    if(url.pathname==="/billing_requests/BR1") return json({billing_requests:{metadata:{booking_id:"anchor-1",payment_group_id:"anchor-1",payment_plan:plan},links:{payment_request:"PM1",mandate:"MD1"}}});
+    if(url.pathname==="/subscriptions") {subscriptions.push(JSON.parse(init.body).subscriptions);return json({subscriptions:{id:"SB1"}});}
+    if(url.pathname==="/subscriptions/SB1") return json({subscriptions:{metadata:{booking_id:"anchor-1"},amount:3500}});
+    if(url.pathname==="/payments/PM2") return json({payments:{charge_date:"2026-11-01",amount:3500}});
+    if(url.pathname==="/functions/v1/send-email") {notices.push(JSON.parse(init.body));return failReceipt ? json({error:"fixture mail outage"},503) : json({success:true});}
+    if(url.pathname==="/rest/v1/bookings") {
+      if(init.method==="POST") {enrolments.push(...JSON.parse(init.body));return json(enrolments);}
+      if(init.method==="PATCH") {
+        const change=JSON.parse(init.body);
+        if(change.gocardless_payment_id) return json([]);
+        if(change.payment_confirmation_sent_at) {receiptMarked=true;return json([]);}
+        if(confirmed || url.searchParams.get("gocardless_payment_id")==="eq.PM2") return json([]);
+        confirmed=true;
+        return json([paidRow]);
+      }
+      if(url.searchParams.has("gocardless_payment_id")) return json(url.searchParams.get("gocardless_payment_id")==="eq.PM1" && confirmed && !receiptMarked ? [paidRow] : []);
+      return json([{session_id:"boxfit",session_name:"BoxFit",user_id:member.id,name:member.name,email:member.email,plan:"Membership — 1 class",booking_date:"2026-10-15"}]);
+    }
+    throw new Error(`Unexpected webhook fetch ${url.pathname}`);
+  };
+  const webhook=async (events,expectedStatus=200)=>{
+    const body=JSON.stringify({events});
+    const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(settings.GOCARDLESS_WEBHOOK_SECRET),{name:"HMAC",hash:"SHA-256"},false,["sign"]);
+    const signature=Buffer.from(await crypto.subtle.sign("HMAC",key,new TextEncoder().encode(body))).toString("hex");
+    const result=await webhookHandler(new Request("https://fixture.supabase.test/webhook",{method:"POST",body,headers:{"Webhook-Signature":signature}}));
+    assert.equal(result.status,expectedStatus,await result.text());
+  };
+  await webhook([{resource_type:"billing_requests",action:"fulfilled",links:{billing_request:"BR1"}}]);
+  assert.equal(notices.length,0); assert.equal(subscriptions.length,0,"PAYG must not create a monthly subscription");
+  await webhook([{resource_type:"payments",action:"confirmed",links:{payment:"PM1"}}]);
+  assert.equal(notices.length,1); assert.equal(notices[0].amount,10); assert.match(notices[0].booking_dates,/16 October 2026/);
+  await webhook([{resource_type:"payments",action:"confirmed",links:{payment:"PM1"}}]);
+  assert.equal(notices.length,1,"duplicate payment events must not send another confirmation");
+  confirmed=false;receiptMarked=false;failReceipt=true;
+  await webhook([{resource_type:"payments",action:"confirmed",links:{payment:"PM1"}}],500);
+  assert.equal(receiptMarked,false);
+  failReceipt=false;
+  await webhook([{resource_type:"payments",action:"confirmed",links:{payment:"PM1"}}]);
+  assert.equal(receiptMarked,true,"retry must deliver a receipt even after status became Paid");
+  const delivered=notices.length;
+  await webhook([{resource_type:"payments",action:"confirmed",links:{payment:"PM1"}}]);
+  assert.equal(notices.length,delivered);
+  plan="membership";
+  await webhook([{resource_type:"billing_requests",action:"fulfilled",links:{billing_request:"BR1"}}]);
+  assert.equal(subscriptions[0].amount,3500);assert.equal(subscriptions[0].metadata.session_id,"boxfit");assert.match(subscriptions[0].name,/BoxFit/);
+  await webhook([{resource_type:"payments",action:"confirmed",links:{payment:"PM2",subscription:"SB1"}}]);
+  assert.deepEqual(enrolments.map(booking=>booking.booking_date),["2026-11-05","2026-11-12","2026-11-19","2026-11-26"]);
+  assert.ok(enrolments.every(booking=>booking.session_id==="boxfit"));
+  console.log("PASS signed class webhooks confirm only on payment, retry failed receipts without repeat deliveries, never subscribe; BoxFit subscriptions enrol the configured weekday");
+} finally {
+  globalThis.fetch=originalFetch;
+  CLASS_PAYMENTS.boxfit.dates.length=0;CLASS_PAYMENTS.boxfit.weekday=null;
+  delete globalThis.Deno;
+}

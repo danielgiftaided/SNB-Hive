@@ -1,3 +1,5 @@
+import { classPaymentConfig } from "./class-config.ts";
+
 export type CheckoutPlan = "payg" | "membership";
 
 export function checkoutMetadata(
@@ -39,19 +41,19 @@ export function bookingRowsValidationIssue(
       rows.some(row => typeof row?.plan !== "string" || !row.plan.toLowerCase().includes(expectedPlan))) {
     return "wrong_plan";
   }
-  // Checkout is only initiated from the Zumba booking. A two-activity
+  // Checkout is initiated from a configured paid class. A two-activity
   // membership deliberately puts the member's second class in the same
   // payment group, so requiring every row to have the Zumba session id makes
   // that valid group impossible to verify. PAYG rows, on the other hand, are
   // all individual Zumba dates and must remain restricted to that session.
-  if (booking.session_id !== "zumba") return "wrong_session";
-  if (plan === "payg" && rows.some(row => !row || row.session_id !== "zumba")) {
+  if (!classPaymentConfig(booking.session_id)) return "wrong_session";
+  if (plan === "payg" && rows.some(row => !row || row.session_id !== booking.session_id)) {
     return "wrong_session";
   }
   if (rows.some(row => !(row.status === "pending_checkout" || row.status === "pending_payment"))) {
     return "wrong_status";
   }
-  if (plan === "payg" && rows.some(row => Math.round(Number(row.amount) * 100) !== paygAmount)) {
+  if (plan !== "membership" && rows.some(row => Math.round(Number(row.amount) * 100) !== paygAmount)) {
     return "wrong_amount";
   }
   return null;

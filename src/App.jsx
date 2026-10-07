@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { Fragment, useState, useEffect, useCallback, useRef } from "react";
 import {
   Calendar, MapPin, Clock, Check, X, ArrowRight, ChevronLeft,
   Loader2, Sparkles, RotateCcw, Music2, Flame, Dumbbell, Flower2,
@@ -7,10 +7,11 @@ import {
   Paintbrush, UserPlus, Trash2
 } from "lucide-react";
 import storage, { supabase } from "./storage.js";
-import { bookingIsActive, bookingMatchesClassDate, classBookingDates, UNDATED_BOOKING } from "./booking-utils.js";
-import { proratedMembershipAmount } from "../supabase/functions/_shared/membership.ts";
+import { bookingIsActive, bookingMatchesClassDate, classBookingDates, UNDATED_BOOKING, isTasterBooking, userTasterBooking, tasterBookingUsed } from "./booking-utils.js";
+import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../supabase/functions/_shared/membership.ts";
 import { membershipDatesFrom } from "../supabase/functions/_shared/membership-bookings.ts";
 import { checkoutErrorDetail, singleMembershipBooking } from "./checkout.js";
+import { CLASS_PAYMENTS, PAYG_AMOUNT, TASTER_AMOUNT, SELF_DEFENCE_DATES, SELF_DEFENCE_PRICE, CLASS_BANK_ACCOUNT, classPaymentConfig } from "../supabase/functions/_shared/class-config.ts";
 
 /* =====================================================================
    CONFIG — edit these to customise the app.
@@ -46,24 +47,22 @@ const DEFAULT_CLASSES = [
   { id:"zumba",    name:"Zumba",                  tagline:"High-energy dance cardio",  day:"Fridays", time:"12:00–13:00", capacity:12, icon:"music",   color:"#C99A4B",
     venue:"6 Dispensary Lane, London E8 1FT",              venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
     whatToBring:"Wear comfortable clothes and grip socks", icsStart:"20260925T110000", icsEnd:"20260925T114500", description:"Zumba is about much more than fitness. It's about community, confidence, and feeling good. Dance has been shown to support memory, coordination, and emotional wellbeing, and music and dance can help get through some of the most challenging times in life.\n\nIt has the power to bring people together, lift spirits, and remind us that exercise doesn't have to feel like a chore — it can be something you genuinely look forward to.\n\nZumba is based on repetitive movements throughout each song, so you don't need to be an experienced dancer or technically advanced to join in. It's all about having fun while getting fit.\n\nThe routines are repeated for about 6 weeks, which allows people to learn the moves and build their confidence and then new routines are introduced gradually over time. That repetition helps build confidence because your body begins to associate the movements with the music, allowing you to learn naturally without pressure. It's a welcoming, supportive environment." },
-  { id:"boxing",   name:"Boxing",                  tagline:"Pad work, Co-ordination",   day:"TBC", time:"TBC", capacity:20, icon:"flame",   color:"#9B5B45", tasterStatus:"tbc",
-    venue:"SCK Fitness, 439 High Road, Leyton, London E10 5EL", venueMap:"https://www.google.com/maps/search/?api=1&query=SCK+Fitness+439+High+Road+Leyton+London+E10+5EL",
-    whatToBring:"Wear comfortable workout clothes and trainers. Bring a water bottle", icsStart:"20260921T123000", icsEnd:"20260921T131500", description:"Boxing is one of the most effective full-body workouts, combining cardiovascular fitness, strength, coordination and stress relief in a fun and empowering way.\n\nThis class is not about fighting or competition. Instead, it uses boxing drills, pad work and fitness exercises to help women improve their health, build confidence and enjoy movement in a supportive environment.\n\nBenefits include:\n• Increased calorie burn and support with weight loss goals\n• Improved cardiovascular fitness and stamina\n• Increased confidence and self-belief\n• A healthy outlet for stress and frustration\n• Improved coordination and balance\n• Stronger core and full-body conditioning\n• Improved mood and mental wellbeing\n\nMany women find boxing incredibly empowering because it allows them to release stress, develop resilience and discover strengths they never knew they had.\n\nSuitable for beginners and all fitness levels." },
   { id:"somatic",  name:"Somatic",                 tagline:"Move, breathe, reconnect",  day:"TBC", time:"TBC", capacity:20, icon:"flower",  color:"#7C9885", tasterStatus:"tbc",
     venue:"6 Dispensary Lane, London E8 1FT",              venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
     whatToBring:"Loose comfortable clothing and grip socks. Bring a water bottle.", icsStart:"20260922T110000", icsEnd:"20260922T114500", description:"Modern life places enormous demands on women. Many spend their days caring for others, managing households, working, raising children and carrying responsibilities that leave little time for themselves.\n\nThis class offers a gentle opportunity to slow down, reconnect with the body and create space for rest, reflection and renewal.\n\nThrough gentle movement, stretching, breathing exercises and guided relaxation, participants are supported in releasing physical tension and calming the nervous system.\n\nBenefits include:\n• Reduced stress and feelings of overwhelm\n• Improved sleep quality\n• Relief from physical tension and tightness\n• Improved body awareness\n• Support for emotional wellbeing\n• A greater sense of calm and balance\n• Time to pause and reconnect with oneself\n• Improved ability to manage the demands of everyday life\n\nSessions may also include gentle reminders around gratitude, self-care, reflection and caring for the body.\n\nFor many women, this class becomes a rare opportunity to simply pause, breathe and be present without expectation or pressure.\n\nSuitable for all ages, abilities and fitness levels.\n\nBecause when women are supported, strengthened and given space to care for themselves, they are better able to care for those around them." },
   { id:"strength", name:"Strength & Conditioning", tagline:"Build strength, build power", day:"TBC", time:"TBC", capacity:20, icon:"dumbbell",color:"#1F4A42", tasterStatus:"tbc", 
     venue:"6 Dispensary Lane, London E8 1FT", venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
     whatToBring:"Gym clothes and trainers and bring a water bottle.", icsStart:"20260924T110000", icsEnd:"20260924T114500", description:"Strength training is one of the most beneficial forms of exercise for women, particularly as we navigate the demands of motherhood, work and daily life.\n\nThis class focuses on building functional strength, improving mobility and helping women feel stronger and more capable in their everyday activities.\n\nUsing bodyweight exercises, resistance bands and light equipment, sessions are designed to be accessible while still providing an effective workout.\n\nBenefits include:\n• Increased muscle tone and strength\n• Support with sustainable fat loss and body composition goals\n• Improved posture and reduced aches and pains\n• Better balance and stability\n• Increased energy levels\n• Stronger bones and joints\n• Improved confidence in daily movement\n• Support for healthy ageing and long-term wellbeing\n\nRather than focusing on appearance alone, this class encourages women to appreciate what their bodies can do and develop strength that carries into everyday life.\n\nSuitable for all fitness levels and can be adapted to individual needs." },
-  { id: "boxfit", name: "BoxFit", tagline: "Boxing-inspired fitness", day: "Thursday 1 October 2026", time: "13:00–14:00", capacity: 18, icon: "flame", color: "#D06B4F", bookingKind: "taster",
-    venue: "6 Dispensary Lane, London E8 1FT", venueMap: "https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT", whatToBring: "Bring boxing gloves and pads if you have them. Wear comfortable workout clothes and trainers. Bring a water bottle", icsStart: "20261001T120000",
-    icsEnd: "20261001T130000", description: "A high-energy boxing-inspired fitness taster combining cardio, conditioning and boxing drills. Suitable for beginners and all fitness levels."},
-  { id:"self_defence", name:"Self Defence", tagline:"Intensive 3-week course", day:"November 2026 start", time:"Wednesdays, 12:00–14:00", capacity:11, icon:"shield", color:"#6F596E", bookingKind:"waitlist",
+  { id: "boxfit", name: "BoxFit", tagline: "Cardio, conditioning & pad work", day: "Dates to be confirmed", time: "Time to be confirmed", capacity: 18, icon: "flame", color: "#D06B4F", bookingPaused: true,
+    venue: "6 Dispensary Lane, London E8 1FT", venueMap: "https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT", whatToBring: "Bring boxing gloves and pads if you have them. Wear comfortable workout clothes and trainers. Bring a water bottle", description: "A high-energy boxing-inspired fitness class combining cardio, conditioning and boxing drills. Suitable for beginners and all fitness levels."},
+  { id:"self_defence", name:"Self Defence", tagline:"Intensive 3-week course", day:"3-week course", time:"Wednesdays, 12:00–14:00", capacity:11, icon:"shield", color:"#6F596E", bookingKind:"bank_transfer", price:SELF_DEFENCE_PRICE, courseDates:SELF_DEFENCE_DATES,
     venue:"6 Dispensary Lane, London E8 1FT", venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
-    details:["2-hour session each week for 3 weeks", "£90 per person", "Limited spaces available"], description:"Join us in November." },
+    details:["Wednesday 18th November", "Wednesday 25th November", "Wednesday 2nd December", "2-hour session each week for 3 weeks", "£90 per person"], description:"A three-week Self Defence course. Pay by bank transfer using your name as the reference." },
 ];
 
-// Zumba launches with one monthly membership tier.
+const ZUMBA_TASTER = { ...DEFAULT_CLASSES.find(cls => cls.id === "zumba"), name:"Zumba taster", tagline:"Try Zumba for half price", bookingKind:"paid_taster", details:["£5 for one session", "One taster per person, per class"] };
+
+// Paid weekly classes share one monthly membership tier.
 const PILATES_BASE = {
   name: "Reformer Pilates", tagline: "Strength, Core, Balance",
   color: "#9b7ecb",
@@ -75,27 +74,16 @@ const PILATES_SESSIONS = [
   { id:"pilates_taster" },
 ];
 
-const MEMBERSHIP_TIERS = [{ activities: 1, price: 35 }];
+const MEMBERSHIP_TIERS = [{ activities: 1, price: MEMBERSHIP_MONTHLY_AMOUNT / 100 }];
 
-const PAYG_PRICE = 10;
-
-// Keep the currently bookable Zumba block explicit so Pay As You Go and
-// membership customers are always offered the same lesson dates. The chosen
-// membership date also drives the first-payment proration calculation below.
-const ZUMBA_BOOKING_DATES = [
-  "2026-10-09",
-  "2026-10-16",
-  "2026-10-23",
-  "2026-10-30",
-];
+const PAYG_PRICE = PAYG_AMOUNT / 100;
 
 const DEFAULT_RETREATS = [
   { id: "retreat-1", name: "Women's Wellness Retreat", location: "Surrey Hills", dates: "Fri 18 – Sun 20 Sept", price: 950, deposit: 300, capacity: 15 },
 ];
 
-// Paid bookings are being launched for Zumba only. Add another class id here
-// when it is ready to accept payments.
-const PAID_CLASS_IDS = new Set(["zumba"]);
+// BoxFit shares Zumba pricing and payment handling; dates keep it paused.
+const PAID_CLASS_IDS = new Set(Object.keys(CLASS_PAYMENTS));
 
 // Retreat payments continue to use bank transfer. Replace these
 // with your real account details before going live — knowing an account
@@ -335,20 +323,29 @@ function StatusBadge({ status }) {
 
 function BookingActions({ booking, onStatusChange }) {
   const isCancelled = booking.status === "cancelled";
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
   return (
+    <div className="flex flex-col gap-1">
     <select
       aria-label={`Actions for ${booking.name || "booking"}`}
       value=""
-      onChange={event => {
-        if (event.target.value) onStatusChange(booking.id, event.target.value);
+      disabled={busy}
+      onChange={async event => {
+        const status = event.target.value;
+        if (!status) return;
+        setBusy(true); setError("");
+        try { await onStatusChange(booking.id, status); }
+        catch (error) { setError(error.message || "Couldn't update this booking."); }
+        finally { setBusy(false); }
       }}
       className="ff-body rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-xs text-stone-600 focus:outline-none focus:ring-2"
       style={{ "--tw-ring-color": TEAL }}
     >
       <option value="" disabled>Actions</option>
       {isCancelled ? (
-        <option value="pending_payment">Restore</option>
+        <option value={isTasterBooking(booking) ? (booking.gocardlessPaymentId ? "paid" : "confirmed") : "pending_payment"}>Restore</option>
       ) : (
         <>
           <option value="paid" disabled={booking.status === "paid"}>Paid</option>
@@ -356,6 +353,8 @@ function BookingActions({ booking, onStatusChange }) {
         </>
       )}
     </select>
+    {error && <p role="alert" className="max-w-xs text-xs text-red-600">{error}</p>}
+    </div>
   );
 }
 
@@ -770,22 +769,23 @@ function AuthScreen({ onAuth }) {
    - Remaining capacity is kept private from regular users
    ---- */
 
-function ClassCard({ cls, booked, onBook, bookingType, onWaitlist }) {
+function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = false }) {
   const Icon = ICONS[cls.icon] || Sparkles;
   const full = booked >= cls.capacity;
   const isMember = bookingType === "membership";
   const isWaitlist = cls.bookingKind === "waitlist";
-  const isTaster = TASTER_MODE || cls.bookingKind === "taster";
+  const isTaster = TASTER_MODE || ["taster", "paid_taster"].includes(cls.bookingKind);
   const isTbc = cls.tasterStatus === "tbc";
   const isBooked = !!bookingType;
   const canBookAnotherPayg = bookingType === "payg";
-  const paymentsAvailable = isTaster || PAID_CLASS_IDS.has(cls.id) || isWaitlist;
+  const paymentsAvailable = isTaster || PAID_CLASS_IDS.has(cls.id) || isWaitlist || cls.bookingKind === "bank_transfer";
   const isClosed =
     isTaster &&
     TASTERS_CLOSED &&
     !isBooked;
 
   const disabled =
+    cls.bookingPaused || tasterUsed ||
     isTbc ||
     !paymentsAvailable ||
     (isBooked && !canBookAnotherPayg) ||
@@ -881,14 +881,14 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist }) {
           disabled={disabled}
           className="ff-body inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full transition disabled:cursor-not-allowed"
           style={{
-            backgroundColor: isTbc
+            backgroundColor: cls.bookingPaused || tasterUsed || isTbc
               ? "#E3DFD3"
               : isBooked && !canBookAnotherPayg
                 ? "#D4EBD9"
                 : !isWaitlist && ((full && !PAID_CLASS_IDS.has(cls.id)) || isClosed)
                   ? "#E3DFD3"
                   : TEAL,
-            color: isTbc
+            color: cls.bookingPaused || tasterUsed || isTbc
               ? "#8A8478"
               : isBooked && !canBookAnotherPayg
                 ? "#2D6B40"
@@ -898,7 +898,7 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist }) {
             opacity: disabled ? 0.85 : 1,
           }}
         >
-          {!paymentsAvailable
+          {cls.bookingPaused ? "Book" : tasterUsed ? "Taster already booked" : !paymentsAvailable
             ? "Coming soon"
             : isTbc
             ? "TBC"
@@ -915,7 +915,7 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist }) {
                     : canBookAnotherPayg
                       ? "Book another lesson"
                     : isTaster
-                      ? "Book taster"
+                      ? (cls.bookingKind === "paid_taster" ? "Book" : "Book taster")
                       : "Book"}
 
           {!disabled && (
@@ -1026,8 +1026,11 @@ function RetreatCard({ retreat, booked, onBook, isSignedUp }) {
    - 5-minute hold (not 30)
    ---- */
 
-function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymentFailure }) {
-  const isTaster = type === "class" && (TASTER_MODE || session.bookingKind === "taster");
+function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm, onPaymentFailure }) {
+  const isPaidTaster = session.bookingKind === "paid_taster";
+  const isBankTransfer = isPaidTaster || session.bookingKind === "bank_transfer";
+  const isTaster = !isPaidTaster && !isBankTransfer && type === "class" && (TASTER_MODE || session.bookingKind === "taster");
+  const previousTaster = isPaidTaster ? userTasterBooking(bookings, currentUser, session.id) : null;
   const [step, setStep]           = useState(1);
   const [plan, setPlan]           = useState(type==="class" ? "payg" : "deposit");
   const [activities, setAct]      = useState(1);
@@ -1035,8 +1038,9 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
   const [saving, setSaving]       = useState(false);
   const [bankRef, setBankRef]     = useState("");
   const [error, setError]         = useState("");
-  const availableDates = session.id === "zumba" ? ZUMBA_BOOKING_DATES : fridayBookingDates();
-  const [selectedDates, setSelectedDates] = useState([availableDates[0]]);
+  const [emailNotice, setEmailNotice] = useState("");
+  const availableDates = classPaymentConfig(session.id)?.dates || fridayBookingDates();
+  const [selectedDates, setSelectedDates] = useState([previousTaster?.bookingDate && availableDates.includes(previousTaster.bookingDate) ? previousTaster.bookingDate : availableDates[0]]);
 
   function toggleDate(date) {
     setSelectedDates(current => current.includes(date)
@@ -1064,12 +1068,44 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
   const monthlyMembershipAmount = MEMBERSHIP_TIERS.find(t=>t.activities===activities)?.price;
   const membershipStartDate = new Date(`${selectedDates[0]}T12:00:00Z`);
   const firstMembershipAmount = proratedMembershipAmount(membershipStartDate, monthlyMembershipAmount * 100) / 100;
-  const amount = type==="class"
+  const amount = isPaidTaster ? TASTER_AMOUNT / 100 : isBankTransfer ? session.price : type==="class"
     ? (plan==="payg" ? PAYG_PRICE * selectedDates.length : firstMembershipAmount)
     : (plan==="deposit" ? session.deposit : session.price);
 
+  const bankBookingDates = isPaidTaster ? selectedDates : session.courseDates;
+
   async function handleConfirm() {
     let pendingBookingId = null;
+    if (saving) return;
+    if (session.bookingPaused) return setError("Booking opens when dates and times are confirmed.");
+    if (isPaidTaster && tasterBookingUsed(previousTaster)) return setError("You have already booked your Zumba taster. Only one taster is available per class, even after cancellation.");
+    if (type === "class" && !isTaster && (!isBankTransfer || isPaidTaster) &&
+        (!selectedDates.length || selectedDates.some(date => !availableDates.includes(date)))) {
+      return setError("Please choose an available lesson date.");
+    }
+    if (isBankTransfer) {
+      setSaving(true); setError("");
+      try {
+        const bookingId = uid();
+        const bankPlan = isPaidTaster ? "Taster (bank transfer)" : "Course (bank transfer)";
+        await onConfirm({ id:bookingId, sessionId:session.id, sessionName:session.name, type:"class",
+          userId:currentUser.id, name:currentUser.name, email:currentUser.email, phone:currentUser.phone,
+          plan:bankPlan, amount, status:"pending_payment",
+          bookingDate:bankBookingDates[0], createdAt:new Date().toISOString() });
+        try {
+          await callEdgeFunction("send-email", { type:"bank_transfer_booking", booking_id:bookingId,
+            to_email:currentUser.email, to_name:currentUser.name, user_name:currentUser.name,
+            user_email:currentUser.email, user_phone:currentUser.phone, session_name:session.name,
+            plan:bankPlan, amount, status:"Awaiting bank transfer",
+            booking_dates:bankBookingDates.map(formatBookingDate).join(", "), time:session.time, venue:session.venue });
+        } catch {
+          setEmailNotice("Your booking is saved, but we couldn't send the emails. Please contact Shams@snbhive.com for confirmation.");
+        }
+        setStep(2);
+      } catch { setError("Couldn't save your booking — please try again."); }
+      finally { setSaving(false); }
+      return;
+    }
     // ── TASTER MODE — no payment, instant confirmation ──
     if (isTaster) {
       setSaving(true); setError("");
@@ -1192,7 +1228,10 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
       }
       setStep(2);
     } catch (err) {
-      if (pendingBookingId) await onPaymentFailure?.(pendingBookingId);
+      if (pendingBookingId) {
+        try { await onPaymentFailure?.(pendingBookingId); }
+        catch (cleanupError) { console.error("[checkout cleanup FAILED]:", cleanupError.message); }
+      }
       const detail = checkoutErrorDetail(err);
       setError(`Couldn't start GoCardless checkout. No payment was taken — ${detail}`);
     }
@@ -1233,10 +1272,10 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
             </div>
           )}
 
-          {step === 1 && !isTaster && (
+          {step === 1 && !isTaster && !isBankTransfer && (
             <div className="flex flex-col gap-4">
               {type==="class" ? (<>
-                <label className="text-sm font-medium text-stone-700">Choose your Zumba payment option</label>
+                <label className="text-sm font-medium text-stone-700">Choose your {session.name} payment option</label>
                 <button onClick={() => setPlan("payg")} className="text-left rounded-xl border-2 p-3.5 transition"
                   style={{ borderColor:plan==="payg"?TEAL:"#E7E2D5" }}>
                   <div className="flex items-center justify-between">
@@ -1264,7 +1303,7 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
                     <span className="font-semibold text-sm">Monthly membership</span>
                     {plan==="membership" && <Check size={16} style={{ color:TEAL }}/>}
                   </div>
-                  <p className="text-xs text-stone-500 mt-0.5">£35/month for one weekly Zumba class</p>
+                  <p className="text-xs text-stone-500 mt-0.5">£{monthlyMembershipAmount.toFixed(2)}/month for one weekly {session.name} class</p>
                 </button>
                 {plan==="membership" && (<>
                   <fieldset className="rounded-xl border border-stone-200 p-3.5">
@@ -1352,6 +1391,40 @@ function BookingModal({ session, type, currentUser, onClose, onConfirm, onPaymen
                 className="inline-flex items-center justify-center gap-1.5 font-semibold text-sm py-3 rounded-full transition"
                 style={{ backgroundColor:TEAL, color:"#fff" }}>
                 {saving ? <><Loader2 size={15} className="animate-spin"/> Opening secure payment…</> : <>Continue to payment <ArrowRight size={15}/></>}
+              </button>
+            </div>
+          )}
+
+          {isBankTransfer && (
+            <div className="flex flex-col gap-4">
+              <h4 className="ff-display text-xl font-semibold" style={{ color:INK }}>{step === 2 ? "Booking saved — awaiting payment" : "Pay by bank transfer"}</h4>
+              {isPaidTaster && step === 1 && (<>
+                <p className="text-sm text-stone-600">Try one Zumba session for £5, half the usual price. You can book one taster per class in total, even if you cancel it.</p>
+                <fieldset className="rounded-xl border border-stone-200 p-3.5">
+                  <legend className="px-1 text-sm font-medium text-stone-700">Choose your taster date</legend>
+                  <div className="flex flex-col gap-2">
+                    {availableDates.map(date => <label key={date} className="flex items-center gap-2.5 rounded-lg bg-stone-50 px-3 py-2 text-sm cursor-pointer">
+                      <input type="radio" name="taster-date" checked={selectedDates[0] === date} onChange={() => setSelectedDates([date])}/>
+                      <span>{formatBookingDate(date)}</span>
+                    </label>)}
+                  </div>
+                </fieldset>
+              </>)}
+
+              <p className="text-sm text-stone-600">£{amount.toFixed(2)} for {isPaidTaster ? "one Zumba taster session" : "the full three-week Self Defence course"}, {session.time}.</p>
+              <ul className="text-sm text-stone-600 space-y-1">{bankBookingDates.map(date => <li key={date}>{formatBookingDate(date)}</li>)}</ul>
+              <div className="rounded-xl bg-stone-50 p-4 text-sm space-y-2">
+                <p><strong>Account name:</strong> {CLASS_BANK_ACCOUNT.accountName}</p>
+                <p><strong>Account number:</strong> {CLASS_BANK_ACCOUNT.accountNumber}</p>
+                <p><strong>Sort code:</strong> {CLASS_BANK_ACCOUNT.sortCode}</p>
+                <p><strong>Reference:</strong> {currentUser.name}</p>
+              </div>
+              <p className="text-xs text-stone-500">Use your name as the payment reference. Your booking will show as awaiting payment until we receive your transfer.</p>
+              {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
+              {emailNotice && <p role="status" className="text-xs text-amber-700">{emailNotice}</p>}
+              <button onClick={step === 2 ? onClose : handleConfirm} disabled={saving}
+                className="inline-flex items-center justify-center gap-1.5 font-semibold text-sm py-3 rounded-full disabled:opacity-50" style={{ backgroundColor:TEAL, color:"#fff" }}>
+                {saving ? <Loader2 size={15} className="animate-spin"/> : step === 2 ? "Got it, thank you" : "Reserve my place"}
               </button>
             </div>
           )}
@@ -1702,6 +1775,17 @@ function getSessionInfo(sessionId) {
   return null;
 }
 
+function cancellationEmail(booking, fallback = {}) {
+  const session = getSessionInfo(booking.sessionId);
+  return {
+    type:"booking_cancelled", to_email:booking.email || fallback.email, to_name:booking.name || fallback.name,
+    user_name:booking.name || fallback.name, user_email:booking.email || fallback.email, user_phone:booking.phone || fallback.phone,
+    session_name:booking.sessionName,
+    booking_date:session?.courseDates ? session.courseDates.map(formatBookingDate).join(", ") : booking.bookingDate ? formatBookingDate(booking.bookingDate) : [session?.day, session?.time].filter(Boolean).join(" · ") || "Not specified",
+    cancelled_at:new Date().toLocaleString("en-GB"),
+  };
+}
+
 function MyBookings({ bookings, currentUser, onCancel }) {
   const [confirmCancel, setConfirmCancel] = useState(null);
   const [cancelling, setCancelling] = useState(null);
@@ -1732,7 +1816,7 @@ function MyBookings({ bookings, currentUser, onCancel }) {
                   <span className="font-semibold text-sm" style={{ color: INK }}>{b.sessionName}</span>
                   <StatusBadge status={b.status}/>
                 </div>
-                {cls?.day && cls?.time && <p className="text-xs text-stone-500 mt-1">{b.bookingDate ? formatBookingDate(b.bookingDate) : cls.day} · {cls.time}</p>}
+                {cls?.day && cls?.time && <p className="text-xs text-stone-500 mt-1">{cls.courseDates ? cls.courseDates.map(formatBookingDate).join(" · ") : b.bookingDate ? formatBookingDate(b.bookingDate) : cls.day} · {cls.time}</p>}
                 {cls?.venue && (
                   <a href={cls.venueMap} target="_blank" rel="noopener noreferrer"
                     className="ff-body flex w-fit items-center gap-1 text-xs text-stone-400 hover:text-stone-600 hover:underline mt-1 transition">
@@ -1922,8 +2006,8 @@ function WelcomeHero({ currentUser }) {
           Women&apos;s Fitness &amp; Wellness Classes
         </h2>
         <p className="ff-body text-sm mt-2 leading-relaxed max-w-sm" style={{ color: "rgba(240,232,204,0.8)" }}>
-          Join our welcoming community. Browse our taster sessions below — they&apos;re free and a great
-          way to try a new class before committing.
+          Join our welcoming community. Browse our classes below and find your next session.
+          We offer half-priced tasters — email <a className="underline font-semibold" href="mailto:Shams@snbhive.com">Shams@snbhive.com</a> for details.
         </p>
       </div>
     </div>
@@ -2067,7 +2151,7 @@ function PrivacyPage() {
 function TermsPage() {
   return (
     <PolicyPage title="Terms & Conditions">
-      <p><strong>1. Taster sessions</strong> — Taster sessions are free and subject to availability. Booking a taster does not guarantee a place on a regular class.</p>
+      <p><strong>1. Taster sessions</strong> — Taster sessions are half price and subject to availability. Each person can book only one taster per class; cancellation does not restore eligibility. Booking a taster does not guarantee a place on a regular class.</p>
       <p><strong>2. Cancellations</strong> — Please cancel at least 24 hours in advance if you cannot attend. This allows us to offer your place to someone on the waitlist.</p>
       <p><strong>3. Health & safety</strong> — By booking a taster you confirm you are in good health and able to participate. Please inform the instructor of any injuries before the session.</p>
       <p><strong>4. Your account</strong> — You are responsible for keeping your login details secure. Contact shams@snbhive.com immediately if you suspect unauthorised access.</p>
@@ -2327,7 +2411,7 @@ function StudioHireForm({ currentUser }) {
             <div>
               <label className="ff-body text-sm font-medium text-stone-700">What type of fitness class would this be?</label>
               <input value={form.fitnessType} onChange={e => setForm({...form, fitnessType:e.target.value})}
-                autoFocus className={inputCls} placeholder="e.g. Yoga, Boxing, Strength training"/>
+                autoFocus className={inputCls} placeholder="e.g. Yoga, BoxFit, Strength training"/>
             </div>
             {error && <p className="ff-body text-xs text-red-600">{error}</p>}
             <div className="flex gap-2">
@@ -2441,11 +2525,11 @@ function StudioHireForm({ currentUser }) {
 
 function AdminClassCard({ cls, bookings, onMoveBooking }) {
   const Icon = ICONS[cls.icon] || Sparkles;
-  const upcomingDates = cls.id === "zumba" ? ZUMBA_BOOKING_DATES : fridayBookingDates();
+  const upcomingDates = classPaymentConfig(cls.id)?.dates || fridayBookingDates();
   const dates = classBookingDates(bookings, cls.id, upcomingDates);
   const [selectedDate, setSelectedDate] = useState(dates[0]);
   const clsBookings = bookings
-    .filter(b => b.sessionId === cls.id && bookingIsActive(b))
+    .filter(b => b.sessionId === cls.id && b.status !== "waitlisted" && bookingIsActive(b))
     .filter(b => !PAID_CLASS_IDS.has(cls.id) || bookingMatchesClassDate(b, selectedDate))
     .sort((a,b) => new Date(a.createdAt||0) - new Date(b.createdAt||0));
   const pct = Math.min(100, cls.capacity ? (clsBookings.length / cls.capacity) * 100 : 0);
@@ -2657,17 +2741,28 @@ function AdminPage() {
   }
 
   async function updateStatus(id, status) {
-    const next = bookings.map(b => b.id === id ? { ...b, status } : b);
-    setBookings(next);
-    await storage.set("bookings", next);
+    const booking = bookings.find(b => b.id === id);
+    if (!booking || booking.status === status) return;
+    const { error } = await supabase.from("bookings").update({ status }).eq("id", id);
+    if (error) throw new Error(error.message);
+    setBookings(current => current.map(b => b.id === id ? { ...b, status } : b));
+    try {
+      if (status === "cancelled") {
+        await callEdgeFunction("send-email", cancellationEmail(booking));
+      } else if (status === "paid" && booking.plan.toLowerCase().includes("bank transfer")) {
+        const session = getSessionInfo(booking.sessionId);
+        await callEdgeFunction("send-email", { ...booking, type:"payment_confirmation",
+          session_name:booking.sessionName,
+          booking_dates:session?.courseDates?.map(formatBookingDate).join(", ") || formatBookingDate(booking.bookingDate) });
+      }
+    } catch { throw new Error("Status saved, but confirmation emails could not be sent. Please contact Shams@snbhive.com."); }
   }
 
   async function moveBooking(id, bookingDate) {
-    const next = bookings.map(booking => booking.id === id
-      ? { ...booking, bookingDate: bookingDate === UNDATED_BOOKING ? null : bookingDate }
-      : booking);
-    setBookings(next);
-    await storage.set("bookings", next);
+    const date = bookingDate === UNDATED_BOOKING ? null : bookingDate;
+    const { error } = await supabase.from("bookings").update({ booking_date:date }).eq("id", id);
+    if (error) throw new Error(error.message);
+    setBookings(current => current.map(booking => booking.id === id ? { ...booking, bookingDate:date } : booking));
   }
 
   async function handleSendBlast() {
@@ -3130,7 +3225,7 @@ function PaymentCompletePage() {
         </div>
         <h1 className="ff-display text-2xl font-semibold mt-4" style={{ color:INK }}>You're all set! 🎉</h1>
         <p className="text-sm text-stone-500 leading-relaxed mt-2">
-          Success — your GoCardless details have been submitted and your Zumba place is secured. We'll email you as soon as your payment or membership is confirmed. Direct Debit collections can take a few working days to appear in your bank account.
+          Your GoCardless details have been submitted. We'll email you as soon as your class payment or membership is confirmed. Direct Debit collections can take a few working days to appear in your bank account.
         </p>
         {bookingId && <p className="text-xs text-stone-400 mt-3">Booking reference: {bookingId.slice(0, 8).toUpperCase()}</p>}
         <a href="/" className="inline-flex justify-center w-full font-semibold text-sm py-3 rounded-full mt-5" style={{ backgroundColor:TEAL, color:"#fff" }}>
@@ -3207,23 +3302,37 @@ function BookingApp() {
   useIdleLogout(!!currentUser, handleSignOut, 30);
 
   function bookedCount(id) {
-    return bookings.filter(b => b.sessionId===id && bookingIsActive(b)).length;
+    return bookings.filter(b => b.sessionId===id && b.status !== "waitlisted" && bookingIsActive(b)).length;
   }
   function getUserBookingType(id) {
     if (!currentUser) return null;
-    const b = bookings.find(b => b.sessionId===id && bookingIsActive(b)
+    const b = bookings.find(b => b.sessionId===id && b.status !== "waitlisted" && bookingIsActive(b) && !isTasterBooking(b)
       && (b.userId===currentUser.id || b.email===currentUser.email));
     if (!b) return null;
     const plan = (b.plan || "").toLowerCase();
     if (plan.includes("waitlist")) return "waitlist";
     if (plan.includes("taster")) return "taster";
     if (plan.includes("membership")) return "membership";
+    if (plan.includes("bank transfer")) return "course";
     return "payg";
   }
 
-  async function persist(next) { setBookings(next); await storage.set("bookings", next); }
-  async function handleConfirmBooking(r) { await persist([...bookings, ...(Array.isArray(r) ? r : [r])]); }
-  async function updateStatus(id, s)     { await persist(bookings.map(b => b.id===id || b.paymentGroupId===id ? {...b, status:s} : b)); }
+  async function persist(next) {
+    // Write only changed rows: upserting a stale full list can undo a webhook's
+    // payment status or overwrite another member's cancellation.
+    const changed = next.filter(booking => booking !== bookings.find(old => old.id === booking.id));
+    await storage.set("bookings", changed);
+    setBookings(next);
+  }
+  async function handleConfirmBooking(r) {
+    const rows = Array.isArray(r) ? r : [r];
+    await persist([...bookings.filter(old => !rows.some(row => row.id === old.id)), ...rows]);
+  }
+  async function updateStatus(id, status) {
+    const { error } = await supabase.from("bookings").update({ status }).eq("payment_group_id", id);
+    if (error) throw new Error(error.message);
+    setBookings(current => current.map(b => b.id===id || b.paymentGroupId===id ? {...b, status} : b));
+  }
   async function handleSignOut() {
     await storage.remove("snb_session");
     setCurrentUser(null); setBookings([]);
@@ -3231,20 +3340,9 @@ function BookingApp() {
   async function cancelMyBooking(id) {
     const booking = bookings.find(b => b.id === id);
     if (!booking) return;
-    const session = getSessionInfo(booking.sessionId);
     await persist(bookings.map(b => b.id===id ? {...b, status:"cancelled"} : b));
     try {
-      await callEdgeFunction("send-email", {
-        type: "booking_cancelled",
-        to_email: booking.email || currentUser.email,
-        to_name: booking.name || currentUser.name,
-        user_name: booking.name || currentUser.name,
-        user_email: booking.email || currentUser.email,
-        user_phone: booking.phone || currentUser.phone,
-        session_name: booking.sessionName,
-        booking_date: booking.bookingDate ? formatBookingDate(booking.bookingDate) : [session?.day, session?.time].filter(Boolean).join(" · ") || "Not specified",
-        cancelled_at: new Date().toLocaleString("en-GB"),
-      });
+      await callEdgeFunction("send-email", cancellationEmail(booking, currentUser));
       return true;
     } catch (error) {
       console.error("[SNB cancellation email FAILED]:", error.message);
@@ -3327,8 +3425,7 @@ function BookingApp() {
   {DEFAULT_CLASSES
     .filter(cls => cls.id !== "self_defence")
     .map(cls => (
-      <ClassCard
-        key={cls.id}
+      <Fragment key={cls.id}><ClassCard
         cls={cls}
         booked={bookedCount(cls.id)}
         bookingType={getUserBookingType(cls.id)}
@@ -3338,6 +3435,9 @@ function BookingApp() {
         }}
         onWaitlist={joinWaitlist}
       />
+      {cls.id === "zumba" && <ClassCard cls={ZUMBA_TASTER} booked={bookedCount(cls.id)}
+        tasterUsed={tasterBookingUsed(userTasterBooking(bookings, currentUser, cls.id))}
+        onBook={() => { setModalSession(ZUMBA_TASTER); setModalType("class"); }}/>}</Fragment>
     ))}
 
   {/* Pilates comes immediately before Self Defence */}
@@ -3416,7 +3516,7 @@ function BookingApp() {
 
 
       {modalSession && (
-        <BookingModal session={modalSession} type={modalType} currentUser={currentUser}
+        <BookingModal session={modalSession} type={modalType} currentUser={currentUser} bookings={bookings}
           onClose={() => setModalSession(null)} onConfirm={handleConfirmBooking}
           onPaymentFailure={id => updateStatus(id, "cancelled")}/>
       )}

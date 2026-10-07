@@ -11,9 +11,27 @@ export function bookingIsActive(booking) {
   // payments/confirmed webhook changes a paid class to `paid`, so every
   // pending class must remain invisible regardless of whether it has a
   // payment reference.
-  if (booking.type === "class" && booking.status === "pending_payment") return false;
+  if (booking.type === "class" && booking.status === "pending_payment" &&
+      !String(booking.plan || "").toLowerCase().includes("bank transfer")) return false;
 
   return true;
+}
+
+export function isTasterBooking(booking) {
+  return String(booking?.plan || "").toLowerCase().includes("taster");
+}
+
+// Cancellation does not restore eligibility. An unfinished checkout can resume
+// its original booking, rather than creating a second lifetime taster.
+export function userTasterBooking(bookings, user, sessionId) {
+  const mine = bookings.filter(booking => booking.sessionId === sessionId && isTasterBooking(booking) &&
+    (booking.userId === user.id || String(booking.email || "").trim().toLowerCase() === user.email.trim().toLowerCase()));
+  return mine.find(tasterBookingUsed) || mine[0] || null;
+}
+
+export function tasterBookingUsed(booking) {
+  return !!booking && (String(booking.plan || "").toLowerCase().includes("bank transfer") || !!booking.gocardlessPaymentId ||
+    !["pending_checkout", "pending_payment"].includes(booking.status));
 }
 
 export function normalizedBookingDate(value) {
