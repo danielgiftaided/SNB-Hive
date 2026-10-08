@@ -193,16 +193,49 @@ with sync_playwright() as p:
  rows=[dict(id='webhook-member',session_id='zumba',session_name='Zumba',type='class',
    user_id='legacy-account-id',name=user['name'],email=' '+user['email'].upper()+' ',plan='Pay as you go',
    amount=10,status='pending_payment',gocardless_payment_id='PM_MEMBER',booking_date='2026-10-09')]
+ rows.append(dict(rows[0],id='second-payment',gocardless_payment_id='PM_SECOND'))
+ rows.append(dict(rows[0],id='missing-reference',gocardless_payment_id=None))
+ writes_before=len(writes);emails_before=len(emails);checkout_before=len(checkout)
  page=context.new_page();page.goto('http://127.0.0.1:5174/')
  page.get_by_role('heading',name='Zumba',exact=True).wait_for()
  page.get_by_role('button',name='My bookings',exact=True).click()
- assert 'No bookings yet.' in page.locator('main').inner_text(), 'Unconfirmed Direct Debits must not become confirmed bookings'
+ pending=page.get_by_role('region',name='Payments awaiting confirmation')
+ pending.wait_for()
+ assert pending.get_by_text('Zumba',exact=True).count()==3
+ assert pending.get_by_text('Awaiting payment',exact=True).count()==3
+ assert pending.get_by_text("We're waiting for your Direct Debit payment to be confirmed.",exact=False).count()==2
+ assert pending.get_by_text('Payment setup needs checking.',exact=False).count()==1
+ assert pending.get_by_role('link',name='Contact Shams',exact=True).get_attribute('href')=='mailto:Shams@snbhive.com'
+ assert 'Friday, 9 October 2026' in pending.inner_text()
+ assert 'No bookings yet.' not in page.locator('main').inner_text()
+ assert page.locator('main').get_by_text('Paid',exact=True).count()==0
+ assert len(writes)==writes_before and len(emails)==emails_before and len(checkout)==checkout_before
+ assert all(row['status']=='pending_payment' for row in rows), 'Displaying a pending payment must not change payment status'
  rows[0]['status']='paid';page.evaluate('window.dispatchEvent(new Event("focus"))')
- page.locator('main').get_by_text('Zumba',exact=True).wait_for()
+ page.locator('main').get_by_text('Paid',exact=True).wait_for()
+ assert pending.get_by_text('Zumba',exact=True).count()==2
  fail_read=True;page.evaluate('window.dispatchEvent(new Event("focus"))')
  page.get_by_role('alert').wait_for()
- assert page.locator('main').get_by_text('Zumba',exact=True).count()==1
+ assert page.locator('main').get_by_text('Paid',exact=True).count()==1
+ assert pending.get_by_text('Zumba',exact=True).count()==2
  fail_read=False;page.get_by_role('button',name='Retry bookings',exact=True).click()
  page.get_by_role('alert').wait_for(state='detached')
- print('PASS member refresh: payment confirmation appears automatically; transient failures preserve confirmed bookings and recover on retry')
+ print('PASS member payments: two references + one NULL for 9 October visible as awaiting confirmation without charges/status changes; webhook moves one to Paid; failed refresh preserves confirmed and pending rows')
+ context.close();context=browser.new_context(viewport={'width':1280,'height':1000})
+ context.add_init_script('sessionStorage.setItem("snb_admin_session",'+json.dumps(json.dumps({'email':'admin@example.test','loginAt':int(time.time()*1000)}))+');')
+ context.route('https://fixture.supabase.test/**',route_api);context.route('https://fonts.googleapis.com/**',lambda route:route.abort())
+ page=context.new_page();page.goto('http://127.0.0.1:5174/admin')
+ page.get_by_role('button',name=re.compile('^Bookings')).click()
+ table=page.locator('table');table.get_by_text('Payment setup needs checking',exact=True).wait_for()
+ assert table.locator('tbody tr').count()==3
+ assert table.get_by_text('Friday, 9 October 2026',exact=False).count()==3
+ assert table.get_by_text('Awaiting payment',exact=True).count()==2
+ with page.expect_download() as download_info:
+  page.get_by_role('button',name='Export CSV',exact=True).click()
+ assert '2026-10-09' in Path(download_info.value.path()).read_text()
+ page.get_by_role('button',name=re.compile('^Classes')).click()
+ zumba_admin=page.locator('div.bg-white.rounded-xl.border.border-stone-200.shadow-sm.overflow-hidden').filter(has=page.get_by_text('Zumba',exact=True))
+ assert zumba_admin.locator('p.ff-display').inner_text()=='1', 'Only the confirmed payment may count toward class capacity'
+ assert len(writes)==writes_before and len(emails)==emails_before and len(checkout)==checkout_before
+ print('PASS admin exact case: all three 9 October rows visible, NULL reference flagged, dates exported, only the paid row reserves a place')
  browser.close()

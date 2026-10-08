@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import storage, { supabase } from "./storage.js";
 import { useBookings } from "./use-bookings.js";
-import { bookingIsActive, bookingBelongsToUser, bookingMatchesClassDate, classBookingDates, UNDATED_BOOKING, isTasterBooking, userTasterBooking, tasterBookingUsed } from "./booking-utils.js";
+import { bookingIsActive, bookingBelongsToUser, classPaymentIsPending, bookingMatchesClassDate, classBookingDates, UNDATED_BOOKING, isTasterBooking, userTasterBooking, tasterBookingUsed } from "./booking-utils.js";
 import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../supabase/functions/_shared/membership.ts";
 import { membershipDatesFrom } from "../supabase/functions/_shared/membership-bookings.ts";
 import { checkoutErrorDetail, singleMembershipBooking } from "./checkout.js";
@@ -327,6 +327,14 @@ function BookingLoadNotice({ error, onRetry }) {
   return <div role="alert" className="ff-body rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
     <p>{error}</p>
     <button onClick={onRetry} className="mt-2 font-semibold underline">Retry bookings</button>
+  </div>;
+}
+
+function AdminBookingStatus({ booking }) {
+  return <div className="flex flex-col gap-1">
+    <StatusBadge status={booking.status}/>
+    {classPaymentIsPending(booking) && !booking.gocardlessPaymentId &&
+      <p className="ff-body text-xs text-amber-800">Payment setup needs checking</p>}
   </div>;
 }
 
@@ -1802,9 +1810,11 @@ function MyBookings({ bookings, currentUser, onCancel }) {
   const mine = bookings
     .filter(b => bookingBelongsToUser(b, currentUser))
     .filter(bookingIsActive);
+  const pendingPayments = bookings
+    .filter(b => bookingBelongsToUser(b, currentUser) && classPaymentIsPending(b));
   return (
     <div className="max-w-md mx-auto flex flex-col gap-3">
-      {mine.length===0
+      {mine.length===0 && pendingPayments.length===0
         ? <div className="text-center py-12">
             <p className="text-sm text-stone-500">No bookings yet.</p>
           </div>
@@ -1859,6 +1869,22 @@ function MyBookings({ bookings, currentUser, onCancel }) {
           );
         })
       }
+      {pendingPayments.length > 0 && <section aria-label="Payments awaiting confirmation" className="flex flex-col gap-3">
+        <h3 className="ff-display text-lg font-semibold mt-3" style={{ color: INK }}>Payments awaiting confirmation</h3>
+        <p className="text-xs text-stone-500">These bookings are awaiting confirmation of payment. Your place is confirmed once your payment is confirmed.</p>
+        {pendingPayments.slice().reverse().map(b => <div key={b.id}
+          className="bg-white rounded-xl border border-amber-200 p-4 flex flex-col gap-2">
+          <div className="flex items-start justify-between gap-2">
+            <span className="font-semibold text-sm" style={{ color: INK }}>{b.sessionName}</span>
+            <StatusBadge status="pending_payment"/>
+          </div>
+          <p className="text-xs text-stone-500">{b.bookingDate ? formatBookingDate(b.bookingDate) : "Lesson date not recorded"} · {b.plan}</p>
+          <p className="text-xs text-stone-600">{b.gocardlessPaymentId
+            ? "We're waiting for your Direct Debit payment to be confirmed. Please don't book or pay again while it's pending."
+            : "Payment setup needs checking. We haven't received a payment reference yet. Contact Shams before trying to pay again."}</p>
+          {!b.gocardlessPaymentId && <a href="mailto:Shams@snbhive.com" className="text-xs font-semibold underline" style={{ color: TEAL }}>Contact Shams</a>}
+        </div>)}
+      </section>}
       {cancelNotice && <p role="status" className="text-center text-xs text-stone-500">{cancelNotice}</p>}
     </div>
   );
@@ -1971,7 +1997,7 @@ function AdminDashboard({ bookings, onMarkPaid, onMarkPending, onCancel, onResto
                     <div className="text-sm font-semibold w-16 text-right">
                       £{typeof b.amount==="number" ? b.amount.toFixed(2) : b.amount}
                     </div>
-                    <StatusBadge status={b.status}/>
+                    <AdminBookingStatus booking={b}/>
                     <div className="flex gap-1.5 ml-auto">
                       {b.status==="pending_payment" && (
                         <button onClick={() => onMarkPaid(b.id)} title="Mark paid" className="p-1.5 rounded-lg hover:bg-stone-100" style={{ color:TEAL }}><Check size={15}/></button>
@@ -2962,7 +2988,7 @@ function AdminPage() {
               const headers = ["Name","Email","Phone","Session","Date","Time","Plan","Amount","Status","Booked at"];
               const rows = visibleBookings.map(b => {
                 const session = getSessionInfo(b.sessionId);
-                return [b.name,b.email,b.phone,b.sessionName,session?.day||"",session?.time||"",b.plan,b.amount,b.status,b.createdAt];
+                return [b.name,b.email,b.phone,b.sessionName,b.bookingDate||session?.day||"",session?.time||"",b.plan,b.amount,b.status,b.createdAt];
               });
               const csv = [headers,...rows].map(r => r.map(v => `"${String(v||"").replace(/"/g,'""')}"`).join(",")).join("\n");
               const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([csv],{type:"text/csv"})), download: `snb-bookings-${new Date().toISOString().slice(0,10)}.csv` });
@@ -3013,14 +3039,14 @@ function AdminPage() {
                         <td className="px-3 py-3 min-w-0">
                           <p className="ff-body text-sm font-medium">{b.sessionName || "—"}</p>
                           {session?.day && session?.time && (
-                            <p className="ff-body text-xs text-stone-500">{session.day} · {session.time}</p>
+                            <p className="ff-body text-xs text-stone-500">{b.bookingDate ? formatBookingDate(b.bookingDate) : session.day} · {session.time}</p>
                           )}
                           <p className="ff-body text-xs text-stone-400 mt-0.5">{b.plan}</p>
                         </td>
                         <td className="ff-body text-sm font-semibold px-2 py-3 text-right whitespace-nowrap">
                           £{typeof b.amount === "number" ? b.amount.toFixed(2) : b.amount}
                         </td>
-                        <td className="px-3 py-3"><StatusBadge status={b.status}/></td>
+                        <td className="px-3 py-3"><AdminBookingStatus booking={b}/></td>
                         <td className="ff-body text-xs text-stone-600 px-3 py-3">
                           {hasValidBookedOn ? bookedOn.toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" }) : "—"}
                         </td>
@@ -3046,12 +3072,12 @@ function AdminPage() {
                           <p className="ff-body text-xs text-stone-500 break-all">{b.email || "—"}</p>
                           <p className="ff-body text-xs text-stone-400">{b.phone || "—"}</p>
                         </div>
-                        <StatusBadge status={b.status}/>
+                        <AdminBookingStatus booking={b}/>
                       </div>
                       <div className="flex justify-between gap-3">
                         <div>
                           <p className="ff-body text-sm font-medium">{b.sessionName || "—"}</p>
-                          {session?.day && session?.time && <p className="ff-body text-xs text-stone-500">{session.day} · {session.time}</p>}
+                          {session?.day && session?.time && <p className="ff-body text-xs text-stone-500">{b.bookingDate ? formatBookingDate(b.bookingDate) : session.day} · {session.time}</p>}
                           <p className="ff-body text-xs text-stone-400">{b.plan}</p>
                         </div>
                         <p className="ff-body text-sm font-semibold whitespace-nowrap">£{typeof b.amount === "number" ? b.amount.toFixed(2) : b.amount}</p>

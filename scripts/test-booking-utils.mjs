@@ -3,6 +3,7 @@ import {
   bookingMatchesClassDate,
   bookingIsActive,
   bookingBelongsToUser,
+  classPaymentIsPending,
   classBookingDates,
   UNDATED_BOOKING,
 } from "../src/booking-utils.js";
@@ -36,5 +37,11 @@ assert.equal(bookingBelongsToUser({ email: " MEMBER@EXAMPLE.TEST " }, { id: "new
 assert.equal(bookingBelongsToUser({ userId: "member", email: "old@example.test" }, { id: "member", email: "new@example.test" }), true);
 assert.equal(bookingBelongsToUser({ userId: "other", email: "other@example.test" }, { id: "member", email: "member@example.test" }), false);
 assert.equal(bookingBelongsToUser({}, {}), false);
+assert.equal(classPaymentIsPending({ type: "class", status: "pending_payment", gocardlessPaymentId: "PM123" }), true);
+assert.equal(classPaymentIsPending({ type: "class", status: "pending_payment", gocardlessPaymentId: null }), true);
+assert.equal(classPaymentIsPending({ type: "class", status: "paid", gocardlessPaymentId: "PM123" }), false);
+assert.equal(classPaymentIsPending({ type: "class", status: "pending_checkout" }), false);
+assert.equal(classPaymentIsPending({ type: "class", status: "cancelled" }), false);
+assert.equal(classPaymentIsPending({ type: "class", status: "pending_payment", plan: "Taster (bank transfer)" }), false);
 
 console.log("PASS bookings only match their recorded lesson date");
