@@ -3,6 +3,8 @@ import { readFile } from "node:fs/promises";
 const functions = [
   "supabase/functions/gocardless-checkout/index.ts",
   "supabase/functions/gocardless-webhook/index.ts",
+  "supabase/functions/gocardless-sync/index.ts",
+  "supabase/functions/_shared/gocardless-bookings.ts",
   "supabase/functions/send-email/index.ts",
   "supabase/functions/admin-auth/index.ts",
 ];
@@ -49,6 +51,8 @@ if (!/\[functions\.send-email\]\s+verify_jwt\s*=\s*false/.test(supabaseConfig)) 
 const deploymentChecks = [
   ["redeploys when send-email changes", '- "supabase/functions/send-email/**"'],
   ["deploys the send-email function", "supabase functions deploy send-email --no-verify-jwt"],
+  ["redeploys when booking sync changes", '- "supabase/functions/gocardless-sync/**"'],
+  ["deploys the booking sync function", "supabase functions deploy gocardless-sync --no-verify-jwt"],
 ];
 
 for (const [description, expected] of deploymentChecks) {

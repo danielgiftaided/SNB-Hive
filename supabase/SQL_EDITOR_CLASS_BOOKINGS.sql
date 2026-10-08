@@ -25,12 +25,15 @@ create index if not exists bookings_gocardless_payment_idx
 
 -- PostgREST can otherwise continue serving its old column list briefly after
 -- the DDL commits, which produces a misleading "schema cache" error.
-select pg_notify('pgrst', 'reload schema');
+notify pgrst, 'reload schema';
 
 -- Retain a lifetime claim even when a taster is cancelled or its booking is
 -- deleted. Unfinished checkouts resume the same booking instead of claiming
 -- another taster. Existing duplicates are preserved, not silently deleted.
-alter table public.bookings add column if not exists payment_confirmation_sent_at timestamptz;
+alter table public.bookings
+  add column if not exists payment_confirmation_sent_at timestamptz,
+  add column if not exists gocardless_billing_request_id text,
+  add column if not exists booking_confirmation_sent_at timestamptz;
 
 create table if not exists public.class_taster_claims (
   session_id text not null,

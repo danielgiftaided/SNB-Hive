@@ -10,3 +10,8 @@ verify_jwt = false
 # the member confirmation or the admin notification.
 [functions.send-email]
 verify_jwt = false
+
+# The server verifies the original checkout with GoCardless. A browser return
+# or a public project key alone cannot allocate a class or mark payment paid.
+[functions.gocardless-sync]
+verify_jwt = false

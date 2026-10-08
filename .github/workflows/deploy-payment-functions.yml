@@ -6,6 +6,7 @@ on:
     paths:
       - "supabase/functions/gocardless-checkout/**"
       - "supabase/functions/gocardless-webhook/**"
+      - "supabase/functions/gocardless-sync/**"
       - "supabase/functions/send-email/**"
       - "supabase/functions/_shared/**"
       - "supabase/config.toml"
@@ -47,3 +48,6 @@ jobs:
 
       - name: Deploy GoCardless webhook
         run: supabase functions deploy gocardless-webhook --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Deploy GoCardless booking sync
+        run: supabase functions deploy gocardless-sync --no-verify-jwt --project-ref "$SUPABASE_PROJECT_REF"

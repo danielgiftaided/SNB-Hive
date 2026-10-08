@@ -8,13 +8,18 @@ assert 'https://fixture.supabase.test' in source and 'test-public-key' in source
 import json,time,re
 from urllib.parse import parse_qs,urlparse
 from playwright.sync_api import sync_playwright
-rows=[]; emails=[]; checkout=[]; writes=[]; fail_checkout=False; fail_booking=False
+rows=[]; emails=[]; checkout=[]; writes=[]; sync_calls=[]; fail_checkout=False; fail_booking=False; fail_read=False; sync_ready=True
 user={'id':'ui-member','name':'UI Test Member','email':'ui-member@example.test','phone':'07000000000','expiresAt':int(time.time()*1000)+3600000}
 def route_api(route):
  global rows, fail_checkout, fail_booking
  req=route.request
  if '/rest/v1/bookings' in req.url:
-  if req.method=='GET': response=rows
+  if req.method=='GET':
+   if fail_read:
+    route.fulfill(status=503,content_type='application/json',body=json.dumps({'message':'Fixture schema reload unavailable'}));return
+   query=parse_qs(urlparse(req.url).query)
+   offset=int(query.get('offset',['0'])[0]);limit=int(query.get('limit',['1000'])[0])
+   response=rows[offset:offset+limit]
   elif req.method=='POST':
    if fail_booking:
     route.fulfill(status=500,content_type='application/json',body=json.dumps({'message':'Fixture save unavailable'}));return
@@ -41,6 +46,17 @@ def route_api(route):
   if fail_checkout:
    route.fulfill(status=500,content_type='application/json',body=json.dumps({'error':'Fixture checkout unavailable'}));return
   response={'authorisation_url':f"http://127.0.0.1:5174/payment-complete?booking_id={payload['booking_id']}"}
+ elif '/functions/v1/gocardless-sync' in req.url:
+  payload=req.post_data_json;sync_calls.append(payload)
+  anchor=next((row for row in rows if row['id']==payload['booking_id']),None)
+  if sync_ready and anchor:
+   group=anchor.get('payment_group_id') or anchor['id']
+   for row in rows:
+    if (row.get('payment_group_id') or row['id'])==group and row['status']!='cancelled':
+     row['gocardless_payment_id']='PM_RECOVERED_'+group
+     row['status']='paid'
+   response={'allocated':True}
+  else: response={'allocated':False,'reason':'checkout_pending'}
  else: raise AssertionError(req.url)
  route.fulfill(status=200,content_type='application/json',body=json.dumps(response))
 def card(page,name):
@@ -144,4 +160,150 @@ with sync_playwright() as p:
   if class_name=='Self Defence': assert '2 December 2026' in emails[-1]['booking_date']
  print('PASS admin browser: taster/course bank transfer receipts and cancellation emails; no GoCardless requests for tasters')
  assert not checkout
+ # Admin history includes old classes, cancellations and pending payments,
+ # independently of confirmed class capacity and member visibility.
+ sync_ready=False
+ rows=[dict(id=f'history-{i}',session_id='zumba',session_name='Zumba',type='class',
+   user_id=f'history-member-{i}',name=f'Historical Member {i}',email=f'history-{i}@example.test',
+   plan='Pay as you go',amount=10,status='paid',created_at='2026-10-01T12:00:00Z') for i in range(205)]
+ rows[-1].update(session_id='boxing',session_name='Boxing',status='cancelled')
+ rows[0].update(status='pending_payment',gocardless_payment_id='PM_PENDING')
+ rows[1].update(status='pending_checkout')
+ page.reload();page.get_by_role('button',name=re.compile('^Bookings')).click()
+ table=page.locator('table');table.get_by_text('Historical Member 204',exact=True).wait_for()
+ assert table.locator('tbody tr').count()==205
+ page.get_by_role('button',name='Cancelled',exact=True).click()
+ assert table.locator('tbody tr').count()==1 and 'Boxing' in table.inner_text()
+ page.get_by_role('button',name='Awaiting payment',exact=True).click()
+ assert table.locator('tbody tr').count()==1 and 'Historical Member 0' in table.inner_text()
+ page.get_by_role('button',name='Checkout not completed',exact=True).click()
+ assert table.locator('tbody tr').count()==1 and 'Historical Member 1' in table.inner_text()
+ page.get_by_role('button',name='All',exact=True).click()
+ with page.expect_download() as download_info:
+  page.get_by_role('button',name='Export CSV',exact=True).click()
+ download=download_info.value
+ from pathlib import Path
+ csv=Path(download.path()).read_text()
+ assert 'Historical Member 204' in csv and 'cancelled' in csv and 'pending_checkout' in csv
+ fail_read=True
+ page.evaluate('window.dispatchEvent(new Event("focus"))')
+ page.get_by_role('alert').wait_for()
+ assert table.locator('tbody tr').count()==205, 'A failed refresh must preserve all loaded history'
+ fail_read=False
+ page.get_by_role('button',name='Retry bookings',exact=True).click()
+ page.get_by_role('alert').wait_for(state='detached')
+ fail_read=True;page.reload();page.get_by_role('alert').wait_for()
+ page.get_by_role('button',name=re.compile('^Bookings')).click()
+ assert 'Booking history could not be loaded' in page.locator('body').inner_text()
+ assert 'No bookings match' not in page.locator('body').inner_text()
+ fail_read=False;page.get_by_role('button',name='Retry bookings',exact=True).click()
+ table.get_by_text('Historical Member 204',exact=True).wait_for()
+ print('PASS admin history: paginated legacy records, pending/cancelled filters and CSV; failed/initial loads show errors and retry without erasing displayed history')
+ context.close();context=browser.new_context(viewport={'width':1280,'height':1000})
+ context.add_init_script('localStorage.setItem("snb_session",'+json.dumps(json.dumps(user))+');')
+ context.route('https://fixture.supabase.test/**',route_api);context.route('https://fonts.googleapis.com/**',lambda route:route.abort())
+ rows=[dict(id='webhook-member',session_id='zumba',session_name='Zumba',type='class',
+   user_id='legacy-account-id',name=user['name'],email=' '+user['email'].upper()+' ',plan='Pay as you go',
+   amount=10,status='pending_payment',gocardless_payment_id='PM_MEMBER',booking_date='2026-10-09')]
+ rows.append(dict(rows[0],id='second-payment',gocardless_payment_id='PM_SECOND'))
+ rows.append(dict(rows[0],id='missing-reference',gocardless_payment_id=None))
+ sync_ready=False
+ writes_before=len(writes);emails_before=len(emails);checkout_before=len(checkout)
+ page=context.new_page();page.goto('http://127.0.0.1:5174/')
+ page.get_by_role('heading',name='Zumba',exact=True).wait_for()
+ page.get_by_role('button',name='My bookings',exact=True).click()
+ pending=page.get_by_role('region',name='Payments awaiting confirmation')
+ pending.wait_for()
+ assert pending.get_by_text('Zumba',exact=True).count()==1
+ assert page.locator('main').get_by_text('Awaiting payment',exact=True).count()==3
+ assert page.locator('main').get_by_text("Your place is reserved. We're checking your original payment setup.",exact=True).count()==2
+ assert pending.get_by_text('Payment setup needs checking.',exact=False).count()==1
+ assert pending.get_by_role('link',name='Contact Shams',exact=True).get_attribute('href')=='mailto:Shams@snbhive.com'
+ assert 'Friday, 9 October 2026' in pending.inner_text()
+ assert 'No bookings yet.' not in page.locator('main').inner_text()
+ assert page.locator('main').get_by_text('Paid',exact=True).count()==0
+ assert len(writes)==writes_before and len(emails)==emails_before and len(checkout)==checkout_before
+ assert all(row['status']=='pending_payment' for row in rows), 'Displaying a pending payment must not change payment status'
+ rows[0]['status']='paid';page.evaluate('window.dispatchEvent(new Event("focus"))')
+ page.locator('main').get_by_text('Paid',exact=True).wait_for()
+ assert pending.get_by_text('Zumba',exact=True).count()==1
+ fail_read=True;page.evaluate('window.dispatchEvent(new Event("focus"))')
+ page.get_by_role('alert').wait_for()
+ assert page.locator('main').get_by_text('Paid',exact=True).count()==1
+ assert pending.get_by_text('Zumba',exact=True).count()==1
+ fail_read=False;page.get_by_role('button',name='Retry bookings',exact=True).click()
+ page.get_by_role('alert').wait_for(state='detached')
+ print('PASS member allocation: two referenced 9 October payments reserve places immediately while awaiting payment; NULL reference stays available for verified recovery; refresh failures preserve rows')
+ sync_ready=True; page.reload()
+ page.get_by_role('button',name='My bookings',exact=True).click()
+ page.wait_for_function("document.querySelector('main')?.innerText.split('Paid').length === 4")
+ assert all(row['status']=='paid' for row in rows)
+ assert pending.count()==0
+ assert len(checkout)==checkout_before
+ print('PASS member automatic repair: two pending payment references plus NULL become Paid and all three return to My bookings without another checkout')
+ # Reset the same case for independent admin recovery and register validation.
+ for row in rows: row['status']='pending_payment'
+ rows[0]['status']='paid';rows[2]['gocardless_payment_id']=None;sync_ready=False
+ context.close();context=browser.new_context(viewport={'width':1280,'height':1000})
+ context.add_init_script('sessionStorage.setItem("snb_admin_session",'+json.dumps(json.dumps({'email':'admin@example.test','loginAt':int(time.time()*1000)}))+');')
+ context.route('https://fixture.supabase.test/**',route_api);context.route('https://fonts.googleapis.com/**',lambda route:route.abort())
+ page=context.new_page();page.goto('http://127.0.0.1:5174/admin')
+ page.get_by_role('button',name=re.compile('^Bookings')).click()
+ table=page.locator('table');table.get_by_text('Payment setup needs checking',exact=True).wait_for()
+ assert table.locator('tbody tr').count()==3
+ assert table.get_by_text('Friday, 9 October 2026',exact=False).count()==3
+ assert table.get_by_text('Awaiting payment',exact=True).count()==2
+ with page.expect_download() as download_info:
+  page.get_by_role('button',name='Export CSV',exact=True).click()
+ assert '2026-10-09' in Path(download_info.value.path()).read_text()
+ page.get_by_role('button',name=re.compile('^Classes')).click()
+ zumba_admin=page.locator('div.bg-white.rounded-xl.border.border-stone-200.shadow-sm.overflow-hidden').filter(has=page.get_by_text('Zumba',exact=True))
+ assert zumba_admin.locator('p.ff-display').inner_text()=='2', 'Completed setup reserves places before payout'
+ assert len(writes)==writes_before and len(emails)==emails_before and len(checkout)==checkout_before
+ sync_ready=True
+ page.get_by_role('button',name=re.compile('^Bookings')).click()
+ page.get_by_role('button',name='Restore completed bookings',exact=True).click()
+ page.get_by_text('completed booking group(s) restored and marked Paid.',exact=False).wait_for()
+ assert rows[2]['gocardless_payment_id'].startswith('PM_RECOVERED_') and all(row['status']=='paid' for row in rows)
+ page.get_by_role('button',name=re.compile('^Classes')).click()
+ assert zumba_admin.locator('p.ff-display').inner_text()=='3'
+ assert len(writes)==writes_before and len(emails)==emails_before and len(checkout)==checkout_before
+ print('PASS admin exact case: all three rows/dates visible; recovery restores the NULL reference and class allocation, and marks all completed setups Paid without another payment')
+ # New PAYG checkout keeps just the two chosen dates; the verified return
+ # page allocates them and returns directly to My bookings.
+ context.close();context=browser.new_context(viewport={'width':1280,'height':1000})
+ context.add_init_script('localStorage.setItem("snb_session",'+json.dumps(json.dumps(user))+');')
+ context.route('https://fixture.supabase.test/**',route_api);context.route('https://fonts.googleapis.com/**',lambda route:route.abort())
+ rows=[];checkout=[];page=context.new_page();page.goto('http://127.0.0.1:5174/')
+ card(page,'Zumba').get_by_role('button',name='Book',exact=True).click()
+ page.get_by_role('checkbox',name='Friday, 23 October 2026',exact=True).check()
+ page.get_by_role('button',name='Continue to payment',exact=True).click()
+ page.get_by_role('heading',name="You're booked! 🎉",exact=True).wait_for()
+ assert len(rows)==2 and sorted(row['booking_date'] for row in rows)==['2026-10-09','2026-10-23']
+ assert all(row['status']=='paid' and row.get('gocardless_payment_id') for row in rows)
+ page.get_by_role('link',name='Return to my bookings',exact=True).click()
+ page.get_by_text('Paid',exact=True).first.wait_for()
+ assert page.locator('main').get_by_text('Zumba',exact=True).count()==2
+ # Start a separate monthly checkout on the 16th: all remaining dates,
+ # including 23rd and 30th, are reserved immediately, not just the first.
+ rows=[];checkout=[];page.goto('http://127.0.0.1:5174/')
+ card(page,'Zumba').get_by_role('button',name='Book',exact=True).click()
+ page.get_by_role('button',name=re.compile('^Monthly membership')).click()
+ page.get_by_role('radio',name='Friday, 16 October 2026',exact=True).check()
+ page.get_by_role('button',name='Continue to payment',exact=True).click()
+ page.get_by_role('heading',name="You're booked! 🎉",exact=True).wait_for()
+ assert sorted(row['booking_date'] for row in rows)==['2026-10-16','2026-10-23','2026-10-30']
+ assert sum(row['amount'] for row in rows)==26.25
+ assert all(row['status']=='paid' and row.get('gocardless_payment_id') for row in rows)
+ page.get_by_role('link',name='Return to my bookings',exact=True).click()
+ page.get_by_text('Paid',exact=True).first.wait_for()
+ assert page.locator('main').get_by_text('Zumba',exact=True).count()==3
+ # A spoofed/premature return must wait for server verification rather than
+ # displaying a reserved place based on its URL alone.
+ sync_ready=False
+ page.goto('http://127.0.0.1:5174/payment-complete?booking_id=not-completed')
+ page.get_by_role('heading',name='Confirming your class places',exact=True).wait_for()
+ assert page.get_by_role('heading',name="You're booked! 🎉",exact=True).count()==0
+ assert len(rows)==3
+ print('PASS new checkout: PAYG chosen dates only, monthly remaining dates with proration, immediate return verification and direct My bookings navigation; false returns do not allocate')
  browser.close()

@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import {
   bookingMatchesClassDate,
   bookingIsActive,
+  bookingBelongsToUser,
+  classPaymentIsPending,
+  bookingSyncIds,
   classBookingDates,
   UNDATED_BOOKING,
 } from "../src/booking-utils.js";
@@ -30,6 +33,28 @@ assert.equal(bookingIsActive(bookings[0]), true);
 assert.equal(bookingIsActive(bookings[5]), false);
 assert.equal(bookingIsActive(bookings[6]), false);
 assert.equal(bookingIsActive({ type: "class", status: "pending_payment" }), false);
-assert.equal(bookingIsActive({ type: "class", status: "pending_payment", gocardlessPaymentId: "PM123" }), false);
+assert.equal(bookingIsActive({ type: "class", status: "pending_payment", gocardlessPaymentId: "PM123" }), true);
+assert.equal(bookingIsActive({ type: "class", status: "pending_payment", gocardlessPaymentId: "PRQ123" }), false);
+assert.equal(bookingBelongsToUser({ email: " MEMBER@EXAMPLE.TEST " }, { id: "new-id", email: "member@example.test" }), true);
+assert.equal(bookingBelongsToUser({ userId: "member", email: "old@example.test" }, { id: "member", email: "new@example.test" }), true);
+assert.equal(bookingBelongsToUser({ userId: "other", email: "other@example.test" }, { id: "member", email: "member@example.test" }), false);
+assert.equal(bookingBelongsToUser({}, {}), false);
+assert.equal(classPaymentIsPending({ type: "class", status: "pending_payment", gocardlessPaymentId: "PM123" }), true);
+assert.equal(classPaymentIsPending({ type: "class", status: "pending_payment", gocardlessPaymentId: null }), true);
+assert.equal(classPaymentIsPending({ type: "class", status: "paid", gocardlessPaymentId: "PM123" }), false);
+assert.equal(classPaymentIsPending({ type: "class", status: "pending_checkout" }), false);
+assert.equal(classPaymentIsPending({ type: "class", status: "cancelled" }), false);
+assert.equal(classPaymentIsPending({ type: "class", status: "pending_payment", plan: "Taster (bank transfer)" }), false);
+
+const syncable = (id, status, plan = "Pay as you go", paymentGroupId) => ({ id, type: "class", status, plan, paymentGroupId });
+assert.deepEqual(bookingSyncIds([
+  syncable("child", "pending_payment", "Membership — 1 class", "original"),
+  syncable("original", "paid", "Membership — 1 class", "original"),
+  syncable("completed-return", "pending_checkout"),
+  syncable("renewal-child", "paid", "Membership — 1 class", "renewal-PM1"),
+  syncable("bank", "pending_payment", "Course (bank transfer)"),
+  syncable("taster", "paid", "Taster (bank transfer)"),
+  syncable("cancelled", "cancelled"),
+]), ["original", "completed-return", "renewal-child"], "reconcile all eligible groups once, including already-paid and checkout rows, without bank transfers/cancellations");
 
 console.log("PASS bookings only match their recorded lesson date");
