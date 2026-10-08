@@ -110,8 +110,8 @@ supabase functions deploy send-email --no-verify-jwt
 
 5. Make a Zumba pay-as-you-go booking with a GoCardless sandbox test bank
    account. Confirm that checkout returns to `/payment-complete` and that the
-   selected dates are allocated immediately after verified checkout while
-   still `pending_payment`. Only `payments.paid_out` changes it to `paid`.
+   selected dates are allocated and marked `paid` immediately after verified
+   successful GoCardless setup, without waiting for `payments.paid_out`.
    Repeat for membership: every remaining class that month should be reserved,
    and a £35 subscription should start on the first of the next month.
    Open admin Bookings to recover existing completed checkouts; see the

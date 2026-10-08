@@ -48,7 +48,10 @@ export async function groupFor(anchor: Booking) {
 
 const patch = (query: Record<string, string>, change: Record<string, unknown>) =>
   bookings(query, { method: "PATCH", body: JSON.stringify(change) });
-const mutableStatuses = "in.(pending_checkout,pending_payment)";
+const mutableStatuses = "in.(pending_checkout,pending_payment,confirmed)";
+// Portal Paid means GoCardless has accepted the authorised payment setup.
+// Bank collection/payout follows the provider's own timetable.
+const acceptedPaymentStatuses = ["pending_submission", "submitted", "confirmed", "paid_out"];
 
 // Stable IDs and INSERT-on-conflict DO NOTHING protect retries/concurrent return
 // and webhook requests without overwriting cancellations or payment statuses.
@@ -72,7 +75,7 @@ export async function fillInitialMembership(group: Booking[], paymentId: string,
       missing.push({ id: `membership-${anchor.payment_group_id || anchor.id}-${sessionId}-${date}`,
         session_id: sessionId, session_name: anchor.session_name, user_id: anchor.user_id,
         name: anchor.name, email: anchor.email, phone: anchor.phone, plan: anchor.plan, type: "class",
-        amount: 0, status: "pending_payment", booking_date: date,
+        amount: 0, status: "paid", booking_date: date,
         payment_group_id: anchor.payment_group_id || anchor.id, gocardless_payment_id: paymentId,
         gocardless_billing_request_id: billingRequestId,
       });
@@ -97,12 +100,21 @@ export async function sendBookingNotice(paymentId: string, type: "booking_confir
     }),
   });
   if (!response.ok) throw new Error(`${type} email could not be sent`);
-  await patch({ gocardless_payment_id: `eq.${paymentId}`, status: "neq.cancelled" }, { [marker]: new Date().toISOString() });
+  const sentAt = new Date().toISOString();
+  await patch({ gocardless_payment_id: `eq.${paymentId}`, status: "neq.cancelled" }, {
+    [marker]: sentAt,
+    ...(type === "payment_confirmation" ? { booking_confirmation_sent_at: sentAt } : {}),
+  });
 }
 
-export async function markPayout(paymentId: string) {
+export async function markSuccessfulPayment(paymentId: string, verifiedPayment?: { status: string }) {
+  const payment = verifiedPayment || (await gc(`/payments/${encodeURIComponent(paymentId)}`)).payments;
+  if (!acceptedPaymentStatuses.includes(payment.status)) return false;
   await patch({ gocardless_payment_id: `eq.${paymentId}`, status: mutableStatuses }, { status: "paid" });
+  // One combined booking/payment-setup confirmation, rather than a second
+  // receipt at payout. Saved markers and mail-provider idempotency cover retries.
   await sendBookingNotice(paymentId, "payment_confirmation");
+  return true;
 }
 
 export async function fulfillBillingRequest(billingRequestId: string, expectedBookingId?: string, tolerateEmailFailure = false) {
@@ -123,13 +135,13 @@ export async function fulfillBillingRequest(billingRequestId: string, expectedBo
   let group = await groupFor(anchor);
   if (group.every(row => row.status === "cancelled")) return { allocated: false, reason: "cancelled" };
   const { payments: payment } = await gc(`/payments/${encodeURIComponent(paymentId)}`);
-  if (!["pending_submission", "submitted", "confirmed", "paid_out"].includes(payment.status)) {
+  if (!acceptedPaymentStatuses.includes(payment.status)) {
     return { allocated: false, reason: "payment_not_authorised" };
   }
-  await patch({ ...filter, status: "in.(pending_checkout,pending_payment,paid)" }, {
+  await patch({ ...filter, status: "in.(pending_checkout,pending_payment,confirmed,paid)" }, {
     gocardless_payment_id: paymentId, gocardless_billing_request_id: billingRequestId,
     payment_group_id: groupId,
-    status: payment.status === "paid_out" ? "paid" : "pending_payment",
+    status: "paid",
   });
   group = await groupFor({ ...anchor, payment_group_id: groupId });
   if (request.metadata?.payment_plan === "membership") {
@@ -149,12 +161,10 @@ export async function fulfillBillingRequest(billingRequestId: string, expectedBo
       } }),
     });
   }
-  // Reconciliation also handles an already-paid-out legacy booking or a
-  // payout webhook that arrived before the fulfillment reference was saved.
+  // Reconciliation applies the same rule to historical completed checkouts.
   let emailPending = false;
   try {
-    if (payment.status === "paid_out") await markPayout(paymentId);
-    await sendBookingNotice(paymentId, "booking_confirmation");
+    await markSuccessfulPayment(paymentId, payment);
   } catch (error) {
     if (!tolerateEmailFailure) throw error;
     emailPending = true;
@@ -171,11 +181,15 @@ export async function enrollRecurringMembership(paymentId: string, subscriptionI
   if (!bookingId) return;
   const [anchor] = await bookings({ id: `eq.${bookingId}`, select: "*", limit: "1" });
   if (!anchor) throw new Error("Subscription booking could not be found");
-  if (!payment.charge_date || !["pending_submission", "submitted", "confirmed", "paid_out"].includes(payment.status)) return;
+  if (!payment.charge_date || !acceptedPaymentStatuses.includes(payment.status)) return;
   const sourceGroup = await groupFor(anchor);
   const existing = await bookings({ gocardless_payment_id: `eq.${paymentId}`, select: "*" });
   // Never create a second enrolment set for the subscription's initial payment.
-  if (existing.some(row => row.payment_group_id === anchor.payment_group_id)) return;
+  if (existing.some(row => row.payment_group_id === (anchor.payment_group_id || anchor.id))) {
+    await fillInitialMembership(sourceGroup, paymentId, anchor.gocardless_billing_request_id || "");
+    await markSuccessfulPayment(paymentId, payment);
+    return;
+  }
   const groupId = `renewal-${paymentId}`;
   const rows: Record<string, unknown>[] = [];
   for (const sessionId of new Set(sourceGroup.map(row => row.session_id))) {
@@ -188,12 +202,12 @@ export async function enrollRecurringMembership(paymentId: string, subscriptionI
         user_id: anchor.user_id, name: anchor.name, email: anchor.email, phone: anchor.phone, plan: anchor.plan,
         type: "class", booking_date: date, payment_group_id: groupId, gocardless_payment_id: paymentId,
         amount: rows.length === 0 && !existing.length ? Number(payment.amount) / 100 : 0,
-        status: payment.status === "paid_out" ? "paid" : "pending_payment",
+        status: "paid",
       });
     }
   }
   await insertMissing(rows);
-  await sendBookingNotice(paymentId, "booking_confirmation");
+  await markSuccessfulPayment(paymentId, payment);
 }
 
 export async function reconcilePayment(paymentId: string) {
@@ -204,7 +218,7 @@ export async function reconcilePayment(paymentId: string) {
     const result = await syncBooking(payment.metadata.booking_id, false);
     if (!result.allocated && result.reason === "checkout_pending") throw new Error("Payment checkout is not visible yet");
   } else {
-    await sendBookingNotice(paymentId, "booking_confirmation");
+    await markSuccessfulPayment(paymentId, payment);
   }
 }
 
@@ -215,12 +229,23 @@ export async function syncBooking(bookingId: string, tolerateEmailFailure = true
   if (anchor.status === "cancelled") return { allocated: false, reason: "cancelled" };
   const originalId = anchor.payment_group_id || anchor.id;
   if (anchor.gocardless_billing_request_id) return fulfillBillingRequest(anchor.gocardless_billing_request_id, originalId, tolerateEmailFailure);
+  let verifiedPayment;
   if (anchor.gocardless_payment_id?.startsWith("PM")) {
     const { payments: payment } = await gc(`/payments/${encodeURIComponent(anchor.gocardless_payment_id)}`);
+    if (!acceptedPaymentStatuses.includes(payment.status)) return { allocated: false, reason: "payment_not_authorised" };
+    if (payment.metadata?.booking_id && payment.metadata.booking_id !== originalId && !payment.links?.subscription) throw new Error("Payment does not match this booking");
+    verifiedPayment = payment;
     if (payment.links?.subscription) {
-      await enrollRecurringMembership(anchor.gocardless_payment_id, payment.links.subscription);
-      if (payment.status === "paid_out") await markPayout(anchor.gocardless_payment_id);
-      return { allocated: ["pending_submission", "submitted", "confirmed", "paid_out"].includes(payment.status) };
+      let emailPending = false;
+      try { await enrollRecurringMembership(anchor.gocardless_payment_id, payment.links.subscription); }
+      catch (error) {
+        // Allocation survives a mail outage, but storage/provider failures must
+        // still be reported instead of showing an unverified successful return.
+        if (!tolerateEmailFailure || !(error instanceof Error) || !error.message.endsWith("email could not be sent")) throw error;
+        emailPending = true;
+      }
+      const allocated = await bookings({ gocardless_payment_id: `eq.${anchor.gocardless_payment_id}`, status: "eq.paid", select: "id", limit: "1" });
+      return { allocated: allocated.length > 0, email_pending: emailPending };
     }
   }
   // Earlier deployments did not save billing-request IDs. Recover their
@@ -233,6 +258,21 @@ export async function syncBooking(bookingId: string, tolerateEmailFailure = true
     if (found) return fulfillBillingRequest(found.id, originalId, tolerateEmailFailure);
     after = result.meta?.cursors?.after;
     if (!after) break;
+  }
+  // Some old fulfilled requests may have fallen outside the lookup window.
+  // An already-stored canonical payment can still be verified with GoCardless.
+  if (verifiedPayment && anchor.gocardless_payment_id) {
+    const filter: Record<string, string> = anchor.payment_group_id ? { payment_group_id: `eq.${originalId}` } : { id: `eq.${anchor.id}` };
+    await patch({ ...filter, status: "in.(pending_checkout,pending_payment,confirmed,paid)" }, {
+      status: "paid", payment_group_id: originalId, gocardless_payment_id: anchor.gocardless_payment_id,
+    });
+    if (String(anchor.plan).toLowerCase().includes("membership")) {
+      await fillInitialMembership(await groupFor({ ...anchor, payment_group_id: originalId }), anchor.gocardless_payment_id, "");
+    }
+    let emailPending = false;
+    try { await markSuccessfulPayment(anchor.gocardless_payment_id, verifiedPayment); }
+    catch (error) { if (!tolerateEmailFailure) throw error; emailPending = true; }
+    return { allocated: true, email_pending: emailPending };
   }
   return { allocated: false, reason: "checkout_not_found" };
 }

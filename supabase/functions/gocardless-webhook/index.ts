@@ -1,4 +1,4 @@
-import { enrollRecurringMembership, fulfillBillingRequest, markPayout, reconcilePayment } from "../_shared/gocardless-bookings.ts";
+import { enrollRecurringMembership, fulfillBillingRequest, reconcilePayment } from "../_shared/gocardless-bookings.ts";
 
 async function validSignature(body: string, signature: string | null) {
   const secret = Deno.env.get("GOCARDLESS_WEBHOOK_SECRET");
@@ -29,7 +29,6 @@ Deno.serve(async request => {
           if (event.links.subscription) await enrollRecurringMembership(event.links.payment, event.links.subscription);
           else await reconcilePayment(event.links.payment);
         }
-        if (event.action === "paid_out") await markPayout(event.links.payment);
       }
     }
     return new Response("ok", { status: 200 });

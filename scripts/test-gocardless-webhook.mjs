@@ -3,7 +3,8 @@ import { readFile } from "node:fs/promises";
 const source = await readFile("supabase/functions/gocardless-webhook/index.ts", "utf8");
 const shared = await readFile("supabase/functions/_shared/gocardless-bookings.ts", "utf8");
 const config = await readFile("supabase/config.toml", "utf8");
-assert.ok(source.includes('event.action === "paid_out") await markPayout'), "only payout events mark payment paid");
+assert.ok(!source.includes("markPayout"), "portal Paid is not gated on payout");
+assert.ok(shared.includes("markSuccessfulPayment"), "accepted setup marks portal Paid");
 assert.ok(source.includes('event.action === "fulfilled"'), "completed checkout allocates classes");
 assert.ok(source.includes('["created", "submitted", "confirmed", "paid_out"]'), "recurring enrolment starts before payout");
 assert.ok(shared.includes("payment_request_payment"), "use the actual payment link");
@@ -11,4 +12,4 @@ assert.ok(shared.includes("mandate_request_mandate"), "use the actual mandate li
 assert.ok(shared.includes('status !== "fulfilled"'), "a return URL alone cannot allocate a class");
 assert.ok(shared.includes("resolution=ignore-duplicates"), "concurrent retries cannot overwrite saved bookings");
 assert.match(config, /\[functions.gocardless-sync\]\s+verify_jwt = false/);
-console.log("PASS webhook deployment: allocation at fulfillment, recurring enrolment before payout, payout-only Paid, canonical provider links and verified return endpoint");
+console.log("PASS webhook deployment: allocation at fulfillment, recurring enrolment before payout, Paid at accepted setup, canonical provider links and verified return endpoint");

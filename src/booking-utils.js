@@ -15,8 +15,8 @@ export function bookingIsActive(booking) {
 
   // A GoCardless payment reference is attached when the mandate/checkout is
   // fulfilled, which can happen before any money is collected. Only the
-  // payments/paid_out webhook changes a class to `paid`. A real payment
-  // reference means completed setup and reserves the selected class dates.
+  // server verifies completed setup and marks it Paid. Keep legacy reservations
+  // visible while reconciliation repairs their older pending status.
   if (booking.type === "class" && booking.status === "pending_payment" &&
       !String(booking.plan || "").toLowerCase().includes("bank transfer") &&
       !/^PM/.test(String(booking.gocardlessPaymentId || ""))) return false;
@@ -31,11 +31,17 @@ export function classPaymentIsPending(booking) {
 
 export function bookingSyncIds(bookings) {
   const groups = new Map();
-  for (const row of bookings.filter(classPaymentIsPending)) {
+  for (const row of bookings.filter(classUsesGoCardless)) {
     const group = row.paymentGroupId || row.id;
     if (!groups.has(group) || row.id === group) groups.set(group, row.id);
   }
   return [...groups.values()];
+}
+
+export function classUsesGoCardless(booking) {
+  const plan = String(booking?.plan || "").toLowerCase();
+  return booking?.type === "class" && ["pending_checkout", "pending_payment", "confirmed", "paid"].includes(booking.status) &&
+    !plan.includes("bank transfer") && (plan.includes("membership") || plan.includes("pay as you go"));
 }
 
 export function isTasterBooking(booking) {

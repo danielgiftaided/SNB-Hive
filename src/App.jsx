@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import storage, { supabase } from "./storage.js";
 import { useBookings } from "./use-bookings.js";
-import { bookingIsActive, bookingBelongsToUser, classPaymentIsPending, bookingSyncIds, bookingMatchesClassDate, classBookingDates, UNDATED_BOOKING, isTasterBooking, userTasterBooking, tasterBookingUsed } from "./booking-utils.js";
+import { bookingIsActive, bookingBelongsToUser, classPaymentIsPending, classUsesGoCardless, bookingSyncIds, bookingMatchesClassDate, classBookingDates, UNDATED_BOOKING, isTasterBooking, userTasterBooking, tasterBookingUsed } from "./booking-utils.js";
 import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../supabase/functions/_shared/membership.ts";
 import { membershipDatesFrom } from "../supabase/functions/_shared/membership-bookings.ts";
 import { checkoutErrorDetail, singleMembershipBooking } from "./checkout.js";
@@ -1815,27 +1815,29 @@ function MyBookings({ bookings, currentUser, onCancel }) {
     .filter(b => bookingBelongsToUser(b, currentUser))
     .filter(bookingIsActive);
   const pendingPayments = bookings
-    .filter(b => bookingBelongsToUser(b, currentUser) && classPaymentIsPending(b) && !bookingIsActive(b));
+    .filter(b => bookingBelongsToUser(b, currentUser) && classUsesGoCardless(b) && !bookingIsActive(b));
+  const recoveryIds = bookingSyncIds(bookings.filter(b => bookingBelongsToUser(b, currentUser)));
   async function recoverPendingPayments() {
     setRecovering(true); setRecoveryNotice("");
     try {
-      const ids = bookingSyncIds(pendingPayments);
-      let allocated = 0;
-      for (const id of ids) {
-        const result = await callEdgeFunction("gocardless-sync", { booking_id: id });
-        if (result.allocated) allocated++;
+      let allocated = 0, unchecked = 0;
+      for (const id of recoveryIds) {
+        try {
+          const result = await callEdgeFunction("gocardless-sync", { booking_id: id });
+          if (result.allocated) allocated++; else unchecked++;
+        } catch { unchecked++; }
       }
       window.dispatchEvent(new Event("focus"));
-      setRecoveryNotice(allocated ? "Your completed bookings have been restored. Updating your class list…" : "We couldn't find completed payment setup for this booking. Please contact Shams before trying another payment.");
+      setRecoveryNotice(unchecked ? "Some payment setups could not be confirmed. Please contact Shams before trying another payment." : allocated ? "Your completed bookings are marked Paid. Updating your class list…" : "We couldn't find completed payment setup for this booking. Please contact Shams before trying another payment.");
     } catch { setRecoveryNotice("We couldn't check your payment setup. Please retry or contact Shams before trying another payment."); }
     finally { setRecovering(false); }
   }
   useEffect(() => {
-    if (pendingPayments.length && !attemptedRecovery.current) {
+    if (recoveryIds.length && !attemptedRecovery.current) {
       attemptedRecovery.current = true;
       recoverPendingPayments();
     }
-  }, [pendingPayments.length]);
+  }, [recoveryIds.length]);
   return (
     <div className="max-w-md mx-auto flex flex-col gap-3">
       {mine.length===0 && pendingPayments.length===0
@@ -1860,7 +1862,7 @@ function MyBookings({ bookings, currentUser, onCancel }) {
                   <StatusBadge status={b.status}/>
                 </div>
                 {cls?.day && cls?.time && <p className="text-xs text-stone-500 mt-1">{cls.courseDates ? cls.courseDates.map(formatBookingDate).join(" · ") : b.bookingDate ? formatBookingDate(b.bookingDate) : cls.day} · {cls.time}</p>}
-                {classPaymentIsPending(b) && <p className="text-xs text-stone-500 mt-1">Your place is reserved. Your Direct Debit is awaiting payment.</p>}
+                {classPaymentIsPending(b) && <p className="text-xs text-stone-500 mt-1">Your place is reserved. We're checking your original payment setup.</p>}
                 {cls?.venue && (
                   <a href={cls.venueMap} target="_blank" rel="noopener noreferrer"
                     className="ff-body flex w-fit items-center gap-1 text-xs text-stone-400 hover:text-stone-600 hover:underline mt-1 transition">
@@ -2839,7 +2841,7 @@ function AdminPage() {
         } catch { unchecked++; }
       }
       await reloadBookings();
-      setBookingRecoveryNotice(`${restored} completed booking group(s) restored. ${unchecked} group(s) need checking in GoCardless. No new payment was requested.`);
+      setBookingRecoveryNotice(`${restored} completed booking group(s) restored and marked Paid. ${unchecked} group(s) need checking in GoCardless. No new payment was requested.`);
     } finally { setRecoveringBookings(false); }
   }
 
@@ -3331,7 +3333,7 @@ function PaymentCompletePage() {
         </div>
         <h1 className="ff-display text-2xl font-semibold mt-4" style={{ color:INK }}>{phase === "reserved" ? "You're booked! 🎉" : phase === "cancelled" ? "This booking was cancelled" : "Confirming your class places"}</h1>
         <p className="text-sm text-stone-500 leading-relaxed mt-2">
-          {phase === "reserved" ? "Your payment setup is complete and your class places are reserved. They now appear in My bookings. Your Direct Debit can take a few working days to collect; you do not need to pay or book again."
+          {phase === "reserved" ? "Your payment setup is complete and your class places are reserved and marked Paid. They now appear in My bookings. GoCardless will collect your Direct Debit automatically; you do not need to pay or book again."
             : phase === "cancelled" ? "This checkout belongs to a cancelled booking. Please contact Shams if you need help."
             : phase === "checking" ? "We're checking your completed payment setup and allocating your selected class dates. Please don't start another payment."
             : "We couldn't confirm your payment setup yet. Check again or contact Shams before trying another payment. Your original booking has been kept."}

@@ -61,6 +61,14 @@ try {
   assert.deepEqual(emails.map(email=>email.to[0]).sort(),[member.email,"shams@snbhive.com"].sort());
   for(const entry of ["£5","33053251","040605",member.name,"23 October 2026"]) assert.ok(emails[0].html.includes(entry),entry);
   assert.match(emails[1].subject,/taster booking/);
+  for (const plan of ["Pay as you go", "Membership — 1 class"]) {
+    emails=[];
+    assert.equal((await emailHandler(post({type:"payment_confirmation",email:member.email,name:member.name,session_name:"Zumba",plan,status:"paid",amount:10,gocardless_payment_id:"PM_SETUP",booking_dates:"Friday 9 October 2026"}))).status,200);
+    assert.deepEqual(emails.map(email=>email.to[0]).sort(),[member.email,"shams@snbhive.com"].sort());
+    assert.ok(emails[0].html.includes("marked Paid") && emails[0].html.includes("payment setup is complete"));
+    assert.ok(emails[1].html.includes("marked Paid"));
+    assert.ok(!emails.some(email=>email.html.includes("Payment received")), "successful setup email does not claim bank settlement");
+  }
   globalThis.fetch=async()=>json({error:"fixture provider unavailable"},503);
   assert.equal((await emailHandler(post({type:"booking_cancelled",to_email:member.email,session_name:"Zumba taster"}))).status,500);
   console.log("PASS actual mail handler sends course/taster confirmations and cancellations to member + Shams, and reports failures");

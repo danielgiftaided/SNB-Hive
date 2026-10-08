@@ -21,5 +21,6 @@ commit;
 -- After deploying the updated functions/frontend, sign into /admin, open
 -- Bookings and press Restore completed bookings. Recovery verifies the
 -- original fulfilled GoCardless checkout, repairs payment references and
--- monthly class dates, and requests no new one-off charge. It cannot allocate
+-- monthly class dates, marks verified successful setups Paid immediately, and
+-- requests no new one-off charge. It cannot allocate
 -- a checkout that was never completed. See docs/CLASS_BOOKING_CHANGES.md.

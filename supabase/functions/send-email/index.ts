@@ -115,14 +115,15 @@ function messagesFor(p: Payload): Message[] {
       return [customer, admin];
     }
     case "booking_confirmation": {
-      const customer = { to, subject: `You're booked — ${value(p.session_name)} 🐝`, html: shell("Your class places are reserved", "Your booking is confirmed", paragraph(`Hi ${value(p.name, "there")}, your payment setup is complete and your places are reserved for the dates below. ${p.status === "paid" ? "Your payment has been received." : "Your Direct Debit is awaiting collection."} You do not need to book or pay again.`) + details(bookingRows(p))) };
+      const customer = { to, subject: `You're booked — ${value(p.session_name)} 🐝`, html: shell("Your class places are reserved", "Your booking is confirmed", paragraph(`Hi ${value(p.name, "there")}, your payment setup is complete and your places are reserved for the dates below. ${p.status === "paid" ? "Your booking is marked Paid." : "We're checking your original payment setup."} You do not need to book or pay again.`) + details(bookingRows(p))) };
       const admin = { to: BOOKING_EMAIL, subject: `New booking: ${value(p.name)} — ${value(p.session_name)}`, html: shell("Class places reserved", p.status === "paid" ? "Booking confirmed — paid" : "Booking confirmed — awaiting payment", details([...bookingRows(p), ["Status", p.status === "paid" ? "Paid" : "Awaiting payment"]])) };
       return [customer, admin];
     }
     case "payment_confirmation": {
       const plan = value(p.plan);
-      const customer = { to, subject: `Payment and booking confirmed — ${value(p.session_name)} 🐝`, html: shell("Your payment and class booking are confirmed", "Payment successful — you're booked!", paragraph(`Hi ${value(p.name, "there")}, thank you! Your ${plan.toLowerCase().includes("membership") ? "membership" : plan.toLowerCase().includes("taster") ? "taster booking" : plan.toLowerCase().includes("bank transfer") ? "course booking" : "pay as you go lesson booking"} and payment have both been confirmed in this email.`) + details(bookingRows(p))) };
-      const admin = { to: BOOKING_EMAIL, subject: `💳 Payment confirmed: ${value(p.name)} — ${value(p.session_name)}`, html: shell("A class payment was confirmed", "Payment received", paragraph("This booking is now marked Paid in the admin portal.") + details(bookingRows(p))) };
+      const directDebit = !plan.toLowerCase().includes("bank transfer") && (plan.toLowerCase().includes("membership") || plan.toLowerCase().includes("pay as you go"));
+      const customer = { to, subject: `Payment and booking confirmed — ${value(p.session_name)} 🐝`, html: shell("Your payment and class booking are confirmed", directDebit ? "Payment setup complete — you're booked!" : "Payment successful — you're booked!", paragraph(directDebit ? `Hi ${value(p.name, "there")}, your payment setup is complete. Your booking is confirmed and marked Paid for the dates below. GoCardless will collect your Direct Debit automatically; you do not need to pay or book again.` : `Hi ${value(p.name, "there")}, thank you! Your ${plan.toLowerCase().includes("taster") ? "taster booking" : "course booking"} and payment have both been confirmed in this email.`) + details(bookingRows(p))) };
+      const admin = { to: BOOKING_EMAIL, subject: `💳 Payment confirmed: ${value(p.name)} — ${value(p.session_name)}`, html: shell("A class payment was confirmed", directDebit ? "Payment setup confirmed" : "Payment received", paragraph("This booking is now marked Paid in the admin portal.") + details(bookingRows(p))) };
       return [customer, admin];
     }
     case "blast":

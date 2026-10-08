@@ -11,7 +11,7 @@ globalThis.Deno = { env: { get: key => settings[key] }, serve: fn => { handler =
 const originalFetch = globalThis.fetch;
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
 let rows = [], requests = new Map(), payments = new Map(), subscriptions = new Map(), notices = [], subscriptionKeys = new Map();
-let failBookingMail = false, failReceipt = false, providerCalls = [], writes = [];
+let failReceipt = false, providerCalls = [], writes = [];
 const row = (id, date, plan = "Pay as you go", group = id) => ({ id, session_id: "zumba", session_name: "Zumba", type: "class",
   user_id: "member-1", name: "Fixture Member", email: "member@example.test", phone: "07000000000", plan,
   amount: 10, status: "pending_payment", booking_date: date, payment_group_id: group, gocardless_payment_id: null });
@@ -48,7 +48,7 @@ globalThis.fetch = async (input, init = {}) => {
   }
   if (url.pathname === "/functions/v1/send-email") {
     const notice = JSON.parse(init.body); notices.push(notice);
-    return (notice.type === "booking_confirmation" && failBookingMail) || (notice.type === "payment_confirmation" && failReceipt) ? json({ error: "Fixture mail outage" }, 503) : json({ success: true });
+    return (notice.type === "payment_confirmation" && failReceipt) ? json({ error: "Fixture mail outage" }, 503) : json({ success: true });
   }
   if (url.pathname === "/rest/v1/bookings") {
     if (init.method === "POST") {
@@ -92,18 +92,18 @@ try {
   requests.set("BR1", billing("BR1", "payg-1", "PM1")); payment("PM1");
   await webhook(fulfilled("BR1"));
   assert.deepEqual(rows.map(item => item.booking_date), ["2026-10-09", "2026-10-23"]);
-  assert.ok(rows.every(item => item.gocardless_payment_id === "PM1" && item.status === "pending_payment" && bookingIsActive(toCamel(item))));
+  assert.ok(rows.every(item => item.gocardless_payment_id === "PM1" && item.status === "paid" && bookingIsActive(toCamel(item))));
   assert.equal(subscriptions.size, 0);
-  assert.equal(notices[0].type, "booking_confirmation"); assert.equal(notices[0].amount, 20);
+  assert.equal(notices[0].type, "payment_confirmation"); assert.equal(notices[0].amount, 20);
   assert.match(notices[0].booking_dates, /9 October 2026.*23 October 2026/);
   assert.ok(!providerCalls.some(call => call.method === "POST" && call.path === "/billing_requests"));
   await webhook(fulfilled("BR1")); assert.equal(notices.length, 1);
   payment("PM1", "confirmed"); await webhook(event("PM1", "confirmed"));
-  assert.ok(rows.every(item => item.status === "pending_payment")); assert.equal(notices.length, 1);
+  assert.ok(rows.every(item => item.status === "paid")); assert.equal(notices.length, 1);
   payment("PM1", "paid_out"); await webhook(event("PM1", "paid_out"));
   assert.ok(rows.every(item => item.status === "paid")); assert.equal(notices.at(-1).type, "payment_confirmation");
   const noticeCount = notices.length; await webhook(event("PM1", "paid_out")); assert.equal(notices.length, noticeCount);
-  console.log("PASS PAYG: immediate allocation to exactly chosen dates, Awaiting payment through confirmed, Paid only at paid_out, independent booking/receipt emails and retry idempotency");
+  console.log("PASS PAYG: chosen dates immediately Paid after accepted setup, one combined confirmation, no payout wait and idempotent later events");
 
   rows = [row("legacy-month", "2026-10-09", "Membership — 1 class"), { ...row("legacy-cancelled", "2026-10-16", "Membership — 1 class", "legacy-month"), status: "cancelled" }];
   rows[0].gocardless_payment_id = "PRQ_OLD"; rows[0].amount = 35;
@@ -124,32 +124,36 @@ try {
   await webhook(event("PM4", "created", subscription.id));
   const november = rows.filter(item => item.gocardless_payment_id === "PM4");
   assert.deepEqual(november.map(item => item.booking_date), ["2026-11-06", "2026-11-13", "2026-11-20", "2026-11-27"]);
-  assert.ok(november.every(item => item.status === "pending_payment" && bookingIsActive(toCamel(item))));
+  assert.ok(november.every(item => item.status === "paid" && bookingIsActive(toCamel(item))));
   assert.equal(november.reduce((sum, item) => sum + item.amount, 0), 35);
+  november.forEach(item => { item.status = "pending_payment"; });
+  payments.get("PM4").links = { subscription: subscription.id };
+  assert.equal((await sync(november[0].id)).allocated, true);
+  assert.ok(november.every(item => item.status === "paid"), "existing renewal members also become Paid without a payout event");
   await Promise.all([webhook(event("PM4", "created", subscription.id)), webhook(event("PM4", "submitted", subscription.id))]);
   assert.equal(rows.filter(item => item.gocardless_payment_id === "PM4").length, 4);
   payment("PM4", "confirmed", "2026-11-01", 3500); await webhook(event("PM4", "confirmed", subscription.id));
-  assert.ok(november.every(item => item.status === "pending_payment"));
+  assert.ok(november.every(item => item.status === "paid"));
   payment("PM4", "paid_out", "2026-11-01", 3500); await webhook(event("PM4", "paid_out", subscription.id));
   assert.ok(november.every(item => item.status === "paid"));
-  assert.equal(rows.find(item => item.id === "legacy-month").status, "pending_payment");
-  console.log("PASS recurring membership: every class in the charge month allocated at created; no duplicate dates, cancellations or initial-month changes; renewal Paid only on payout");
+  assert.equal(rows.find(item => item.id === "legacy-month").status, "paid");
+  console.log("PASS recurring membership: every class in the charge month allocated at created; no duplicate dates, cancellations or initial-month changes; renewal Paid as soon as its authorised payment is created");
 
   rows = [row("legacy-null", "2026-10-09")]; requests.set("BRNULL", billing("BRNULL", "legacy-null", "PMNULL")); payment("PMNULL", "pending_submission", "2026-10-12", 1000);
   delete rows[0].payment_group_id;
   requests.get("BRNULL").metadata.payment_group_id = "";
   assert.equal((await sync("legacy-null")).allocated, true);
-  assert.equal(rows[0].gocardless_payment_id, "PMNULL"); assert.equal(rows[0].status, "pending_payment");
+  assert.equal(rows[0].gocardless_payment_id, "PMNULL"); assert.equal(rows[0].status, "paid");
   assert.equal(rows[0].payment_group_id, "legacy-null");
   assert.equal(rows.length, 1);
-  rows = [{ ...row("return-pending", "2026-10-09"), gocardless_billing_request_id: "BRPENDING" }];
+  rows = [{ ...row("return-pending", "2026-10-09"), gocardless_billing_request_id: "BRPENDING", status: "pending_checkout" }];
   requests.set("BRPENDING", billing("BRPENDING", "return-pending", "PMPENDING", "payg", "pending"));
   const snapshot = JSON.stringify(rows);
   assert.equal((await sync("return-pending")).allocated, false); assert.equal(JSON.stringify(rows), snapshot);
   requests.get("BRPENDING").status = "fulfilled"; payment("PMPENDING", "pending_submission", "2026-10-12", 1000);
   assert.equal((await sync("return-pending")).allocated, true);
-  assert.equal(rows[0].status, "pending_payment");
-  rows = [{ ...row("mismatched", "2026-10-09"), gocardless_billing_request_id: "BRPENDING" }];
+  assert.equal(rows[0].status, "paid");
+  rows = [{ ...row("mismatched", "2026-10-09"), gocardless_billing_request_id: "BRPENDING", status: "pending_checkout" }];
   await sync("mismatched", 503); assert.equal(rows[0].gocardless_payment_id, null);
   rows = [{ ...row("never-completed", "2026-10-09"), status: "cancelled" }];
   assert.equal((await sync("never-completed")).allocated, false);
@@ -158,13 +162,16 @@ try {
   console.log("PASS recovery/return: NULL references restored from original metadata, delayed fulfillment can retry, false return/mismatched/cancelled/uncompleted checkouts cannot allocate or request another payment");
 
   rows = [row("mail-retry", "2026-10-09")]; requests.set("BRMAIL", billing("BRMAIL", "mail-retry", "PMMAIL")); payment("PMMAIL");
-  failBookingMail = true; await webhook(fulfilled("BRMAIL"), 500);
-  assert.equal(rows[0].status, "pending_payment"); assert.ok(bookingIsActive(toCamel(rows[0]))); assert.equal(rows[0].booking_confirmation_sent_at, undefined);
-  assert.equal((await sync("mail-retry")).allocated, true, "email outage must not block the verified return page's successful allocation");
-  failBookingMail = false; await webhook(fulfilled("BRMAIL")); assert.ok(rows[0].booking_confirmation_sent_at);
-  failReceipt = true; payment("PMMAIL", "paid_out"); await webhook(event("PMMAIL", "paid_out"), 500);
-  assert.equal(rows[0].status, "paid"); assert.equal(rows[0].payment_confirmation_sent_at, undefined);
-  failReceipt = false; await webhook(event("PMMAIL", "paid_out")); assert.ok(rows[0].payment_confirmation_sent_at);
+  failReceipt = true; await webhook(fulfilled("BRMAIL"), 500);
+  assert.equal(rows[0].status, "paid"); assert.ok(bookingIsActive(toCamel(rows[0])));
+  assert.equal(rows[0].booking_confirmation_sent_at, undefined); assert.equal(rows[0].payment_confirmation_sent_at, undefined);
+  const mailOutage = await sync("mail-retry");
+  assert.equal(mailOutage.allocated, true, "email outage must not block verified allocation"); assert.equal(mailOutage.email_pending, true);
+  failReceipt = false; await webhook(fulfilled("BRMAIL"));
+  assert.ok(rows[0].booking_confirmation_sent_at && rows[0].payment_confirmation_sent_at);
+  const completedNotices = notices.length;
+  payment("PMMAIL", "paid_out"); await webhook(event("PMMAIL", "paid_out"));
+  assert.equal(notices.length, completedNotices, "payout does not send a second confirmation");
   rows = [{ ...row("out-of-order", "2026-10-09"), gocardless_billing_request_id: "BROUT" }];
   requests.set("BROUT", billing("BROUT", "out-of-order", "PMOUT")); payment("PMOUT", "paid_out");
   payments.get("PMOUT").metadata = { booking_id: "out-of-order" };
@@ -174,12 +181,24 @@ try {
   rows = [{ ...row("old-confirmed", "2026-10-09"), status: "paid", gocardless_billing_request_id: "BROLD" }];
   requests.set("BROLD", billing("BROLD", "old-confirmed", "PMOLD")); payment("PMOLD", "confirmed");
   assert.equal((await sync("old-confirmed")).allocated, true);
-  assert.equal(rows[0].status, "pending_payment", "verified recovery corrects historical Paid-at-confirmed rows under the payout-only rule");
+  assert.equal(rows[0].status, "paid", "verified successful existing members remain Paid without waiting for payout");
+  rows = [{ ...row("paid-month", "2026-10-09", "Membership — 1 class"), status: "paid", gocardless_billing_request_id: "BRPAID" }];
+  requests.set("BRPAID", billing("BRPAID", "paid-month", "PMPAID", "membership")); payment("PMPAID", "submitted", "2026-10-12", 3500);
+  assert.equal((await sync("paid-month")).allocated, true);
+  assert.deepEqual(rows.map(item => item.booking_date), ["2026-10-09", "2026-10-16", "2026-10-23", "2026-10-30"]);
+  assert.ok(rows.every(item => item.status === "paid"));
+  rows = [{ ...row("old-payment-only", "2026-10-09", "Membership — 1 class"), gocardless_payment_id: "PMONLY" }];
+  payment("PMONLY", "submitted", "2026-10-12", 3500);
+  assert.equal((await sync("old-payment-only")).allocated, true);
+  assert.equal(rows.length, 4); assert.ok(rows.every(item => item.status === "paid"));
+  rows = [{ ...row("failed-payment", "2026-10-09"), gocardless_payment_id: "PMFAILED" }]; payment("PMFAILED", "failed");
+  assert.equal((await sync("failed-payment")).allocated, false); assert.equal(rows[0].status, "pending_payment");
+  console.log("PASS existing-member reconciliation: already-Paid monthly dates repaired, original canonical payment verified without old request, failed payment stays unpaid");
   rows = [{ ...row("not-authorised", "2026-10-09"), gocardless_billing_request_id: "BRDENIED" }];
   requests.set("BRDENIED", billing("BRDENIED", "not-authorised", "PMDENIED")); payment("PMDENIED", "customer_approval_denied");
   assert.equal((await sync("not-authorised")).allocated, false);
   assert.equal(rows[0].gocardless_payment_id, null);
   const result = await webhookHandler(new Request("https://fixture.supabase.test/webhook", { method: "POST", body: "{}", headers: { "Webhook-Signature": "bad" } }));
   assert.equal(result.status, 498);
-  console.log("PASS separate email retries, return-page email outages, out-of-order payout recovery, verified legacy payment-status correction, denied setups and invalid webhook signatures");
+  console.log("PASS combined confirmation retries, return-page mail outages, out-of-order payout recovery, existing Paid members, denied setups and invalid webhook signatures");
 } finally { globalThis.fetch = originalFetch; delete globalThis.Deno; }

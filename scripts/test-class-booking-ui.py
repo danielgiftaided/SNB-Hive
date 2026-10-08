@@ -54,6 +54,7 @@ def route_api(route):
    for row in rows:
     if (row.get('payment_group_id') or row['id'])==group and row['status']!='cancelled':
      row['gocardless_payment_id']='PM_RECOVERED_'+group
+     row['status']='paid'
    response={'allocated':True}
   else: response={'allocated':False,'reason':'checkout_pending'}
  else: raise AssertionError(req.url)
@@ -161,6 +162,7 @@ with sync_playwright() as p:
  assert not checkout
  # Admin history includes old classes, cancellations and pending payments,
  # independently of confirmed class capacity and member visibility.
+ sync_ready=False
  rows=[dict(id=f'history-{i}',session_id='zumba',session_name='Zumba',type='class',
    user_id=f'history-member-{i}',name=f'Historical Member {i}',email=f'history-{i}@example.test',
    plan='Pay as you go',amount=10,status='paid',created_at='2026-10-01T12:00:00Z') for i in range(205)]
@@ -214,7 +216,7 @@ with sync_playwright() as p:
  pending.wait_for()
  assert pending.get_by_text('Zumba',exact=True).count()==1
  assert page.locator('main').get_by_text('Awaiting payment',exact=True).count()==3
- assert page.locator('main').get_by_text('Your place is reserved. Your Direct Debit is awaiting payment.',exact=True).count()==2
+ assert page.locator('main').get_by_text("Your place is reserved. We're checking your original payment setup.",exact=True).count()==2
  assert pending.get_by_text('Payment setup needs checking.',exact=False).count()==1
  assert pending.get_by_role('link',name='Contact Shams',exact=True).get_attribute('href')=='mailto:Shams@snbhive.com'
  assert 'Friday, 9 October 2026' in pending.inner_text()
@@ -232,6 +234,16 @@ with sync_playwright() as p:
  fail_read=False;page.get_by_role('button',name='Retry bookings',exact=True).click()
  page.get_by_role('alert').wait_for(state='detached')
  print('PASS member allocation: two referenced 9 October payments reserve places immediately while awaiting payment; NULL reference stays available for verified recovery; refresh failures preserve rows')
+ sync_ready=True; page.reload()
+ page.get_by_role('button',name='My bookings',exact=True).click()
+ page.wait_for_function("document.querySelector('main')?.innerText.split('Paid').length === 4")
+ assert all(row['status']=='paid' for row in rows)
+ assert pending.count()==0
+ assert len(checkout)==checkout_before
+ print('PASS member automatic repair: two pending payment references plus NULL become Paid and all three return to My bookings without another checkout')
+ # Reset the same case for independent admin recovery and register validation.
+ for row in rows: row['status']='pending_payment'
+ rows[0]['status']='paid';rows[2]['gocardless_payment_id']=None;sync_ready=False
  context.close();context=browser.new_context(viewport={'width':1280,'height':1000})
  context.add_init_script('sessionStorage.setItem("snb_admin_session",'+json.dumps(json.dumps({'email':'admin@example.test','loginAt':int(time.time()*1000)}))+');')
  context.route('https://fixture.supabase.test/**',route_api);context.route('https://fonts.googleapis.com/**',lambda route:route.abort())
@@ -251,12 +263,12 @@ with sync_playwright() as p:
  sync_ready=True
  page.get_by_role('button',name=re.compile('^Bookings')).click()
  page.get_by_role('button',name='Restore completed bookings',exact=True).click()
- page.get_by_text('completed booking group(s) restored.',exact=False).wait_for()
- assert rows[2]['gocardless_payment_id'].startswith('PM_RECOVERED_') and rows[2]['status']=='pending_payment'
+ page.get_by_text('completed booking group(s) restored and marked Paid.',exact=False).wait_for()
+ assert rows[2]['gocardless_payment_id'].startswith('PM_RECOVERED_') and all(row['status']=='paid' for row in rows)
  page.get_by_role('button',name=re.compile('^Classes')).click()
  assert zumba_admin.locator('p.ff-display').inner_text()=='3'
  assert len(writes)==writes_before and len(emails)==emails_before and len(checkout)==checkout_before
- print('PASS admin exact case: all three rows/dates visible; recovery restores the NULL reference and class allocation without another payment or marking it Paid')
+ print('PASS admin exact case: all three rows/dates visible; recovery restores the NULL reference and class allocation, and marks all completed setups Paid without another payment')
  # New PAYG checkout keeps just the two chosen dates; the verified return
  # page allocates them and returns directly to My bookings.
  context.close();context=browser.new_context(viewport={'width':1280,'height':1000})
@@ -268,9 +280,9 @@ with sync_playwright() as p:
  page.get_by_role('button',name='Continue to payment',exact=True).click()
  page.get_by_role('heading',name="You're booked! 🎉",exact=True).wait_for()
  assert len(rows)==2 and sorted(row['booking_date'] for row in rows)==['2026-10-09','2026-10-23']
- assert all(row['status']=='pending_payment' and row.get('gocardless_payment_id') for row in rows)
+ assert all(row['status']=='paid' and row.get('gocardless_payment_id') for row in rows)
  page.get_by_role('link',name='Return to my bookings',exact=True).click()
- page.get_by_text('Your place is reserved. Your Direct Debit is awaiting payment.',exact=True).first.wait_for()
+ page.get_by_text('Paid',exact=True).first.wait_for()
  assert page.locator('main').get_by_text('Zumba',exact=True).count()==2
  # Start a separate monthly checkout on the 16th: all remaining dates,
  # including 23rd and 30th, are reserved immediately, not just the first.
@@ -282,9 +294,9 @@ with sync_playwright() as p:
  page.get_by_role('heading',name="You're booked! 🎉",exact=True).wait_for()
  assert sorted(row['booking_date'] for row in rows)==['2026-10-16','2026-10-23','2026-10-30']
  assert sum(row['amount'] for row in rows)==26.25
- assert all(row['status']=='pending_payment' and row.get('gocardless_payment_id') for row in rows)
+ assert all(row['status']=='paid' and row.get('gocardless_payment_id') for row in rows)
  page.get_by_role('link',name='Return to my bookings',exact=True).click()
- page.get_by_text('Your place is reserved. Your Direct Debit is awaiting payment.',exact=True).first.wait_for()
+ page.get_by_text('Paid',exact=True).first.wait_for()
  assert page.locator('main').get_by_text('Zumba',exact=True).count()==3
  # A spoofed/premature return must wait for server verification rather than
  # displaying a reserved place based on its URL alone.

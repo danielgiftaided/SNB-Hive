@@ -244,7 +244,7 @@ You should see `APP_URL`, `GOCARDLESS_ACCESS_TOKEN`,
    account in sandbox.
 6. GoCardless should return the browser to `/payment-complete`, where the app
    shows the short booking reference.
-7. In **My bookings**, the booking begins as **Awaiting payment**. Completed setup immediately reserves the chosen dates, through the return-page server check or the signed `billing_requests.fulfilled` webhook. The customer and Shams receive booking confirmations. It stays **Awaiting payment** until `payments.paid_out`, which marks it **Paid** and sends payment receipts.
+7. In **My bookings**, successful verified payment setup immediately reserves the chosen dates and marks them **Paid**, through the return-page server check or the signed `billing_requests.fulfilled` webhook. The customer and Shams receive a combined booking/payment-setup confirmation. It does not wait for `payments.paid_out` and payout does not send a duplicate confirmation.
 8. In the GoCardless sandbox dashboard, verify that the customer, mandate, and
    £10 payment were created.
 
@@ -259,7 +259,7 @@ again, because the app prevents one customer from booking Zumba twice.
    amount, then press
    **Continue to payment**.
 4. Complete the GoCardless sandbox authorization.
-5. Confirm the app returns to `/payment-complete` and immediately reserves the chosen start date and all subsequent classes in that month. Check the member/admin lists and booking emails. Payment remains **Awaiting payment** until **Paid Out**.
+5. Confirm the app returns to `/payment-complete` and immediately reserves the chosen start date and all subsequent classes in that month. Check the member/admin lists and booking emails. The booking is marked **Paid** as soon as successful payment setup is verified, before payout.
 6. In GoCardless, verify the prorated one-off payment and a subscription named
    `SNB Hive Zumba monthly membership` exist and that the subscription amount
    is £35 monthly with collection day set to the 1st of the next month. Scheduled recurring payments enrol the full charge month before payout.
@@ -418,7 +418,7 @@ is stale or whether the booking write needs investigation; no database secret
 or access token is needed to diagnose it.
 
 Do not mark the webhook as working merely because checkout returned to the app.
-The return page calls `gocardless-sync`, which verifies the original checkout server-side and allocates the booking/subscription through the same handler as the signed webhook. A return URL by itself proves nothing. Verify both the immediate allocation and the later `payments.paid_out` update. See [rollout and legacy recovery](CLASS_BOOKING_CHANGES.md#rollout-order), including the additional SQL columns and sync function required by PR #46.
+The return page calls `gocardless-sync`, which verifies the original checkout server-side and allocates the booking/subscription through the same handler as the signed webhook. A return URL by itself proves nothing. Verify immediate allocation and Paid status after successful setup, and that later `payments.paid_out` events do not duplicate confirmation emails. See [rollout and legacy recovery](CLASS_BOOKING_CHANGES.md#rollout-order), including the additional SQL columns and sync function required by PR #46.
 
 ## 8. Switch from sandbox to live
 
@@ -463,9 +463,10 @@ Only do this after both sandbox journeys pass.
   subscriptions. Changing the booking status in SNB Hive does not cancel a
   GoCardless mandate or subscription.
 - Completed payment setup reserves the class dates immediately. The SNB Hive
-  admin dashboard keeps **Awaiting payment** until the **paid_out** webhook
-  marks it **Paid** and sends both payout receipts. Collection confirmation
-  alone does not mark it Paid. Use **Restore completed bookings** to recheck
+  admin dashboard and My bookings show **Paid** as soon as the server verifies
+  successful authorised setup, before payout. The member and Shams receive one
+  combined confirmation. Paid is a portal convention for accepted setup, not
+  confirmation of settlement to the business bank account. Use **Restore completed bookings** to recheck
   existing rows against their original GoCardless checkout without another charge.
 - If prices change, update both customer-facing and server-side prices together:
   1. `PAYG_PRICE` and `MEMBERSHIP_TIERS` in `src/App.jsx`;
