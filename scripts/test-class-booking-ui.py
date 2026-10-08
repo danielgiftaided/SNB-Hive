@@ -73,7 +73,9 @@ with sync_playwright() as p:
  assert card(page,'BoxFit').get_by_role('button',name='Book',exact=True).is_enabled()
  assert 'taster' not in card(page,'BoxFit').inner_text().lower()
  for date in ['Thursday, 15 October 2026','Tuesday, 20 October 2026','Tuesday, 27 October 2026']:
-  assert date in card(page,'BoxFit').inner_text()
+  assert date not in card(page,'BoxFit').inner_text()
+ assert 'October' not in card(page,'BoxFit').inner_text()
+ assert 'Tuesdays' in card(page,'BoxFit').inner_text()
  assert '13:00–14:00' in card(page,'BoxFit').inner_text()
  assert 'half-priced tasters' in page.locator('main').inner_text()
  assert page.get_by_role('link',name='Shams@snbhive.com').get_attribute('href')=='mailto:Shams@snbhive.com'
