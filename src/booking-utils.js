@@ -48,6 +48,13 @@ export function isTasterBooking(booking) {
   return String(booking?.plan || "").toLowerCase().includes("taster");
 }
 
+// BoxFit's past tasters are history, not enrolments in the new paid classes.
+// Zumba's live paid tasters still reserve a place on their selected lesson date.
+export function bookingIsClassRegistration(booking) {
+  return bookingIsActive(booking) && booking.status !== "waitlisted" &&
+    !(booking.sessionId === "boxfit" && isTasterBooking(booking));
+}
+
 // Cancellation does not restore eligibility. An unfinished checkout can resume
 // its original booking, rather than creating a second lifetime taster.
 export function userTasterBooking(bookings, user, sessionId) {
@@ -74,12 +81,12 @@ export function bookingMatchesClassDate(booking, selectedDate) {
 
 export function classBookingDates(bookings, sessionId, upcomingDates) {
   const dated = bookings
-    .filter(booking => booking.sessionId === sessionId && bookingIsActive(booking))
+    .filter(booking => booking.sessionId === sessionId && bookingIsClassRegistration(booking))
     .map(booking => normalizedBookingDate(booking.bookingDate))
     .filter(Boolean);
   const dates = [...new Set([...upcomingDates, ...dated])].sort();
   const hasUndated = bookings.some(booking =>
-    booking.sessionId === sessionId && bookingIsActive(booking) &&
+    booking.sessionId === sessionId && bookingIsClassRegistration(booking) &&
     !normalizedBookingDate(booking.bookingDate));
   return hasUndated ? [...dates, UNDATED_BOOKING] : dates;
 }

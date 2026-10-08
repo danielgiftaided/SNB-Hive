@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import storage, { supabase } from "./storage.js";
 import { useBookings } from "./use-bookings.js";
-import { bookingIsActive, bookingBelongsToUser, classPaymentIsPending, classUsesGoCardless, bookingSyncIds, bookingMatchesClassDate, classBookingDates, UNDATED_BOOKING, isTasterBooking, userTasterBooking, tasterBookingUsed } from "./booking-utils.js";
+import { bookingIsActive, bookingIsClassRegistration, bookingBelongsToUser, classPaymentIsPending, classUsesGoCardless, bookingSyncIds, bookingMatchesClassDate, classBookingDates, UNDATED_BOOKING, isTasterBooking, userTasterBooking, tasterBookingUsed } from "./booking-utils.js";
 import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../supabase/functions/_shared/membership.ts";
 import { membershipDatesFrom } from "../supabase/functions/_shared/membership-bookings.ts";
 import { checkoutErrorDetail, singleMembershipBooking } from "./checkout.js";
@@ -54,7 +54,8 @@ const DEFAULT_CLASSES = [
   { id:"strength", name:"Strength & Conditioning", tagline:"Build strength, build power", day:"TBC", time:"TBC", capacity:20, icon:"dumbbell",color:"#1F4A42", tasterStatus:"tbc", 
     venue:"6 Dispensary Lane, London E8 1FT", venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
     whatToBring:"Gym clothes and trainers and bring a water bottle.", icsStart:"20260924T110000", icsEnd:"20260924T114500", description:"Strength training is one of the most beneficial forms of exercise for women, particularly as we navigate the demands of motherhood, work and daily life.\n\nThis class focuses on building functional strength, improving mobility and helping women feel stronger and more capable in their everyday activities.\n\nUsing bodyweight exercises, resistance bands and light equipment, sessions are designed to be accessible while still providing an effective workout.\n\nBenefits include:\n• Increased muscle tone and strength\n• Support with sustainable fat loss and body composition goals\n• Improved posture and reduced aches and pains\n• Better balance and stability\n• Increased energy levels\n• Stronger bones and joints\n• Improved confidence in daily movement\n• Support for healthy ageing and long-term wellbeing\n\nRather than focusing on appearance alone, this class encourages women to appreciate what their bodies can do and develop strength that carries into everyday life.\n\nSuitable for all fitness levels and can be adapted to individual needs." },
-  { id: "boxfit", name: "BoxFit", tagline: "Cardio, conditioning & pad work", day: "Dates to be confirmed", time: "Time to be confirmed", capacity: 18, icon: "flame", color: "#D06B4F", bookingPaused: true,
+  { id: "boxfit", name: "BoxFit", tagline: "Cardio, conditioning & pad work", day: "15 October, then Tuesdays", time: "13:00–14:00", capacity: 18, icon: "flame", color: "#D06B4F",
+    details: CLASS_PAYMENTS.boxfit.dates.map(formatBookingDate),
     venue: "6 Dispensary Lane, London E8 1FT", venueMap: "https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT", whatToBring: "Bring boxing gloves and pads if you have them. Wear comfortable workout clothes and trainers. Bring a water bottle", description: "A high-energy boxing-inspired fitness class combining cardio, conditioning and boxing drills. Suitable for beginners and all fitness levels."},
   { id:"self_defence", name:"Self Defence", tagline:"Intensive 3-week course", day:"3-week course", time:"Wednesdays, 12:00–14:00", capacity:11, icon:"shield", color:"#6F596E", bookingKind:"bank_transfer", price:SELF_DEFENCE_PRICE, courseDates:SELF_DEFENCE_DATES,
     venue:"6 Dispensary Lane, London E8 1FT", venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
@@ -83,7 +84,7 @@ const DEFAULT_RETREATS = [
   { id: "retreat-1", name: "Women's Wellness Retreat", location: "Surrey Hills", dates: "Fri 18 – Sun 20 Sept", price: 950, deposit: 300, capacity: 15 },
 ];
 
-// BoxFit shares Zumba pricing and payment handling; dates keep it paused.
+// BoxFit and Zumba share pricing, checkout and membership handling.
 const PAID_CLASS_IDS = new Set(Object.keys(CLASS_PAYMENTS));
 
 // Retreat payments continue to use bank transfer. Replace these
@@ -1039,7 +1040,7 @@ function RetreatCard({ retreat, booked, onBook, isSignedUp }) {
 
 /* ---- BOOKING MODAL
    - Details pre-filled from logged-in user
-   - Zumba monthly membership
+   - Zumba / BoxFit monthly membership
    - PAYG £10
    - 5-minute hold (not 30)
    ---- */
@@ -2596,7 +2597,7 @@ function AdminClassCard({ cls, bookings, onMoveBooking }) {
   const dates = classBookingDates(bookings, cls.id, upcomingDates);
   const [selectedDate, setSelectedDate] = useState(dates[0]);
   const clsBookings = bookings
-    .filter(b => b.sessionId === cls.id && b.status !== "waitlisted" && bookingIsActive(b))
+    .filter(b => b.sessionId === cls.id && bookingIsClassRegistration(b))
     .filter(b => !PAID_CLASS_IDS.has(cls.id) || bookingMatchesClassDate(b, selectedDate))
     .sort((a,b) => new Date(a.createdAt||0) - new Date(b.createdAt||0));
   const pct = Math.min(100, cls.capacity ? (clsBookings.length / cls.capacity) * 100 : 0);
@@ -3402,7 +3403,7 @@ function BookingApp() {
   useIdleLogout(!!currentUser, handleSignOut, 30);
 
   function bookedCount(id) {
-    return bookings.filter(b => b.sessionId===id && b.status !== "waitlisted" && bookingIsActive(b)).length;
+    return bookings.filter(b => b.sessionId===id && bookingIsClassRegistration(b)).length;
   }
   function getUserBookingType(id) {
     if (!currentUser) return null;
