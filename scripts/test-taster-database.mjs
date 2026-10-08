@@ -35,10 +35,14 @@ try {
   const sql = await readFile(process.argv[3] || new URL('../supabase/migrations/20261007000000_lifetime_class_tasters.sql',import.meta.url),'utf8');
   await db.exec(sql);
   await db.exec(sql); // The SQL Editor file and migration can be re-run safely.
+  const bookingSecurityBefore = (await db.query("select relrowsecurity, relacl from pg_class where oid = 'public.bookings'::regclass")).rows;
   const eligibilitySql = await readFile(new URL(process.argv[3] ? '../supabase/SQL_EDITOR_ZUMBA_TASTER_ELIGIBILITY.sql' : '../supabase/migrations/20261008010000_regular_zumba_taster_eligibility.sql', import.meta.url), 'utf8');
   await db.exec(eligibilitySql);
   await db.exec(eligibilitySql);
   assert.deepEqual((await snapshot()).rows, historyBefore, "running SQL twice preserves every original booking and its status, amount, member and timestamps");
+  assert.equal((await db.query("select to_regclass('public.existing') as relation")).rows[0].relation, null, "the function does not create an existing table");
+  assert.equal((await db.query("select relrowsecurity from pg_class where oid = 'public.class_taster_claims'::regclass")).rows[0].relrowsecurity, true, "eligibility claims have RLS enabled");
+  assert.deepEqual((await db.query("select relrowsecurity, relacl from pg_class where oid = 'public.bookings'::regclass")).rows, bookingSecurityBefore, "eligibility SQL preserves bookings RLS and access grants");
   const insert = (id,user,email,session='zumba') => db.query(`insert into bookings (id,session_id,user_id,email,plan,status,amount,booking_date,payment_group_id)
     values ($1,$2,$3,$4,'Taster (bank transfer)','pending_payment',5,'2026-10-16',$1)`,[id,session,user,email]);
   await assert.rejects(insert('paid-member-taster','paid-member','paid@example.test'),/Zumba tasters are only/);

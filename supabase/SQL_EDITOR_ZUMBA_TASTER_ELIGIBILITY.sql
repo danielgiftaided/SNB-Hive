@@ -5,6 +5,11 @@ begin;
 -- Zumba tasters are only available before a member's first paid class.
 -- Requires the existing lifetime-taster schema (already deployed for SNB Hive).
 -- Adds eligibility claims/triggers only: never deletes or updates bookings.
+-- Keep eligibility claims private; preserve existing bookings access policies.
+alter table public.class_taster_claims enable row level security;
+revoke all on public.class_taster_claims from anon, authenticated;
+grant select on public.class_taster_claims to service_role;
+
 -- A completed regular Zumba booking uses taster eligibility permanently.
 -- Reuse the private lifetime claims so cancelling/deleting a paid booking
 -- cannot make that member a first-time taster customer again.
@@ -38,15 +43,13 @@ end;
 $$;
 revoke all on function public.claim_regular_zumba_booking() from public;
 
-drop trigger if exists claim_regular_zumba_booking on public.bookings;
-create trigger claim_regular_zumba_booking
+create or replace trigger claim_regular_zumba_booking
 before insert or update on public.bookings
 for each row execute function public.claim_regular_zumba_booking();
 
 create or replace function public.enforce_lifetime_class_taster()
 returns trigger language plpgsql security definer set search_path = public as $$
 declare
-  existing public.bookings%rowtype;
   inserted integer;
 begin
   if TG_OP = 'UPDATE' and OLD.plan ilike '%taster%' and
@@ -66,10 +69,12 @@ begin
 
   -- INSERT also runs for PostgREST upserts. Allow an existing taster to be
   -- cancelled or its unfinished checkout resumed, including historical rows.
-  select * into existing from public.bookings where id = NEW.id;
-  if existing.id is not null and existing.plan ilike '%taster%' and
-      existing.session_id = NEW.session_id and existing.user_id = NEW.user_id and
-      lower(btrim(existing.email)) = lower(btrim(NEW.email)) then
+  if exists (
+    select 1 from public.bookings as saved_booking
+    where saved_booking.id = NEW.id and saved_booking.plan ilike '%taster%'
+      and saved_booking.session_id = NEW.session_id and saved_booking.user_id = NEW.user_id
+      and lower(btrim(saved_booking.email)) = lower(btrim(NEW.email))
+  ) then
     return NEW;
   end if;
 
@@ -88,8 +93,7 @@ end;
 $$;
 revoke all on function public.enforce_lifetime_class_taster() from public;
 
-drop trigger if exists enforce_lifetime_class_taster on public.bookings;
-create trigger enforce_lifetime_class_taster
+create or replace trigger enforce_lifetime_class_taster
 before insert or update on public.bookings
 for each row execute function public.enforce_lifetime_class_taster();
 
