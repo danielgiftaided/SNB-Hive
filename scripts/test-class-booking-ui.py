@@ -70,6 +70,7 @@ with sync_playwright() as p:
  page=context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
  page.goto('http://127.0.0.1:5174/');page.get_by_role('heading',name='Zumba',exact=True).wait_for()
  assert page.get_by_role('heading',name='Boxing',exact=True).count()==0
+ assert page.locator('main h3').all_text_contents()==['Zumba','BoxFit','Zumba taster','Reformer Pilates','Self Defence','Somatic','Strength & Conditioning']
  assert card(page,'BoxFit').get_by_role('button',name='Book',exact=True).is_enabled()
  assert 'taster' not in card(page,'BoxFit').inner_text().lower()
  for date in ['Thursday, 15 October 2026','Tuesday, 20 October 2026','Tuesday, 27 October 2026']:
@@ -81,7 +82,7 @@ with sync_playwright() as p:
  assert page.get_by_role('link',name='Shams@snbhive.com').get_attribute('href')=='mailto:Shams@snbhive.com'
  page.screenshot(path='/tmp/snb-class-cards-desktop.png',full_page=True)
  for key in ['width','height']:
-  assert card(page,'Zumba').bounding_box()[key]==card(page,'Zumba taster').bounding_box()[key]
+  assert card(page,'Zumba').bounding_box()[key]==card(page,'BoxFit').bounding_box()[key]
  self_card=card(page,'Self Defence')
  for date in ['Wednesday 18th November','Wednesday 25th November','Wednesday 2nd December']: assert date in self_card.inner_text()
  self_card.get_by_role('button',name='Book',exact=True).click()
@@ -97,7 +98,7 @@ with sync_playwright() as p:
  page.get_by_text('Booking cancelled. Confirmation emails have been sent.').wait_for()
  assert emails[-1]['type']=='booking_cancelled' and '2 December 2026' in emails[-1]['booking_date']
  page.get_by_role('button',name='Classes',exact=True).first.click()
- card(page,'Zumba taster').get_by_role('button',name='Book',exact=True).click()
+ card(page,'Zumba taster').get_by_role('button',name='Book taster',exact=True).click()
  radios=page.get_by_role('radio')
  assert radios.count()==4
  assert 'Friday, 9 October 2026' in page.locator('body').inner_text()
@@ -123,12 +124,30 @@ with sync_playwright() as p:
  assert card(page,'Zumba taster').get_by_role('button').is_disabled()
  assert not errors,errors
  print('PASS desktop browser: class cards, bank transfer course, confirmation/cancellation payloads, £5 single-date taster, lifetime cancellation limit and ordinary Zumba availability')
+ # Regular Zumba bookings prevent a new taster, including historical
+ # member IDs/email capitalization and completed bookings later cancelled.
+ taster_history=rows[:]
+ for plan,status,reference in [('Pay as you go','paid',None),('Membership — 1 class','paid',None),('Pay as you go','pending_payment','PM_ALREADY_BOOKED'),('Membership — 1 class','cancelled','PM_CANCELLED')]:
+  rows=[dict(id='regular-zumba',session_id='zumba',session_name='Zumba',type='class',user_id='older-account-id',name=user['name'],email=' '+user['email'].upper()+' ',plan=plan,amount=10,status=status,gocardless_payment_id=reference,booking_date='2026-10-09')]
+  page.goto('http://127.0.0.1:5174/')
+  card(page,'Zumba taster').get_by_role('button',name='Book taster',exact=True).wait_for()
+  button=card(page,'Zumba taster').get_by_role('button',name='Book taster',exact=True)
+  assert button.is_disabled()
+  assert button.evaluate('(button) => getComputedStyle(button).backgroundColor')=='rgb(227, 223, 211)'
+ rows=[dict(rows[0],plan='Pay as you go',status='pending_payment',gocardless_payment_id=None)]
+ page.goto('http://127.0.0.1:5174/')
+ assert card(page,'Zumba taster').get_by_role('button',name='Book taster',exact=True).is_enabled(), 'An unfinished checkout is not a paid class booking'
+ rows=[dict(rows[0],session_id='boxfit',session_name='BoxFit',status='paid')]
+ page.goto('http://127.0.0.1:5174/')
+ assert card(page,'Zumba taster').get_by_role('button',name='Book taster',exact=True).is_enabled(), 'BoxFit does not affect Zumba taster eligibility'
+ rows=taster_history
+ print('PASS taster eligibility: PAYG/monthly/completed legacy/cancelled Zumba bookings disable and grey Book taster; unfinished checkouts and other classes remain eligible')
  # Separate member: a failed save must not consume eligibility or call GoCardless.
  user['id']='retry-member';user['email']='retry@example.test';rows=[];checkout=[];fail_booking=True
  context.close();context=browser.new_context(viewport={'width':375,'height':812})
  context.add_init_script('localStorage.setItem("snb_session",'+json.dumps(json.dumps(user))+');')
  context.route('https://fixture.supabase.test/**',route_api);context.route('https://fonts.googleapis.com/**',lambda route:route.abort())
- page=context.new_page();page.goto('http://127.0.0.1:5174/');card(page,'Zumba taster').get_by_role('button',name='Book',exact=True).click()
+ page=context.new_page();page.goto('http://127.0.0.1:5174/');card(page,'Zumba taster').get_by_role('button',name='Book taster',exact=True).click()
  page.get_by_role('radio',name='Friday, 16 October 2026',exact=True).check()
  page.get_by_role('button',name='Reserve my place',exact=True).click()
  page.get_by_text("Couldn't save your booking",exact=False).wait_for()

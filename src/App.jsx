@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Calendar, MapPin, Clock, Check, X, ArrowRight, ChevronLeft,
   Loader2, Sparkles, RotateCcw, Music2, Flame, Dumbbell, Flower2,
@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import storage, { supabase } from "./storage.js";
 import { useBookings } from "./use-bookings.js";
-import { bookingIsActive, bookingIsClassRegistration, bookingBelongsToUser, classPaymentIsPending, classUsesGoCardless, bookingSyncIds, bookingMatchesClassDate, classBookingDates, UNDATED_BOOKING, isTasterBooking, userTasterBooking, tasterBookingUsed } from "./booking-utils.js";
+import { bookingIsActive, bookingIsClassRegistration, bookingBelongsToUser, classPaymentIsPending, classUsesGoCardless, bookingSyncIds, bookingMatchesClassDate, classBookingDates, UNDATED_BOOKING, isTasterBooking, userHasBookedRegularClass, userTasterBooking, tasterBookingUsed } from "./booking-utils.js";
 import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../supabase/functions/_shared/membership.ts";
 import { membershipDatesFrom } from "../supabase/functions/_shared/membership-bookings.ts";
 import { checkoutErrorDetail, singleMembershipBooking } from "./checkout.js";
@@ -787,7 +787,7 @@ function AuthScreen({ onAuth }) {
    - Remaining capacity is kept private from regular users
    ---- */
 
-function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = false }) {
+function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = false, tasterIneligible = false }) {
   const Icon = ICONS[cls.icon] || Sparkles;
   const full = booked >= cls.capacity;
   const isMember = bookingType === "membership";
@@ -803,7 +803,7 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = 
     !isBooked;
 
   const disabled =
-    cls.bookingPaused || tasterUsed ||
+    cls.bookingPaused || tasterUsed || tasterIneligible ||
     isTbc ||
     !paymentsAvailable ||
     (isBooked && !canBookAnotherPayg) ||
@@ -897,16 +897,17 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = 
             }
           }}
           disabled={disabled}
+          title={tasterIneligible ? "Zumba tasters are only for people who have not booked a PAYG or monthly Zumba class." : undefined}
           className="ff-body inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full transition disabled:cursor-not-allowed"
           style={{
-            backgroundColor: cls.bookingPaused || tasterUsed || isTbc
+            backgroundColor: cls.bookingPaused || tasterUsed || tasterIneligible || isTbc
               ? "#E3DFD3"
               : isBooked && !canBookAnotherPayg
                 ? "#D4EBD9"
                 : !isWaitlist && ((full && !PAID_CLASS_IDS.has(cls.id)) || isClosed)
                   ? "#E3DFD3"
                   : TEAL,
-            color: cls.bookingPaused || tasterUsed || isTbc
+            color: cls.bookingPaused || tasterUsed || tasterIneligible || isTbc
               ? "#8A8478"
               : isBooked && !canBookAnotherPayg
                 ? "#2D6B40"
@@ -933,7 +934,7 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = 
                     : canBookAnotherPayg
                       ? "Book another lesson"
                     : isTaster
-                      ? (cls.bookingKind === "paid_taster" ? "Book" : "Book taster")
+                      ? "Book taster"
                       : "Book"}
 
           {!disabled && (
@@ -1097,6 +1098,7 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
     if (saving) return;
     if (session.bookingPaused) return setError("Booking opens when dates and times are confirmed.");
     if (isPaidTaster && tasterBookingUsed(previousTaster)) return setError("You have already booked your Zumba taster. Only one taster is available per class, even after cancellation.");
+    if (isPaidTaster && userHasBookedRegularClass(bookings, currentUser, session.id)) return setError("Zumba tasters are only for people who have not booked a PAYG or monthly Zumba class.");
     if (type === "class" && !isTaster && (!isBankTransfer || isPaidTaster) &&
         (!selectedDates.length || selectedDates.some(date => !availableDates.includes(date)))) {
       return setError("Please choose an available lesson date.");
@@ -1120,7 +1122,10 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
           setEmailNotice("Your booking is saved, but we couldn't send the emails. Please contact Shams@snbhive.com for confirmation.");
         }
         setStep(2);
-      } catch { setError("Couldn't save your booking — please try again."); }
+      } catch (error) {
+        const message = String(error?.message || "");
+        setError(message.includes("Zumba tasters are only") || message.includes("Only one lifetime taster") ? message : "Couldn't save your booking — please try again.");
+      }
       finally { setSaving(false); }
       return;
     }
@@ -1417,7 +1422,7 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
             <div className="flex flex-col gap-4">
               <h4 className="ff-display text-xl font-semibold" style={{ color:INK }}>{step === 2 ? "Booking saved — awaiting payment" : "Pay by bank transfer"}</h4>
               {isPaidTaster && step === 1 && (<>
-                <p className="text-sm text-stone-600">Try one Zumba session for £5, half the usual price. You can book one taster per class in total, even if you cancel it.</p>
+                <p className="text-sm text-stone-600">Try one Zumba session for £5, half the usual price. Tasters are for people who have not booked a PAYG or monthly Zumba class. You can book one taster per class in total, even if you cancel it.</p>
                 <fieldset className="rounded-xl border border-stone-200 p-3.5">
                   <legend className="px-1 text-sm font-medium text-stone-700">Choose your taster date</legend>
                   <div className="flex flex-col gap-2">
@@ -3518,11 +3523,11 @@ function BookingApp() {
                   </div>
                 )}
                 <div className="grid sm:grid-cols-2 gap-4">
-  {/* Show all ordinary classes first */}
+  {/* Live paid classes lead the catalogue. */}
   {DEFAULT_CLASSES
-    .filter(cls => cls.id !== "self_defence")
+    .filter(cls => ["zumba", "boxfit"].includes(cls.id))
     .map(cls => (
-      <Fragment key={cls.id}><ClassCard
+      <ClassCard key={cls.id}
         cls={cls}
         booked={bookedCount(cls.id)}
         bookingType={getUserBookingType(cls.id)}
@@ -3532,10 +3537,12 @@ function BookingApp() {
         }}
         onWaitlist={joinWaitlist}
       />
-      {cls.id === "zumba" && <ClassCard cls={ZUMBA_TASTER} booked={bookedCount(cls.id)}
-        tasterUsed={tasterBookingUsed(userTasterBooking(bookings, currentUser, cls.id))}
-        onBook={() => { setModalSession(ZUMBA_TASTER); setModalType("class"); }}/>}</Fragment>
     ))}
+
+  <ClassCard cls={ZUMBA_TASTER} booked={bookedCount("zumba")}
+    tasterUsed={tasterBookingUsed(userTasterBooking(bookings, currentUser, "zumba"))}
+    tasterIneligible={userHasBookedRegularClass(bookings, currentUser, "zumba")}
+    onBook={() => { setModalSession(ZUMBA_TASTER); setModalType("class"); }}/>
 
   {/* Pilates comes immediately before Self Defence */}
   <PilatesCard
@@ -3558,6 +3565,13 @@ function BookingApp() {
         onWaitlist={joinWaitlist}
       />
     ))}
+
+  {/* Classes with unconfirmed dates are last. */}
+  {DEFAULT_CLASSES.filter(cls => ["somatic", "strength"].includes(cls.id)).map(cls => (
+    <ClassCard key={cls.id} cls={cls} booked={bookedCount(cls.id)}
+      bookingType={getUserBookingType(cls.id)} onWaitlist={joinWaitlist}
+      onBook={() => { setModalSession(cls); setModalType("class"); }}/>
+  ))}
 </div>
               </>
             : tab==="workshops"

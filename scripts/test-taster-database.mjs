@@ -35,9 +35,35 @@ try {
   const sql = await readFile(process.argv[3] || new URL('../supabase/migrations/20261007000000_lifetime_class_tasters.sql',import.meta.url),'utf8');
   await db.exec(sql);
   await db.exec(sql); // The SQL Editor file and migration can be re-run safely.
+  const bookingSecurityBefore = (await db.query("select relrowsecurity, relacl from pg_class where oid = 'public.bookings'::regclass")).rows;
+  const eligibilitySql = await readFile(new URL(process.argv[3] ? '../supabase/SQL_EDITOR_ZUMBA_TASTER_ELIGIBILITY.sql' : '../supabase/migrations/20261008010000_regular_zumba_taster_eligibility.sql', import.meta.url), 'utf8');
+  await db.exec(eligibilitySql);
+  await db.exec(eligibilitySql);
   assert.deepEqual((await snapshot()).rows, historyBefore, "running SQL twice preserves every original booking and its status, amount, member and timestamps");
+  assert.equal((await db.query("select to_regclass('public.existing') as relation")).rows[0].relation, null, "the function does not create an existing table");
+  assert.equal((await db.query("select relrowsecurity from pg_class where oid = 'public.class_taster_claims'::regclass")).rows[0].relrowsecurity, true, "eligibility claims have RLS enabled");
+  assert.deepEqual((await db.query("select relrowsecurity, relacl from pg_class where oid = 'public.bookings'::regclass")).rows, bookingSecurityBefore, "eligibility SQL preserves bookings RLS and access grants");
   const insert = (id,user,email,session='zumba') => db.query(`insert into bookings (id,session_id,user_id,email,plan,status,amount,booking_date,payment_group_id)
     values ($1,$2,$3,$4,'Taster (bank transfer)','pending_payment',5,'2026-10-16',$1)`,[id,session,user,email]);
+  await assert.rejects(insert('paid-member-taster','paid-member','paid@example.test'),/Zumba tasters are only/);
+  await assert.rejects(insert('changed-email-taster','paid-member','changed-paid@example.test'),/Zumba tasters are only/);
+  await assert.rejects(insert('same-email-taster','new-paid-id',' PAID@EXAMPLE.TEST '),/Zumba tasters are only/);
+  await db.query("update bookings set status='cancelled' where id='paid-class'");
+  await db.query("delete from bookings where id='paid-class'");
+  await assert.rejects(insert('after-paid-delete','paid-member','paid@example.test'),/Zumba tasters are only/);
+  await insert('unfinished-eligible','checkout-member','checkout@example.test');
+  await insert('unpaid-eligible','pending-member','pending@example.test');
+  await db.query("update bookings set gocardless_payment_id='PM_ELIGIBLE' where id='pending-class'");
+  await db.query("update bookings set status='paid' where id='unpaid-eligible'");
+  await db.query("update bookings set status='cancelled' where id='unpaid-eligible'");
+  await assert.rejects(insert('after-completed-pending','pending-member','pending@example.test'),/Zumba tasters are only/);
+  await db.query("insert into bookings (id,session_id,email,user_id,plan,status,gocardless_payment_id) values ('regular-first','zumba','new-paid@example.test','new-paid','Pay as you go','pending_payment',null)");
+  await db.query("update bookings set status='paid',gocardless_payment_id='PM_NEW' where id='regular-first'");
+  await assert.rejects(insert('new-paid-taster','new-paid','new-paid@example.test'),/Zumba tasters are only/);
+  await db.query("insert into bookings (id,session_id,email,user_id,plan,status) values ('no-email-paid','zumba',null,'no-email','Membership — 1 class','paid')");
+  await assert.rejects(insert('no-email-history','no-email','now-has-email@example.test'),/Zumba tasters are only/);
+  await db.query("insert into bookings (id,session_id,email,user_id,plan,status) values ('paid-other-class','boxfit','boxfit-only@example.test','boxfit-only','Pay as you go','paid')");
+  await insert('boxfit-only-taster','boxfit-only','boxfit-only@example.test');
   await assert.rejects(insert('new-historical','past-member','PAST@example.test'),/Only one lifetime taster/);
   await db.query("update bookings set status='cancelled' where id='historic-duplicate'");
   await insert('pending-1','new-member','new@example.test');
@@ -63,6 +89,7 @@ try {
   await db.query("insert into bookings (id,session_id,email,user_id,plan,status) values ('regular','zumba','new@example.test','new-member','Pay as you go','paid')");
   await db.query("insert into bookings (id,session_id,email,user_id) values ('no-plan','zumba','new@example.test','new-member')");
   await db.exec("grant select, insert, update on bookings to anon; set role anon");
+  await assert.rejects(insert('browser-paid-bypass','new-paid','new-paid@example.test'),/Zumba tasters are only/);
   await insert('browser-first','browser-member','browser@example.test');
   await assert.rejects(insert('browser-second','browser-member','browser@example.test'),/Only one lifetime taster/);
   await assert.rejects(db.query("select * from public.class_taster_claims"),/permission denied/);
@@ -72,5 +99,5 @@ try {
   const beforeDiagnostics = (await snapshot()).rows;
   await db.exec(await readFile(new URL('../supabase/SQL_EDITOR_BOOKING_DIAGNOSTICS.sql', import.meta.url), 'utf8'));
   assert.deepEqual((await snapshot()).rows, beforeDiagnostics, "read-only diagnostics preserve all bookings");
-  console.log("PASS actual PostgreSQL migration: preserves history, enforces one lifetime taster by email/member, resumes one pending row, survives cancellation/deletion, isolates class eligibility and protects claims");
+  console.log("PASS actual PostgreSQL migration: preserves history, enforces first-class/lifetime taster eligibility by email/member, blocks regular-member bypass and retains existing tasters, survives cancellation/deletion, isolates class eligibility and protects claims");
 } finally { await db.close(); }

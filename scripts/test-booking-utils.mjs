@@ -3,6 +3,7 @@ import {
   bookingMatchesClassDate,
   bookingIsActive,
   bookingIsClassRegistration,
+  userHasBookedRegularClass,
   bookingBelongsToUser,
   classPaymentIsPending,
   bookingSyncIds,
@@ -73,3 +74,20 @@ assert.deepEqual(classBookingDates(boxfitHistory, "boxfit", ["2026-10-15", "2026
 assert.equal(bookingIsClassRegistration({ ...boxfitHistory[2], sessionId: "zumba", plan: "Taster (bank transfer)" }), true, "Zumba paid tasters still reserve class places");
 assert.deepEqual(boxfitHistory, boxfitSnapshot, "excluding old BoxFit tasters must preserve their records and members");
 console.log("PASS BoxFit register excludes all historical tasters without erasing history or excluding live Zumba tasters");
+
+const member = { id: "member", email: "member@example.test" };
+const regular = { sessionId: "zumba", type: "class", userId: "member", email: "member@example.test", plan: "Pay as you go", status: "paid" };
+for (const plan of ["Pay as you go", "Membership — 1 class"]) {
+  assert.equal(userHasBookedRegularClass([{ ...regular, plan }], member, "zumba"), true);
+  assert.equal(userHasBookedRegularClass([{ ...regular, plan, userId: "old-id", email: " MEMBER@EXAMPLE.TEST " }], member, "zumba"), true);
+  assert.equal(userHasBookedRegularClass([{ ...regular, plan, email: "changed@example.test" }], member, "zumba"), true);
+  assert.equal(userHasBookedRegularClass([{ ...regular, plan, status: "pending_payment", gocardlessPaymentId: "PM1" }], member, "zumba"), true);
+  assert.equal(userHasBookedRegularClass([{ ...regular, plan, status: "cancelled", gocardlessPaymentId: "PM1" }], member, "zumba"), true);
+  for (const status of ["pending_payment", "pending_checkout", "cancelled", "waitlisted"]) {
+    assert.equal(userHasBookedRegularClass([{ ...regular, plan, status }], member, "zumba"), false, "incomplete attempts must not consume first-class eligibility");
+  }
+}
+assert.equal(userHasBookedRegularClass([{ ...regular, plan: "Taster (bank transfer)" }], member, "zumba"), false);
+assert.equal(userHasBookedRegularClass([{ ...regular, sessionId: "boxfit" }], member, "zumba"), false);
+assert.equal(userHasBookedRegularClass([{ ...regular, userId: "other", email: "other@example.test" }], member, "zumba"), false);
+console.log("PASS regular class history disables tasters for the same member/email, preserves incomplete-attempt eligibility and isolates classes/members");
