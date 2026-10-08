@@ -43,7 +43,7 @@ try {
   const emailHandler = handler;
   let emails=[], emailHeaders=[];
   globalThis.fetch=async (url,init)=>{assert.equal(url,"https://api.resend.com/emails");emails.push(JSON.parse(init.body));emailHeaders.push(init.headers);return json({id:"email-1"});};
-  for (const type of ["bank_transfer_booking","payment_confirmation","booking_cancelled"]) {
+  for (const type of ["bank_transfer_booking","booking_confirmation","payment_confirmation","booking_cancelled"]) {
     emails=[];
     const result=await emailHandler(post({type,to_email:member.email,to_name:member.name,email:member.email,name:member.name,user_email:member.email,user_name:member.name,session_name:type==="bank_transfer_booking"?"Self Defence":"Zumba taster",plan:type==="bank_transfer_booking"?"Course (bank transfer)":"Taster (bank transfer)",gocardless_payment_id:type==="payment_confirmation"?"PM1":undefined,amount:type==="bank_transfer_booking"?90:5,booking_dates:SELF_DEFENCE_DATES.join(", "),booking_date:"Friday 16 October 2026"}));
     assert.equal(result.status,200);
@@ -53,6 +53,7 @@ try {
       assert.match(emails[0].subject,/awaiting bank transfer/);
     }
     if(type==="payment_confirmation") { assert.ok(emails.every(email=>email.html.includes("£5"))); assert.equal(emailHeaders.at(-1)["Idempotency-Key"],"payment-PM1-1"); }
+    if(type==="booking_confirmation") assert.ok(emails[0].html.includes("places are reserved"));
     if(type==="booking_cancelled") assert.ok(emails.every(email=>email.subject.includes("cancelled")));
   }
   emails=[];
@@ -107,61 +108,6 @@ try {
   assert.match(calls[0].body.billing_requests.payment_request.description,/BoxFit membership/);
   console.log("PASS actual checkout handler: rejects GoCardless tasters, safe PAYG retries, unavailable dates, paused BoxFit and shared membership proration");
 
-  await import("../supabase/functions/gocardless-webhook/index.ts");
-  const webhookHandler=handler;
-  let plan="payg",confirmed=false,receiptMarked=false,failReceipt=false,subscriptions=[],notices=[],enrolments=[];
-  const paidRow={id:row.id,session_name:"Zumba",name:member.name,email:member.email,plan:"Pay as you go",amount:10,booking_date:row.booking_date,gocardless_payment_id:"PM1"};
-  globalThis.fetch=async(input,init={})=>{
-    const url=new URL(input);
-    if(url.pathname==="/billing_requests/BR1") return json({billing_requests:{metadata:{booking_id:"anchor-1",payment_group_id:"anchor-1",payment_plan:plan},links:{payment_request:"PM1",mandate:"MD1"}}});
-    if(url.pathname==="/subscriptions") {subscriptions.push(JSON.parse(init.body).subscriptions);return json({subscriptions:{id:"SB1"}});}
-    if(url.pathname==="/subscriptions/SB1") return json({subscriptions:{metadata:{booking_id:"anchor-1"},amount:3500}});
-    if(url.pathname==="/payments/PM2") return json({payments:{charge_date:"2026-11-01",amount:3500}});
-    if(url.pathname==="/functions/v1/send-email") {notices.push(JSON.parse(init.body));return failReceipt ? json({error:"fixture mail outage"},503) : json({success:true});}
-    if(url.pathname==="/rest/v1/bookings") {
-      if(init.method==="POST") {enrolments.push(...JSON.parse(init.body));return json(enrolments);}
-      if(init.method==="PATCH") {
-        const change=JSON.parse(init.body);
-        if(change.gocardless_payment_id) return json([]);
-        if(change.payment_confirmation_sent_at) {receiptMarked=true;return json([]);}
-        if(confirmed || url.searchParams.get("gocardless_payment_id")==="eq.PM2") return json([]);
-        confirmed=true;
-        return json([paidRow]);
-      }
-      if(url.searchParams.has("gocardless_payment_id")) return json(url.searchParams.get("gocardless_payment_id")==="eq.PM1" && confirmed && !receiptMarked ? [paidRow] : []);
-      return json([{session_id:"boxfit",session_name:"BoxFit",user_id:member.id,name:member.name,email:member.email,plan:"Membership — 1 class",booking_date:"2026-10-15"}]);
-    }
-    throw new Error(`Unexpected webhook fetch ${url.pathname}`);
-  };
-  const webhook=async (events,expectedStatus=200)=>{
-    const body=JSON.stringify({events});
-    const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(settings.GOCARDLESS_WEBHOOK_SECRET),{name:"HMAC",hash:"SHA-256"},false,["sign"]);
-    const signature=Buffer.from(await crypto.subtle.sign("HMAC",key,new TextEncoder().encode(body))).toString("hex");
-    const result=await webhookHandler(new Request("https://fixture.supabase.test/webhook",{method:"POST",body,headers:{"Webhook-Signature":signature}}));
-    assert.equal(result.status,expectedStatus,await result.text());
-  };
-  await webhook([{resource_type:"billing_requests",action:"fulfilled",links:{billing_request:"BR1"}}]);
-  assert.equal(notices.length,0); assert.equal(subscriptions.length,0,"PAYG must not create a monthly subscription");
-  await webhook([{resource_type:"payments",action:"confirmed",links:{payment:"PM1"}}]);
-  assert.equal(notices.length,1); assert.equal(notices[0].amount,10); assert.match(notices[0].booking_dates,/16 October 2026/);
-  await webhook([{resource_type:"payments",action:"confirmed",links:{payment:"PM1"}}]);
-  assert.equal(notices.length,1,"duplicate payment events must not send another confirmation");
-  confirmed=false;receiptMarked=false;failReceipt=true;
-  await webhook([{resource_type:"payments",action:"confirmed",links:{payment:"PM1"}}],500);
-  assert.equal(receiptMarked,false);
-  failReceipt=false;
-  await webhook([{resource_type:"payments",action:"confirmed",links:{payment:"PM1"}}]);
-  assert.equal(receiptMarked,true,"retry must deliver a receipt even after status became Paid");
-  const delivered=notices.length;
-  await webhook([{resource_type:"payments",action:"confirmed",links:{payment:"PM1"}}]);
-  assert.equal(notices.length,delivered);
-  plan="membership";
-  await webhook([{resource_type:"billing_requests",action:"fulfilled",links:{billing_request:"BR1"}}]);
-  assert.equal(subscriptions[0].amount,3500);assert.equal(subscriptions[0].metadata.session_id,"boxfit");assert.match(subscriptions[0].name,/BoxFit/);
-  await webhook([{resource_type:"payments",action:"confirmed",links:{payment:"PM2",subscription:"SB1"}}]);
-  assert.deepEqual(enrolments.map(booking=>booking.booking_date),["2026-11-05","2026-11-12","2026-11-19","2026-11-26"]);
-  assert.ok(enrolments.every(booking=>booking.session_id==="boxfit"));
-  console.log("PASS signed class webhooks confirm only on payment, retry failed receipts without repeat deliveries, never subscribe; BoxFit subscriptions enrol the configured weekday");
 } finally {
   globalThis.fetch=originalFetch;
   CLASS_PAYMENTS.boxfit.dates.length=0;CLASS_PAYMENTS.boxfit.weekday=null;

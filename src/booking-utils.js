@@ -9,17 +9,17 @@ export function bookingBelongsToUser(booking, user) {
 
 // A checkout attempt is not a booking. GoCardless can leave the browser flow
 // before payment is authorised, so these rows exist only to let the server
-// validate checkout and must not reserve a place or appear as confirmed.
+// validate checkout. Completed setup reserves a place before the money pays out.
 export function bookingIsActive(booking) {
   if (!booking || booking.status === "cancelled" || booking.status === "pending_checkout") return false;
 
   // A GoCardless payment reference is attached when the mandate/checkout is
   // fulfilled, which can happen before any money is collected. Only the
-  // payments/confirmed webhook changes a paid class to `paid`, so every
-  // pending class must stay outside confirmed reservations regardless of
-  // whether it has a payment reference. My bookings shows it separately.
+  // payments/paid_out webhook changes a class to `paid`. A real payment
+  // reference means completed setup and reserves the selected class dates.
   if (booking.type === "class" && booking.status === "pending_payment" &&
-      !String(booking.plan || "").toLowerCase().includes("bank transfer")) return false;
+      !String(booking.plan || "").toLowerCase().includes("bank transfer") &&
+      !/^PM/.test(String(booking.gocardlessPaymentId || ""))) return false;
 
   return true;
 }
@@ -27,6 +27,15 @@ export function bookingIsActive(booking) {
 export function classPaymentIsPending(booking) {
   return booking?.type === "class" && booking.status === "pending_payment" &&
     !String(booking.plan || "").toLowerCase().includes("bank transfer");
+}
+
+export function bookingSyncIds(bookings) {
+  const groups = new Map();
+  for (const row of bookings.filter(classPaymentIsPending)) {
+    const group = row.paymentGroupId || row.id;
+    if (!groups.has(group) || row.id === group) groups.set(group, row.id);
+  }
+  return [...groups.values()];
 }
 
 export function isTasterBooking(booking) {

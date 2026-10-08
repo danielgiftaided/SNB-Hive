@@ -114,6 +114,11 @@ function messagesFor(p: Payload): Message[] {
       const admin = { to: BOOKING_EMAIL, subject: `🎨 New workshop booking: ${value(p.to_name)} — ${value(p.session_name)}`, html: shell("A workshop was booked", `New booking for ${value(p.session_name)}`, details([["Name", p.to_name], ["Email", p.to_email], ["People", p.num_people], ["Total", `£${value(p.price)}`], ["Guests", p.guests]])) };
       return [customer, admin];
     }
+    case "booking_confirmation": {
+      const customer = { to, subject: `You're booked — ${value(p.session_name)} 🐝`, html: shell("Your class places are reserved", "Your booking is confirmed", paragraph(`Hi ${value(p.name, "there")}, your payment setup is complete and your places are reserved for the dates below. ${p.status === "paid" ? "Your payment has been received." : "Your Direct Debit is awaiting collection."} You do not need to book or pay again.`) + details(bookingRows(p))) };
+      const admin = { to: BOOKING_EMAIL, subject: `New booking: ${value(p.name)} — ${value(p.session_name)}`, html: shell("Class places reserved", p.status === "paid" ? "Booking confirmed — paid" : "Booking confirmed — awaiting payment", details([...bookingRows(p), ["Status", p.status === "paid" ? "Paid" : "Awaiting payment"]])) };
+      return [customer, admin];
+    }
     case "payment_confirmation": {
       const plan = value(p.plan);
       const customer = { to, subject: `Payment and booking confirmed — ${value(p.session_name)} 🐝`, html: shell("Your payment and class booking are confirmed", "Payment successful — you're booked!", paragraph(`Hi ${value(p.name, "there")}, thank you! Your ${plan.toLowerCase().includes("membership") ? "membership" : plan.toLowerCase().includes("taster") ? "taster booking" : plan.toLowerCase().includes("bank transfer") ? "course booking" : "pay as you go lesson booking"} and payment have both been confirmed in this email.`) + details(bookingRows(p))) };
@@ -145,7 +150,8 @@ Deno.serve(async request => {
   try {
     const payload = await request.json();
     const messages = messagesFor(payload);
-    await Promise.all(messages.map((message, index) => send(message, payload.type === "payment_confirmation" && payload.gocardless_payment_id ? `payment-${value(payload.gocardless_payment_id)}-${index}` : undefined)));
+    const category = payload.type === "booking_confirmation" ? "booking" : payload.type === "payment_confirmation" ? "payment" : "";
+    await Promise.all(messages.map((message, index) => send(message, category && payload.gocardless_payment_id ? `${category}-${value(payload.gocardless_payment_id)}-${index}` : undefined)));
     console.log(`[send-email] sent type=${value(payload.type)} messages=${messages.length}`);
     return json({ success: true });
   } catch (error) {

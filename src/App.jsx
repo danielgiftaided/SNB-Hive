@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import storage, { supabase } from "./storage.js";
 import { useBookings } from "./use-bookings.js";
-import { bookingIsActive, bookingBelongsToUser, classPaymentIsPending, bookingMatchesClassDate, classBookingDates, UNDATED_BOOKING, isTasterBooking, userTasterBooking, tasterBookingUsed } from "./booking-utils.js";
+import { bookingIsActive, bookingBelongsToUser, classPaymentIsPending, bookingSyncIds, bookingMatchesClassDate, classBookingDates, UNDATED_BOOKING, isTasterBooking, userTasterBooking, tasterBookingUsed } from "./booking-utils.js";
 import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../supabase/functions/_shared/membership.ts";
 import { membershipDatesFrom } from "../supabase/functions/_shared/membership-bookings.ts";
 import { checkoutErrorDetail, singleMembershipBooking } from "./checkout.js";
@@ -333,7 +333,7 @@ function BookingLoadNotice({ error, onRetry }) {
 function AdminBookingStatus({ booking }) {
   return <div className="flex flex-col gap-1">
     <StatusBadge status={booking.status}/>
-    {classPaymentIsPending(booking) && !booking.gocardlessPaymentId &&
+    {classPaymentIsPending(booking) && !bookingIsActive(booking) &&
       <p className="ff-body text-xs text-amber-800">Payment setup needs checking</p>}
   </div>;
 }
@@ -365,7 +365,8 @@ function BookingActions({ booking, onStatusChange }) {
         <option value={isTasterBooking(booking) ? (booking.gocardlessPaymentId ? "paid" : "confirmed") : "pending_payment"}>Restore</option>
       ) : (
         <>
-          <option value="paid" disabled={booking.status === "paid"}>Paid</option>
+          {classPaymentIsPending(booking) && <option value="check_payment">Check original payment</option>}
+          <option value="paid" disabled={booking.status === "paid" || classPaymentIsPending(booking)}>Paid</option>
           <option value="cancelled">Cancelled</option>
         </>
       )}
@@ -1206,7 +1207,7 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
         pendingBookingId = bookingId;
         // Use the same payment-group contract as PAYG for memberships. This
         // lets checkout and the webhook find the provisional row consistently,
-        // while bookingIsActive keeps it hidden until payment is confirmed.
+        // while bookingIsActive waits for completed payment setup.
         const paymentGroupId = type === "class" ? bookingId : null;
         // A short, unique reference the person includes on their bank
         // transfer, so it can be matched back to this booking manually.
@@ -1807,18 +1808,41 @@ function MyBookings({ bookings, currentUser, onCancel }) {
   const [confirmCancel, setConfirmCancel] = useState(null);
   const [cancelling, setCancelling] = useState(null);
   const [cancelNotice, setCancelNotice] = useState("");
+  const [recovering, setRecovering] = useState(false);
+  const [recoveryNotice, setRecoveryNotice] = useState("");
+  const attemptedRecovery = useRef(false);
   const mine = bookings
     .filter(b => bookingBelongsToUser(b, currentUser))
     .filter(bookingIsActive);
   const pendingPayments = bookings
-    .filter(b => bookingBelongsToUser(b, currentUser) && classPaymentIsPending(b));
+    .filter(b => bookingBelongsToUser(b, currentUser) && classPaymentIsPending(b) && !bookingIsActive(b));
+  async function recoverPendingPayments() {
+    setRecovering(true); setRecoveryNotice("");
+    try {
+      const ids = bookingSyncIds(pendingPayments);
+      let allocated = 0;
+      for (const id of ids) {
+        const result = await callEdgeFunction("gocardless-sync", { booking_id: id });
+        if (result.allocated) allocated++;
+      }
+      window.dispatchEvent(new Event("focus"));
+      setRecoveryNotice(allocated ? "Your completed bookings have been restored. Updating your class list…" : "We couldn't find completed payment setup for this booking. Please contact Shams before trying another payment.");
+    } catch { setRecoveryNotice("We couldn't check your payment setup. Please retry or contact Shams before trying another payment."); }
+    finally { setRecovering(false); }
+  }
+  useEffect(() => {
+    if (pendingPayments.length && !attemptedRecovery.current) {
+      attemptedRecovery.current = true;
+      recoverPendingPayments();
+    }
+  }, [pendingPayments.length]);
   return (
     <div className="max-w-md mx-auto flex flex-col gap-3">
       {mine.length===0 && pendingPayments.length===0
         ? <div className="text-center py-12">
             <p className="text-sm text-stone-500">No bookings yet.</p>
           </div>
-        : mine.slice().reverse().map(b => {
+        : mine.slice().sort((a, b) => String(a.bookingDate || a.createdAt || "").localeCompare(String(b.bookingDate || b.createdAt || ""))).map(b => {
           const cls = getSessionInfo(b.sessionId);
           const Icon = cls ? (ICONS[cls.icon] || Sparkles) : Sparkles;
           const isTaster = (b.plan || "").toLowerCase().includes("taster");
@@ -1836,6 +1860,7 @@ function MyBookings({ bookings, currentUser, onCancel }) {
                   <StatusBadge status={b.status}/>
                 </div>
                 {cls?.day && cls?.time && <p className="text-xs text-stone-500 mt-1">{cls.courseDates ? cls.courseDates.map(formatBookingDate).join(" · ") : b.bookingDate ? formatBookingDate(b.bookingDate) : cls.day} · {cls.time}</p>}
+                {classPaymentIsPending(b) && <p className="text-xs text-stone-500 mt-1">Your place is reserved. Your Direct Debit is awaiting payment.</p>}
                 {cls?.venue && (
                   <a href={cls.venueMap} target="_blank" rel="noopener noreferrer"
                     className="ff-body flex w-fit items-center gap-1 text-xs text-stone-400 hover:text-stone-600 hover:underline mt-1 transition">
@@ -1871,7 +1896,7 @@ function MyBookings({ bookings, currentUser, onCancel }) {
       }
       {pendingPayments.length > 0 && <section aria-label="Payments awaiting confirmation" className="flex flex-col gap-3">
         <h3 className="ff-display text-lg font-semibold mt-3" style={{ color: INK }}>Payments awaiting confirmation</h3>
-        <p className="text-xs text-stone-500">These bookings are awaiting confirmation of payment. Your place is confirmed once your payment is confirmed.</p>
+        <p className="text-xs text-stone-500">These bookings still need their payment setup checked. Completed payment setup reserves your class places immediately.</p>
         {pendingPayments.slice().reverse().map(b => <div key={b.id}
           className="bg-white rounded-xl border border-amber-200 p-4 flex flex-col gap-2">
           <div className="flex items-start justify-between gap-2">
@@ -1879,11 +1904,15 @@ function MyBookings({ bookings, currentUser, onCancel }) {
             <StatusBadge status="pending_payment"/>
           </div>
           <p className="text-xs text-stone-500">{b.bookingDate ? formatBookingDate(b.bookingDate) : "Lesson date not recorded"} · {b.plan}</p>
-          <p className="text-xs text-stone-600">{b.gocardlessPaymentId
+          <p className="text-xs text-stone-600">{/^PM/.test(String(b.gocardlessPaymentId || ""))
             ? "We're waiting for your Direct Debit payment to be confirmed. Please don't book or pay again while it's pending."
-            : "Payment setup needs checking. We haven't received a payment reference yet. Contact Shams before trying to pay again."}</p>
-          {!b.gocardlessPaymentId && <a href="mailto:Shams@snbhive.com" className="text-xs font-semibold underline" style={{ color: TEAL }}>Contact Shams</a>}
+            : "Payment setup needs checking. We need to check your original payment before you try to pay again."}</p>
+          <a href="mailto:Shams@snbhive.com" className="text-xs font-semibold underline" style={{ color: TEAL }}>Contact Shams</a>
         </div>)}
+        <button onClick={recoverPendingPayments} disabled={recovering} className="text-sm font-semibold underline disabled:opacity-50" style={{ color: TEAL }}>
+          {recovering ? "Checking your original payment…" : "Check my payment setup"}
+        </button>
+        {recoveryNotice && <p role="status" className="text-xs text-stone-500">{recoveryNotice}</p>}
       </section>}
       {cancelNotice && <p role="status" className="text-center text-xs text-stone-500">{cancelNotice}</p>}
     </div>
@@ -1999,7 +2028,7 @@ function AdminDashboard({ bookings, onMarkPaid, onMarkPending, onCancel, onResto
                     </div>
                     <AdminBookingStatus booking={b}/>
                     <div className="flex gap-1.5 ml-auto">
-                      {b.status==="pending_payment" && (
+                      {b.status==="pending_payment" && !classPaymentIsPending(b) && (
                         <button onClick={() => onMarkPaid(b.id)} title="Mark paid" className="p-1.5 rounded-lg hover:bg-stone-100" style={{ color:TEAL }}><Check size={15}/></button>
                       )}
                       {b.status==="paid" && (
@@ -2668,6 +2697,9 @@ function AdminPage() {
   const [showAdminPw, setShowAdminPw] = useState(false);
 
   const { bookings, setBookings, loading, loadError, reloadBookings } = useBookings(unlocked);
+  const [recoveringBookings, setRecoveringBookings] = useState(false);
+  const [bookingRecoveryNotice, setBookingRecoveryNotice] = useState("");
+  const attemptedBookingRecovery = useRef(false);
   const [members, setMembers]     = useState([]);
   const [enquiries, setEnquiries] = useState([]);
   const [adminTab, setAdminTab]   = useState("members");
@@ -2696,6 +2728,14 @@ function AdminPage() {
     });
     return () => { active = false; };
   }, [unlocked]);
+
+  useEffect(() => {
+    if (!unlocked) { attemptedBookingRecovery.current = false; return; }
+    if (adminTab === "bookings" && !loading && !attemptedBookingRecovery.current) {
+      attemptedBookingRecovery.current = true;
+      recoverExistingBookings();
+    }
+  }, [unlocked, adminTab, loading]);
 
   function handleAdminSignOut() {
     sessionStorage.removeItem("snb_admin_session");
@@ -2760,6 +2800,12 @@ function AdminPage() {
   async function updateStatus(id, status) {
     const booking = bookings.find(b => b.id === id);
     if (!booking || booking.status === status) return;
+    if (status === "check_payment") {
+      const result = await callEdgeFunction("gocardless-sync", { booking_id: id });
+      await reloadBookings();
+      if (!result.allocated) throw new Error("No completed checkout was found. Check GoCardless before requesting another payment.");
+      return;
+    }
     const { error } = await supabase.from("bookings").update({ status }).eq("id", id);
     if (error) throw new Error(error.message);
     setBookings(current => current.map(b => b.id === id ? { ...b, status } : b));
@@ -2780,6 +2826,21 @@ function AdminPage() {
     const { error } = await supabase.from("bookings").update({ booking_date:date }).eq("id", id);
     if (error) throw new Error(error.message);
     setBookings(current => current.map(booking => booking.id === id ? { ...booking, bookingDate:date } : booking));
+  }
+
+  async function recoverExistingBookings() {
+    setRecoveringBookings(true); setBookingRecoveryNotice("");
+    let restored = 0, unchecked = 0;
+    try {
+      for (const id of bookingSyncIds(bookings)) {
+        try {
+          const result = await callEdgeFunction("gocardless-sync", { booking_id: id });
+          if (result.allocated) restored++; else unchecked++;
+        } catch { unchecked++; }
+      }
+      await reloadBookings();
+      setBookingRecoveryNotice(`${restored} completed booking group(s) restored. ${unchecked} group(s) need checking in GoCardless. No new payment was requested.`);
+    } finally { setRecoveringBookings(false); }
   }
 
   async function handleSendBlast() {
@@ -2925,6 +2986,7 @@ function AdminPage() {
 
       <div className="max-w-5xl mx-auto px-4 py-6 flex flex-col gap-6">
         <BookingLoadNotice error={loadError} onRetry={reloadBookings}/>
+        {bookingRecoveryNotice && <p role="status" className="ff-body text-sm text-stone-600">{bookingRecoveryNotice}</p>}
 
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
@@ -2965,6 +3027,9 @@ function AdminPage() {
 
         {/* ── BOOKINGS TAB ── */}
         {adminTab === "bookings" && <>
+        <button onClick={recoverExistingBookings} disabled={recoveringBookings} className="ff-body text-sm font-semibold underline disabled:opacity-50 self-start" style={{ color: TEAL }}>
+          {recoveringBookings ? "Checking original payments…" : "Restore completed bookings"}
+        </button>
 
         {/* Filters + search */}
         <div className="flex flex-wrap items-center gap-2 justify-between">
@@ -3236,19 +3301,44 @@ export default function App() {
 
 function PaymentCompletePage() {
   const bookingId = new URLSearchParams(window.location.search).get("booking_id");
+  const [phase, setPhase] = useState("checking");
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    let active = true;
+    let timer;
+    let attempts = 0;
+    const check = async () => {
+      if (!bookingId) { if (active) setPhase("error"); return; }
+      try {
+        const result = await callEdgeFunction("gocardless-sync", { booking_id: bookingId });
+        if (!active) return;
+        if (result.allocated) { setPhase("reserved"); return; }
+        if (result.reason === "cancelled") { setPhase("cancelled"); return; }
+        if (++attempts < 8) timer = setTimeout(check, 1500);
+        else setPhase("pending");
+      } catch { if (active) setPhase("error"); }
+    };
+    setPhase("checking");
+    check();
+    return () => { active = false; clearTimeout(timer); };
+  }, [bookingId, retry]);
   return (
     <div className="min-h-screen flex items-center justify-center p-5" style={{ backgroundColor:BG }}>
       <Fonts/>
       <div className="ff-body bg-white rounded-3xl border border-stone-200 shadow-sm max-w-md w-full p-7 text-center">
         <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto" style={{ backgroundColor:"#E9F1EC" }}>
-          <Check size={27} style={{ color:TEAL }}/>
+          {phase === "checking" ? <Loader2 size={27} className="animate-spin" style={{ color:TEAL }}/> : <Check size={27} style={{ color:TEAL }}/>}
         </div>
-        <h1 className="ff-display text-2xl font-semibold mt-4" style={{ color:INK }}>You're all set! 🎉</h1>
+        <h1 className="ff-display text-2xl font-semibold mt-4" style={{ color:INK }}>{phase === "reserved" ? "You're booked! 🎉" : phase === "cancelled" ? "This booking was cancelled" : "Confirming your class places"}</h1>
         <p className="text-sm text-stone-500 leading-relaxed mt-2">
-          Your GoCardless details have been submitted. We'll email you as soon as your class payment or membership is confirmed. Direct Debit collections can take a few working days to appear in your bank account.
+          {phase === "reserved" ? "Your payment setup is complete and your class places are reserved. They now appear in My bookings. Your Direct Debit can take a few working days to collect; you do not need to pay or book again."
+            : phase === "cancelled" ? "This checkout belongs to a cancelled booking. Please contact Shams if you need help."
+            : phase === "checking" ? "We're checking your completed payment setup and allocating your selected class dates. Please don't start another payment."
+            : "We couldn't confirm your payment setup yet. Check again or contact Shams before trying another payment. Your original booking has been kept."}
         </p>
+        {["pending", "error"].includes(phase) && <button onClick={() => setRetry(value => value + 1)} className="mt-4 text-sm font-semibold underline" style={{ color:TEAL }}>Check again</button>}
         {bookingId && <p className="text-xs text-stone-400 mt-3">Booking reference: {bookingId.slice(0, 8).toUpperCase()}</p>}
-        <a href="/" className="inline-flex justify-center w-full font-semibold text-sm py-3 rounded-full mt-5" style={{ backgroundColor:TEAL, color:"#fff" }}>
+        <a href="/?tab=bookings" className="inline-flex justify-center w-full font-semibold text-sm py-3 rounded-full mt-5" style={{ backgroundColor:TEAL, color:"#fff" }}>
           Return to my bookings
         </a>
       </div>
@@ -3259,7 +3349,7 @@ function PaymentCompletePage() {
 function BookingApp() {
   const [currentUser, setCurrentUser]       = useState(null);
   const [authLoading, setAuthLoading]       = useState(true);
-  const [tab, setTab]                       = useState("classes");
+  const [tab, setTab]                       = useState(() => new URLSearchParams(window.location.search).get("tab") === "bookings" ? "bookings" : "classes");
   const { bookings, setBookings, loading, loadError, reloadBookings } = useBookings(!!currentUser);
   const [modalSession, setModalSession]     = useState(null);
   const [modalType, setModalType]           = useState(null);
@@ -3285,7 +3375,7 @@ function BookingApp() {
             await storage.remove("snb_session"); // expired — force re-login
           } else {
             setCurrentUser(s);
-            setTab("classes");
+            setTab(new URLSearchParams(window.location.search).get("tab") === "bookings" ? "bookings" : "classes");
           }
         }
       } catch {}
@@ -3375,7 +3465,7 @@ function BookingApp() {
   );
 
   // Not logged in — show registration / login
-  if (!currentUser) return <AuthScreen onAuth={s => { setCurrentUser(s); setTab("classes"); }}/>;
+  if (!currentUser) return <AuthScreen onAuth={s => { setCurrentUser(s); setTab(new URLSearchParams(window.location.search).get("tab") === "bookings" ? "bookings" : "classes"); }}/>;
 
   return (
     <div className="min-h-screen w-full" style={{ backgroundColor:BG }}>

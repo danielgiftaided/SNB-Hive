@@ -233,6 +233,7 @@ Deno.serve(async request => {
             amount: expectedAmount,
             currency: "GBP",
             description: `SNB Hive ${session.name} class`,
+            metadata: { booking_id },
           },
           mandate_request: { scheme: "bacs" },
           metadata,
@@ -242,12 +243,21 @@ Deno.serve(async request => {
             amount: firstPaymentAmount,
             currency: "GBP",
             description: `SNB Hive ${session.name} membership - first month`,
+            metadata: { booking_id },
           },
           mandate_request: { scheme: "bacs" },
           metadata,
         };
 
     const billingRequest = await gc("/billing_requests", { billing_requests: requestBody }, `class-checkout-${booking_id}`);
+    const projectUrl = Deno.env.get("SUPABASE_URL");
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const saved = await fetch(`${projectUrl}/rest/v1/bookings?${new URLSearchParams({
+      payment_group_id: `eq.${booking.payment_group_id || booking_id}`,
+      status: "in.(pending_checkout,pending_payment)",
+    })}`, { method: "PATCH", headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ gocardless_billing_request_id: billingRequest.billing_requests.id }) });
+    if (!saved.ok) throw new Error("Checkout reference could not be saved. Please retry this booking.");
     const flow = await gc("/billing_request_flows", {
       billing_request_flows: {
         redirect_uri: redirectUri,

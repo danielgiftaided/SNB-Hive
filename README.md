@@ -98,18 +98,24 @@ supabase secrets set \
   APP_URL=https://YOUR-LIVE-DOMAIN
 ```
 
-4. Deploy both functions:
+4. Apply [the allocation SQL](supabase/SQL_EDITOR_BOOKING_ALLOCATION.sql) to the
+   existing project, then deploy the payment and confirmation functions:
 
 ```bash
 supabase functions deploy gocardless-checkout
 supabase functions deploy gocardless-webhook --no-verify-jwt
+supabase functions deploy gocardless-sync --no-verify-jwt
+supabase functions deploy send-email --no-verify-jwt
 ```
 
 5. Make a Zumba pay-as-you-go booking with a GoCardless sandbox test bank
    account. Confirm that checkout returns to `/payment-complete` and that the
-   booking changes from `pending_payment` to `confirmed` after the signed
-   `billing_requests.fulfilled` webhook arrives. Repeat for membership and
-   verify a £35 monthly subscription appears in GoCardless.
+   selected dates are allocated immediately after verified checkout while
+   still `pending_payment`. Only `payments.paid_out` changes it to `paid`.
+   Repeat for membership: every remaining class that month should be reserved,
+   and a £35 subscription should start on the first of the next month.
+   Open admin Bookings to recover existing completed checkouts; see the
+   [rollout and recovery instructions](docs/CLASS_BOOKING_CHANGES.md#rollout-order).
 
 ### Go live
 

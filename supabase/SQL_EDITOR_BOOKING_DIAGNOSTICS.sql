@@ -15,7 +15,9 @@ order by session_name, status, plan;
 -- Search these results for a missing booking; do not share personal details publicly.
 select id, session_id, session_name, name, plan, status, amount, created_at,
   to_jsonb(b)->>'booking_date' as booking_date,
-  to_jsonb(b)->>'gocardless_payment_id' as gocardless_payment_id
+  to_jsonb(b)->>'gocardless_payment_id' as gocardless_payment_id,
+  to_jsonb(b)->>'payment_group_id' as payment_group_id,
+  to_jsonb(b)->>'gocardless_billing_request_id' as gocardless_billing_request_id
 from public.bookings b
 order by created_at desc, id desc;
 

@@ -28,6 +28,10 @@ try {
   `);
   const snapshot = () => db.query('select id,session_id,session_name,name,email,user_id,plan,status,amount,created_at from bookings order by id');
   const historyBefore = (await snapshot()).rows;
+  const allocationSql = await readFile(new URL('../supabase/SQL_EDITOR_BOOKING_ALLOCATION.sql', import.meta.url), 'utf8');
+  await db.exec(allocationSql);
+  await db.exec(allocationSql);
+  assert.deepEqual((await snapshot()).rows, historyBefore, "allocation SQL preserves every existing booking when run twice");
   const sql = await readFile(process.argv[3] || new URL('../supabase/migrations/20261007000000_lifetime_class_tasters.sql',import.meta.url),'utf8');
   await db.exec(sql);
   await db.exec(sql); // The SQL Editor file and migration can be re-run safely.

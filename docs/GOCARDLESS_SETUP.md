@@ -155,6 +155,7 @@ Deploy checkout first:
 ```bash
 npx supabase functions deploy gocardless-checkout
 npx supabase functions deploy send-email
+npx supabase functions deploy gocardless-sync --no-verify-jwt
 ```
 
 Deploy the webhook without Supabase JWT verification. GoCardless cannot send a
@@ -243,9 +244,7 @@ You should see `APP_URL`, `GOCARDLESS_ACCESS_TOKEN`,
    account in sandbox.
 6. GoCardless should return the browser to `/payment-complete`, where the app
    shows the short booking reference.
-7. In **My bookings**, the booking begins as **Awaiting payment**. After the
-   signed `billing_requests.fulfilled` webhook is processed it changes to
-   **Paid**. The customer and Shams each receive a confirmation email.
+7. In **My bookings**, the booking begins as **Awaiting payment**. Completed setup immediately reserves the chosen dates, through the return-page server check or the signed `billing_requests.fulfilled` webhook. The customer and Shams receive booking confirmations. It stays **Awaiting payment** until `payments.paid_out`, which marks it **Paid** and sends payment receipts.
 8. In the GoCardless sandbox dashboard, verify that the customer, mandate, and
    £10 payment were created.
 
@@ -260,11 +259,10 @@ again, because the app prevents one customer from booking Zumba twice.
    amount, then press
    **Continue to payment**.
 4. Complete the GoCardless sandbox authorization.
-5. Confirm the app returns to `/payment-complete` and the booking eventually
-   changes to **Paid**, and that the membership confirmation emails arrive.
+5. Confirm the app returns to `/payment-complete` and immediately reserves the chosen start date and all subsequent classes in that month. Check the member/admin lists and booking emails. Payment remains **Awaiting payment** until **Paid Out**.
 6. In GoCardless, verify the prorated one-off payment and a subscription named
    `SNB Hive Zumba monthly membership` exist and that the subscription amount
-   is £35 monthly with collection day set to the 1st.
+   is £35 monthly with collection day set to the 1st of the next month. Scheduled recurring payments enrol the full charge month before payout.
 
 The webhook uses an idempotency key, so a webhook retry will not intentionally
 create a second subscription for the same booking.
@@ -420,8 +418,7 @@ is stale or whether the booking write needs investigation; no database secret
 or access token is needed to diagnose it.
 
 Do not mark the webhook as working merely because checkout returned to the app.
-The return page is customer-facing confirmation; the signed webhook is what
-confirms the database booking and creates a membership subscription.
+The return page calls `gocardless-sync`, which verifies the original checkout server-side and allocates the booking/subscription through the same handler as the signed webhook. A return URL by itself proves nothing. Verify both the immediate allocation and the later `payments.paid_out` update. See [rollout and legacy recovery](CLASS_BOOKING_CHANGES.md#rollout-order), including the additional SQL columns and sync function required by PR #46.
 
 ## 8. Switch from sandbox to live
 
@@ -465,9 +462,11 @@ Only do this after both sandbox journeys pass.
 - Use the GoCardless dashboard to inspect or cancel mandates, payments, and
   subscriptions. Changing the booking status in SNB Hive does not cancel a
   GoCardless mandate or subscription.
-- The SNB Hive admin dashboard shows the booking state. The webhook changes a
-  successfully authorized booking from **Awaiting payment** to **Paid** and
-  asks `send-email` to notify both the customer and Shams.
+- Completed payment setup reserves the class dates immediately. The SNB Hive
+  admin dashboard keeps **Awaiting payment** until the **paid_out** webhook
+  marks it **Paid** and sends both payout receipts. Collection confirmation
+  alone does not mark it Paid. Use **Restore completed bookings** to recheck
+  existing rows against their original GoCardless checkout without another charge.
 - If prices change, update both customer-facing and server-side prices together:
   1. `PAYG_PRICE` and `MEMBERSHIP_TIERS` in `src/App.jsx`;
   2. `PRICES` in `supabase/functions/gocardless-checkout/index.ts` for PAYG,
