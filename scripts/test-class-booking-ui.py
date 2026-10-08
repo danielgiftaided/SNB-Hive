@@ -70,8 +70,11 @@ with sync_playwright() as p:
  page=context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
  page.goto('http://127.0.0.1:5174/');page.get_by_role('heading',name='Zumba',exact=True).wait_for()
  assert page.get_by_role('heading',name='Boxing',exact=True).count()==0
- assert card(page,'BoxFit').get_by_role('button',name='Book',exact=True).is_disabled()
+ assert card(page,'BoxFit').get_by_role('button',name='Book',exact=True).is_enabled()
  assert 'taster' not in card(page,'BoxFit').inner_text().lower()
+ for date in ['Thursday, 15 October 2026','Tuesday, 20 October 2026','Tuesday, 27 October 2026']:
+  assert date in card(page,'BoxFit').inner_text()
+ assert '13:00–14:00' in card(page,'BoxFit').inner_text()
  assert 'half-priced tasters' in page.locator('main').inner_text()
  assert page.get_by_role('link',name='Shams@snbhive.com').get_attribute('href')=='mailto:Shams@snbhive.com'
  page.screenshot(path='/tmp/snb-class-cards-desktop.png',full_page=True)
@@ -134,9 +137,9 @@ with sync_playwright() as p:
  page.get_by_role('button',name='Got it, thank you',exact=True).click()
  page.goto('http://127.0.0.1:5174/');page.get_by_role('heading',name='Zumba',exact=True).wait_for()
  assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
- assert card(page,'BoxFit').get_by_role('button',name='Book',exact=True).is_disabled()
+ assert card(page,'BoxFit').get_by_role('button',name='Book',exact=True).is_enabled()
  assert card(page,'Self Defence').get_by_role('button',name='Book',exact=True).is_enabled()
- print('PASS mobile browser: failed taster save retries without consuming eligibility or calling GoCardless, active Self Defence, disabled BoxFit, no horizontal overflow')
+ print('PASS mobile browser: failed taster save retries without consuming eligibility or calling GoCardless, active Self Defence and BoxFit, no horizontal overflow')
  page.screenshot(path='/tmp/snb-class-cards-mobile.png',full_page=True)
  card(page,'Self Defence').get_by_role('button',name='Book',exact=True).click()
  page.get_by_role('button',name='Reserve my place').click();page.get_by_text('Booking saved — awaiting payment').wait_for()
@@ -298,12 +301,76 @@ with sync_playwright() as p:
  page.get_by_role('link',name='Return to my bookings',exact=True).click()
  page.get_by_text('Paid',exact=True).first.wait_for()
  assert page.locator('main').get_by_text('Zumba',exact=True).count()==3
+ # Live BoxFit shares the verified flow, while old tasters do not carry into
+ # class registers or stop the same member from booking the new paid lessons.
+ rows=[dict(id='old-box-undated',session_id='boxfit',session_name='BoxFit',type='class',user_id=user['id'],name='Old BoxFit Taster',email=user['email'],plan='Taster',amount=0,status='confirmed'),
+       dict(id='old-box-dated',session_id='boxfit',session_name='BoxFit',type='class',user_id=user['id'],name='Past Dated Taster',email=user['email'],plan='Free taster',amount=0,status='confirmed',booking_date='2026-10-01'),
+       dict(id='old-box-overlap',session_id='boxfit',session_name='BoxFit',type='class',user_id=user['id'],name='Overlapping Taster',email=user['email'],plan='Taster',amount=0,status='confirmed',booking_date='2026-10-15')]
+ past_boxfit=json.loads(json.dumps(rows));checkout=[]
+ page.goto('http://127.0.0.1:5174/');card(page,'BoxFit').get_by_role('button',name='Book',exact=True).click()
+ checkboxes=page.get_by_role('checkbox')
+ assert checkboxes.count()==3
+ page.get_by_role('checkbox',name='Tuesday, 27 October 2026',exact=True).check()
+ page.get_by_role('button',name='Continue to payment',exact=True).click()
+ page.get_by_role('heading',name="You're booked! 🎉",exact=True).wait_for()
+ live_box=[row for row in rows if row['plan']=='Pay as you go']
+ assert len(live_box)==2 and sorted(row['booking_date'] for row in live_box)==['2026-10-15','2026-10-27']
+ assert all(row['status']=='paid' and row['session_id']=='boxfit' for row in live_box)
+ assert checkout[-1]['session_id']=='boxfit' and checkout[-1]['plan']=='payg'
+ page.get_by_role('link',name='Return to my bookings',exact=True).click()
+ page.get_by_role('button',name='Cancel class',exact=True).first.wait_for()
+ assert page.get_by_role('button',name='Cancel class',exact=True).count()==2
+ assert page.locator('main').get_by_text('Paid',exact=True).count()==2
+ page.get_by_role('button',name='Cancel class',exact=True).first.click()
+ page.get_by_role('button',name='Yes',exact=True).click()
+ page.get_by_text('Booking cancelled. Confirmation emails have been sent.').wait_for()
+ assert emails[-1]['type']=='booking_cancelled' and emails[-1]['session_name']=='BoxFit'
+ assert '15 October 2026' in emails[-1]['booking_date']
+ assert rows[:3]==past_boxfit, 'Launching BoxFit must not erase or alter past taster records'
+ context.close();context=browser.new_context(viewport={'width':1280,'height':1000})
+ context.add_init_script('sessionStorage.setItem("snb_admin_session",'+json.dumps(json.dumps({'email':'admin@example.test','loginAt':int(time.time()*1000)}))+');')
+ context.route('https://fixture.supabase.test/**',route_api);context.route('https://fonts.googleapis.com/**',lambda route:route.abort())
+ page=context.new_page();page.goto('http://127.0.0.1:5174/admin');page.get_by_role('button',name=re.compile('^Classes')).click()
+ box_admin=page.locator('div.bg-white.rounded-xl.border.border-stone-200.shadow-sm.overflow-hidden').filter(has=page.get_by_text('BoxFit',exact=True))
+ lesson_dates=box_admin.get_by_role('combobox')
+ assert lesson_dates.locator('option').evaluate_all('(options) => options.map(option => option.value)')==['2026-10-15','2026-10-20','2026-10-27']
+ assert box_admin.locator('p.ff-display').inner_text()=='0'
+ lesson_dates.select_option('2026-10-27')
+ assert box_admin.locator('p.ff-display').inner_text()=='1'
+ for old in past_boxfit: assert old['name'] not in box_admin.inner_text()
+ page.get_by_role('button',name=re.compile('^Bookings')).click()
+ page.locator('table').get_by_text('Old BoxFit Taster',exact=True).wait_for()
+ assert len(rows)==5 and rows[:3]==past_boxfit
+ print('PASS live BoxFit PAYG: exact date choices, immediately Paid in My bookings, cancellation email, old tasters excluded from class register/date list while their history is preserved')
+ context.close();context=browser.new_context(viewport={'width':1280,'height':1000})
+ context.add_init_script('localStorage.setItem("snb_session",'+json.dumps(json.dumps(user))+');')
+ context.route('https://fixture.supabase.test/**',route_api);context.route('https://fonts.googleapis.com/**',lambda route:route.abort())
+ page=context.new_page()
+ for start,expected_dates,expected_amount in [
+  ('Thursday, 15 October 2026',['2026-10-15','2026-10-20','2026-10-27'],26.25),
+  ('Tuesday, 20 October 2026',['2026-10-20','2026-10-27'],17.50),
+  ('Tuesday, 27 October 2026',['2026-10-27'],8.75)]:
+  rows=[];checkout=[];page.goto('http://127.0.0.1:5174/')
+  card(page,'BoxFit').get_by_role('button',name='Book',exact=True).click()
+  page.get_by_role('button',name=re.compile('^Monthly membership')).click()
+  assert page.get_by_role('radio').count()==3
+  page.get_by_role('radio',name=start,exact=True).check()
+  page.get_by_role('button',name='Continue to payment',exact=True).click()
+  page.get_by_role('heading',name="You're booked! 🎉",exact=True).wait_for()
+  assert sorted(row['booking_date'] for row in rows)==expected_dates
+  assert sum(row['amount'] for row in rows)==expected_amount
+  assert all(row['status']=='paid' and row['session_id']=='boxfit' for row in rows)
+  assert checkout[-1]['plan']=='membership' and checkout[-1]['session_id']=='boxfit'
+  page.get_by_role('link',name='Return to my bookings',exact=True).click()
+  page.get_by_role('button',name='Cancel class',exact=True).first.wait_for()
+  assert page.locator('main').get_by_text('Paid',exact=True).count()==len(expected_dates)
+ print('PASS BoxFit monthly browser: 15/20/27 October starts allocate all remaining scheduled classes with shared £26.25/£17.50/£8.75 proration and immediate Paid status')
  # A spoofed/premature return must wait for server verification rather than
  # displaying a reserved place based on its URL alone.
  sync_ready=False
  page.goto('http://127.0.0.1:5174/payment-complete?booking_id=not-completed')
  page.get_by_role('heading',name='Confirming your class places',exact=True).wait_for()
  assert page.get_by_role('heading',name="You're booked! 🎉",exact=True).count()==0
- assert len(rows)==3
+ assert len(rows)==1
  print('PASS new checkout: PAYG chosen dates only, monthly remaining dates with proration, immediate return verification and direct My bookings navigation; false returns do not allocate')
  browser.close()

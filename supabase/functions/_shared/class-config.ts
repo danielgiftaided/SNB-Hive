@@ -7,9 +7,9 @@ export const CLASS_PAYMENTS = {
   },
   boxfit: {
     name: "BoxFit",
-    // Set the confirmed dates and weekday here to open bookings.
-    dates: [] as string[],
-    weekday: null as number | null,
+    // Opening lesson is a Thursday; subsequent lessons/renewals are Tuesdays.
+    dates: ["2026-10-15", "2026-10-20", "2026-10-27"],
+    weekday: 2,
   },
 } as const;
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   bookingMatchesClassDate,
   bookingIsActive,
+  bookingIsClassRegistration,
   bookingBelongsToUser,
   classPaymentIsPending,
   bookingSyncIds,
@@ -58,3 +59,17 @@ assert.deepEqual(bookingSyncIds([
 ]), ["original", "completed-return", "renewal-child"], "reconcile all eligible groups once, including already-paid and checkout rows, without bank transfers/cancellations");
 
 console.log("PASS bookings only match their recorded lesson date");
+
+const boxfitHistory = [
+  { id: "past-undated", sessionId: "boxfit", type: "class", status: "confirmed", plan: "Taster" },
+  { id: "past-dated", sessionId: "boxfit", type: "class", status: "confirmed", plan: "Free taster", bookingDate: "2026-10-01" },
+  { id: "past-overlap", sessionId: "boxfit", type: "class", status: "paid", plan: "Taster", bookingDate: "2026-10-15" },
+  { id: "live-payg", sessionId: "boxfit", type: "class", status: "paid", plan: "Pay as you go", bookingDate: "2026-10-15" },
+  { id: "live-monthly", sessionId: "boxfit", type: "class", status: "paid", plan: "Membership — 1 class", bookingDate: "2026-10-20" },
+];
+const boxfitSnapshot = structuredClone(boxfitHistory);
+assert.deepEqual(boxfitHistory.filter(bookingIsClassRegistration).map(row => row.id), ["live-payg", "live-monthly"]);
+assert.deepEqual(classBookingDates(boxfitHistory, "boxfit", ["2026-10-15", "2026-10-20", "2026-10-27"]), ["2026-10-15", "2026-10-20", "2026-10-27"]);
+assert.equal(bookingIsClassRegistration({ ...boxfitHistory[2], sessionId: "zumba", plan: "Taster (bank transfer)" }), true, "Zumba paid tasters still reserve class places");
+assert.deepEqual(boxfitHistory, boxfitSnapshot, "excluding old BoxFit tasters must preserve their records and members");
+console.log("PASS BoxFit register excludes all historical tasters without erasing history or excluding live Zumba tasters");
