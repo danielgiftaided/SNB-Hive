@@ -219,6 +219,7 @@ with sync_playwright() as p:
  page.get_by_role('button',name='My bookings',exact=True).click()
  pending=page.get_by_role('region',name='Payments awaiting confirmation')
  pending.wait_for()
+ assert page.get_by_role('button',name='Check my payment setup',exact=True).count()==0
  assert pending.get_by_text('Zumba',exact=True).count()==1
  assert page.locator('main').get_by_text('Awaiting payment',exact=True).count()==3
  assert page.locator('main').get_by_text("Your place is reserved. We're checking your original payment setup.",exact=True).count()==2

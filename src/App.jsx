@@ -1808,7 +1808,6 @@ function MyBookings({ bookings, currentUser, onCancel }) {
   const [confirmCancel, setConfirmCancel] = useState(null);
   const [cancelling, setCancelling] = useState(null);
   const [cancelNotice, setCancelNotice] = useState("");
-  const [recovering, setRecovering] = useState(false);
   const [recoveryNotice, setRecoveryNotice] = useState("");
   const attemptedRecovery = useRef(false);
   const mine = bookings
@@ -1818,7 +1817,7 @@ function MyBookings({ bookings, currentUser, onCancel }) {
     .filter(b => bookingBelongsToUser(b, currentUser) && classUsesGoCardless(b) && !bookingIsActive(b));
   const recoveryIds = bookingSyncIds(bookings.filter(b => bookingBelongsToUser(b, currentUser)));
   async function recoverPendingPayments() {
-    setRecovering(true); setRecoveryNotice("");
+    setRecoveryNotice("");
     try {
       let allocated = 0, unchecked = 0;
       for (const id of recoveryIds) {
@@ -1829,8 +1828,7 @@ function MyBookings({ bookings, currentUser, onCancel }) {
       }
       window.dispatchEvent(new Event("focus"));
       setRecoveryNotice(unchecked ? "Some payment setups could not be confirmed. Please contact Shams before trying another payment." : allocated ? "Your completed bookings are marked Paid. Updating your class list…" : "We couldn't find completed payment setup for this booking. Please contact Shams before trying another payment.");
-    } catch { setRecoveryNotice("We couldn't check your payment setup. Please retry or contact Shams before trying another payment."); }
-    finally { setRecovering(false); }
+    } catch { setRecoveryNotice("We couldn't check your payment setup. Please contact Shams before trying another payment."); }
   }
   useEffect(() => {
     if (recoveryIds.length && !attemptedRecovery.current) {
@@ -1911,9 +1909,6 @@ function MyBookings({ bookings, currentUser, onCancel }) {
             : "Payment setup needs checking. We need to check your original payment before you try to pay again."}</p>
           <a href="mailto:Shams@snbhive.com" className="text-xs font-semibold underline" style={{ color: TEAL }}>Contact Shams</a>
         </div>)}
-        <button onClick={recoverPendingPayments} disabled={recovering} className="text-sm font-semibold underline disabled:opacity-50" style={{ color: TEAL }}>
-          {recovering ? "Checking your original payment…" : "Check my payment setup"}
-        </button>
         {recoveryNotice && <p role="status" className="text-xs text-stone-500">{recoveryNotice}</p>}
       </section>}
       {cancelNotice && <p role="status" className="text-center text-xs text-stone-500">{cancelNotice}</p>}
