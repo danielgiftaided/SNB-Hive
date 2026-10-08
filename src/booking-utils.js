@@ -48,6 +48,16 @@ export function isTasterBooking(booking) {
   return String(booking?.plan || "").toLowerCase().includes("taster");
 }
 
+export function userHasBookedRegularClass(bookings, user, sessionId) {
+  return bookings.some(booking => {
+    const plan = String(booking.plan || "").toLowerCase();
+    return booking.sessionId === sessionId && bookingBelongsToUser(booking, user) &&
+      !isTasterBooking(booking) && (plan.includes("pay as you go") || plan.includes("membership")) &&
+      (["paid", "confirmed"].includes(booking.status) ||
+        (["pending_payment", "cancelled"].includes(booking.status) && /^PM/.test(String(booking.gocardlessPaymentId || ""))));
+  });
+}
+
 // BoxFit's past tasters are history, not enrolments in the new paid classes.
 // Zumba's live paid tasters still reserve a place on their selected lesson date.
 export function bookingIsClassRegistration(booking) {
