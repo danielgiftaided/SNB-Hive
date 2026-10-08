@@ -1,5 +1,12 @@
 export const UNDATED_BOOKING = "undated";
 
+export function bookingBelongsToUser(booking, user) {
+  if (!booking || !user) return false;
+  if (user.id && booking.userId === user.id) return true;
+  const email = String(user.email || "").trim().toLowerCase();
+  return !!email && String(booking.email || "").trim().toLowerCase() === email;
+}
+
 // A checkout attempt is not a booking. GoCardless can leave the browser flow
 // before payment is authorised, so these rows exist only to let the server
 // validate checkout and must not reserve a place or appear to the customer.
@@ -25,7 +32,7 @@ export function isTasterBooking(booking) {
 // its original booking, rather than creating a second lifetime taster.
 export function userTasterBooking(bookings, user, sessionId) {
   const mine = bookings.filter(booking => booking.sessionId === sessionId && isTasterBooking(booking) &&
-    (booking.userId === user.id || String(booking.email || "").trim().toLowerCase() === user.email.trim().toLowerCase()));
+    bookingBelongsToUser(booking, user));
   return mine.find(tasterBookingUsed) || mine[0] || null;
 }
 

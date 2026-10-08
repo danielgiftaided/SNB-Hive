@@ -17,6 +17,20 @@ The file adds any missing booking-date/payment columns, receipt tracking, and th
 
 If using the Supabase CLI instead, apply the committed migrations to the correctly linked project with `supabase db push`. The SQL Editor file and CLI migration can both be applied safely; the trigger is replaced idempotently.
 
+## Missing bookings and SQL Editor results
+
+An empty `pg_notify` result from the original SQL is expected: it asks PostgREST to reload its schema after adding columns. It does not delete or alter booking records. The copyable file now uses `NOTIFY` directly to avoid that confusing result column. There is no need to re-run the setup SQL just to fix the display.
+
+The admin Bookings tab and CSV now include the complete history, with filters for paid, booked, awaiting payment, unfinished checkout, waitlisted and cancelled rows. The Classes view and capacity counters still include only active reservations. Unconfirmed Direct Debit attempts remain excluded from members' confirmed bookings until the payment webhook confirms collection. Member booking lists now refresh on realtime events, returning to the browser and every 15 seconds while visible.
+
+Booking reads fetch all pages, including records older than Supabase's default 1,000-row response limit. Failed schema/network reads display an error and Retry button, retain the last successfully loaded list, and do not masquerade as an empty table or use a partial list.
+
+Member ownership checks match either the saved member ID or the normalized email, so historical bookings with differently capitalized/spaced email addresses still appear.
+
+To investigate specific missing records, copy **the entire** [`supabase/SQL_EDITOR_BOOKING_DIAGNOSTICS.sql`](../supabase/SQL_EDITOR_BOOKING_DIAGNOSTICS.sql) into a new query in the existing project's SQL Editor. This runs in a read-only transaction, returns total/status counts, complete history, policies and triggers, and changes nothing. Each SELECT has a separate results tab. Do not post member details publicly.
+
+If the missing records exist in SQL but do not appear after deploying this frontend fix, compare their actual status, class and recorded lesson date with the screen's filters. If the rows are absent from `public.bookings`, this frontend fix cannot reconstruct them; investigate database/API logs and backups before restoring the specific records. Do not mark payments paid or disable policies simply to make rows appear. Production rows and delivery cannot be verified by the isolated tests.
+
 ## Deploy after applying SQL
 
 1. Deploy the updated email function:
@@ -45,6 +59,7 @@ Node.js 24 or newer runs the existing direct TypeScript imports.
 
 ```sh
 npm run test:booking-utils
+npm run test:booking-reader
 npm run test:membership-proration
 npm run test:gocardless-checkout
 npm run test:gocardless-webhook
@@ -62,7 +77,7 @@ npm install --prefix /tmp/snb-database-tests --no-package-lock --no-audit --no-f
 npm run test:taster-database -- /tmp/snb-database-tests/node_modules/@electric-sql/pglite/dist/index.js supabase/SQL_EDITOR_CLASS_BOOKINGS.sql
 ```
 
-This runs the SQL twice and checks preserved history, member/email identity, pending bank-transfer claims, cancellation/deletion, separate classes and claim-table permissions. Omit the final SQL-file argument to test the CLI migration instead.
+This runs the SQL twice and checks every original booking field remains unchanged across paid, pending, cancelled, historical taster and removed-class records. It also checks member/email identity, pending bank-transfer claims, cancellation/deletion, separate classes, claim-table permissions and read-only diagnostics. Omit the final SQL-file argument to test the CLI migration instead. `test:booking-reader` checks more than 1,000 records and refuses failed or partially downloaded lists.
 
 The optional browser regression script requires Python Playwright and Chromium at `/usr/bin/chromium`. In one terminal, start Vite using these **fixture** settings; in another, run the script from the repository root:
 
@@ -72,4 +87,4 @@ VITE_SUPABASE_URL=https://fixture.supabase.test VITE_SUPABASE_ANON_KEY=test-publ
 python scripts/test-class-booking-ui.py
 ```
 
-It refuses non-fixture settings and intercepts the fixture API. It covers desktop/mobile cards, bank details, a single-date bank-transfer taster, failed-save retry, lifetime eligibility after cancellation, full-price Zumba availability and admin payment/cancellation email requests. It asserts no GoCardless request occurs for tasters.
+It refuses non-fixture settings and intercepts the fixture API. It covers desktop/mobile cards, bank details, a single-date bank-transfer taster, failed-save retry, lifetime eligibility after cancellation, full-price Zumba availability and admin payment/cancellation email requests. It also verifies paginated admin history, pending/cancelled filters and CSV, failed-refresh preservation, initial error/retry and member payment refreshes. It asserts no GoCardless request occurs for tasters.

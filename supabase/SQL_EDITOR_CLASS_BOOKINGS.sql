@@ -25,7 +25,7 @@ create index if not exists bookings_gocardless_payment_idx
 
 -- PostgREST can otherwise continue serving its old column list briefly after
 -- the DDL commits, which produces a misleading "schema cache" error.
-select pg_notify('pgrst', 'reload schema');
+notify pgrst, 'reload schema';
 
 -- Retain a lifetime claim even when a taster is cancelled or its booking is
 -- deleted. Unfinished checkouts resume the same booking instead of claiming

@@ -10,7 +10,7 @@ try {
   await db.exec(`
     create role anon; create role authenticated; create role service_role bypassrls;
     create table public.bookings (
-      id text primary key, session_id text, email text, user_id text, plan text,
+      id text primary key, session_id text, session_name text, name text, email text, user_id text, plan text,
       status text, amount numeric,
       ${process.argv[3] ? "" : "booking_date date, payment_group_id text, gocardless_payment_id text,"}
       created_at timestamptz default now()
@@ -18,11 +18,20 @@ try {
     insert into bookings (id,session_id,email,user_id,plan,status) values
       ('historic-1','zumba','past@example.test','past-member','Free taster','cancelled'),
       ('historic-duplicate','zumba','past@example.test','past-member','Free taster','confirmed');
+    insert into bookings (id,session_id,email,user_id,plan,status,amount) values
+      ('paid-class','zumba','paid@example.test','paid-member','Membership — 1 class','paid',35),
+      ('pending-class','zumba','pending@example.test','pending-member','Pay as you go','pending_payment',10),
+      ('unfinished','zumba','checkout@example.test','checkout-member','Pay as you go','pending_checkout',10),
+      ('cancelled-class','zumba','cancelled@example.test','cancelled-member','Pay as you go','cancelled',10),
+      ('legacy-boxing','boxing','boxing@example.test','boxing-member','Free taster','confirmed',0),
+      ('bank-course','self_defence','course@example.test','course-member','Course (bank transfer)','pending_payment',90);
   `);
+  const snapshot = () => db.query('select id,session_id,session_name,name,email,user_id,plan,status,amount,created_at from bookings order by id');
+  const historyBefore = (await snapshot()).rows;
   const sql = await readFile(process.argv[3] || new URL('../supabase/migrations/20261007000000_lifetime_class_tasters.sql',import.meta.url),'utf8');
   await db.exec(sql);
   await db.exec(sql); // The SQL Editor file and migration can be re-run safely.
-  assert.equal((await db.query('select * from bookings')).rows.length,2,"migration preserves duplicate historical bookings");
+  assert.deepEqual((await snapshot()).rows, historyBefore, "running SQL twice preserves every original booking and its status, amount, member and timestamps");
   const insert = (id,user,email,session='zumba') => db.query(`insert into bookings (id,session_id,user_id,email,plan,status,amount,booking_date,payment_group_id)
     values ($1,$2,$3,$4,'Taster (bank transfer)','pending_payment',5,'2026-10-16',$1)`,[id,session,user,email]);
   await assert.rejects(insert('new-historical','past-member','PAST@example.test'),/Only one lifetime taster/);
@@ -56,5 +65,8 @@ try {
   await db.exec("reset role; set role service_role");
   assert.ok((await db.query("select * from public.class_taster_claims")).rows.length > 0);
   await db.exec("reset role");
+  const beforeDiagnostics = (await snapshot()).rows;
+  await db.exec(await readFile(new URL('../supabase/SQL_EDITOR_BOOKING_DIAGNOSTICS.sql', import.meta.url), 'utf8'));
+  assert.deepEqual((await snapshot()).rows, beforeDiagnostics, "read-only diagnostics preserve all bookings");
   console.log("PASS actual PostgreSQL migration: preserves history, enforces one lifetime taster by email/member, resumes one pending row, survives cancellation/deletion, isolates class eligibility and protects claims");
 } finally { await db.close(); }

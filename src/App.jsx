@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect, useCallback, useRef } from "react";
+import { Fragment, useState, useEffect, useRef } from "react";
 import {
   Calendar, MapPin, Clock, Check, X, ArrowRight, ChevronLeft,
   Loader2, Sparkles, RotateCcw, Music2, Flame, Dumbbell, Flower2,
@@ -7,7 +7,8 @@ import {
   Paintbrush, UserPlus, Trash2
 } from "lucide-react";
 import storage, { supabase } from "./storage.js";
-import { bookingIsActive, bookingMatchesClassDate, classBookingDates, UNDATED_BOOKING, isTasterBooking, userTasterBooking, tasterBookingUsed } from "./booking-utils.js";
+import { useBookings } from "./use-bookings.js";
+import { bookingIsActive, bookingBelongsToUser, bookingMatchesClassDate, classBookingDates, UNDATED_BOOKING, isTasterBooking, userTasterBooking, tasterBookingUsed } from "./booking-utils.js";
 import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../supabase/functions/_shared/membership.ts";
 import { membershipDatesFrom } from "../supabase/functions/_shared/membership-bookings.ts";
 import { checkoutErrorDetail, singleMembershipBooking } from "./checkout.js";
@@ -319,6 +320,14 @@ function StatusBadge({ status }) {
       <m.icon size={11} /> {m.label}
     </span>
   );
+}
+
+function BookingLoadNotice({ error, onRetry }) {
+  if (!error) return null;
+  return <div role="alert" className="ff-body rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+    <p>{error}</p>
+    <button onClick={onRetry} className="mt-2 font-semibold underline">Retry bookings</button>
+  </div>;
 }
 
 function BookingActions({ booking, onStatusChange }) {
@@ -1791,7 +1800,7 @@ function MyBookings({ bookings, currentUser, onCancel }) {
   const [cancelling, setCancelling] = useState(null);
   const [cancelNotice, setCancelNotice] = useState("");
   const mine = bookings
-    .filter(b => b.userId===currentUser.id || b.email===currentUser.email)
+    .filter(b => bookingBelongsToUser(b, currentUser))
     .filter(bookingIsActive);
   return (
     <div className="max-w-md mx-auto flex flex-col gap-3">
@@ -1884,7 +1893,8 @@ function AdminDashboard({ bookings, onMarkPaid, onMarkPending, onCancel, onResto
     }
   }
 
-  const visibleBookings = bookings.filter(bookingIsActive);
+  // Keep the complete audit history visible; only active rows reserve places.
+  const visibleBookings = bookings;
   const filtered = visibleBookings.filter(b => {
     if (statusFilter!=="all" && b.status!==statusFilter) return false;
     if (query && !(`${b.name} ${b.email} ${b.sessionName}`.toLowerCase().includes(query.toLowerCase()))) return false;
@@ -1924,7 +1934,7 @@ function AdminDashboard({ bookings, onMarkPaid, onMarkPending, onCancel, onResto
 
           <div className="flex flex-wrap items-center gap-2 justify-between">
             <div className="flex gap-1.5 flex-wrap">
-              {["all","paid","pending_payment","cancelled"].map(s => (
+              {["all","paid","confirmed","pending_payment","pending_checkout","waitlisted","cancelled"].map(s => (
                 <button key={s} onClick={() => setFilter(s)}
                   className="text-xs font-medium px-3 py-1.5 rounded-full transition"
                   style={{ backgroundColor:statusFilter===s?TEAL:"#F3F1EA", color:statusFilter===s?"#fff":"#6B6457" }}>
@@ -2631,10 +2641,9 @@ function AdminPage() {
   const [mfaSentMsg, setMfaSentMsg] = useState("");
   const [showAdminPw, setShowAdminPw] = useState(false);
 
-  const [bookings, setBookings]   = useState([]);
+  const { bookings, setBookings, loading, loadError, reloadBookings } = useBookings(unlocked);
   const [members, setMembers]     = useState([]);
   const [enquiries, setEnquiries] = useState([]);
-  const [loading, setLoading]     = useState(false);
   const [adminTab, setAdminTab]   = useState("members");
   const [statusFilter, setFilter] = useState("all");
   const [query, setQuery]         = useState("");
@@ -2647,37 +2656,19 @@ function AdminPage() {
   // main user-facing app, arguably even more important here.
   useIdleLogout(unlocked, handleAdminSignOut, 30);
 
-  // Load admin data when unlocked, then keep bookings in sync with webhook
-  // updates (including automatic GoCardless payment confirmations).
+  // Booking refreshes are handled by useBookings, preserving history on error.
   useEffect(() => {
     if (!unlocked) return;
     let active = true;
-    const reloadBookings = async () => {
-      const next = await storage.get("bookings");
-      if (active) setBookings(next || []);
-    };
-    setLoading(true);
     Promise.all([
-      reloadBookings(),
       storage.get("snb_users"),
       storage.get("studio_hire_enquiries"),
-    ]).then(([, u, e]) => {
+    ]).then(([u, e]) => {
       if (!active) return;
       setMembers(u || []);
       setEnquiries(e || []);
-    }).finally(() => setLoading(false));
-    const unsubscribe = storage.subscribeToBookings(reloadBookings);
-    const refresh = () => { if (document.visibilityState === "visible") reloadBookings(); };
-    const refreshTimer = window.setInterval(refresh, 15000);
-    window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", refresh);
-    return () => {
-      active = false;
-      unsubscribe();
-      window.clearInterval(refreshTimer);
-      window.removeEventListener("focus", refresh);
-      document.removeEventListener("visibilitychange", refresh);
-    };
+    });
+    return () => { active = false; };
   }, [unlocked]);
 
   function handleAdminSignOut() {
@@ -2869,7 +2860,7 @@ function AdminPage() {
   );
 
   // ── Dashboard ─────────────────────────────────────────────────────────
-  const visibleBookings = bookings.filter(bookingIsActive);
+  const visibleBookings = bookings;
   const filtered = visibleBookings.filter(b => {
     if (statusFilter !== "all" && b.status !== statusFilter) return false;
     if (query && !(`${b.name} ${b.email} ${b.sessionName}`.toLowerCase().includes(query.toLowerCase()))) return false;
@@ -2907,6 +2898,7 @@ function AdminPage() {
       </div>
 
       <div className="max-w-5xl mx-auto px-4 py-6 flex flex-col gap-6">
+        <BookingLoadNotice error={loadError} onRetry={reloadBookings}/>
 
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
@@ -2930,7 +2922,7 @@ function AdminPage() {
             const count = key==="members" ? members.length
               : key==="classes" ? DEFAULT_CLASSES.length
               : key==="studio-hire" ? enquiries.length
-              : bookings.filter(bookingIsActive).length;
+              : bookings.length;
             return (
               <button key={key} onClick={() => setAdminTab(key)}
                 className="ff-body text-sm font-medium px-5 py-1.5 rounded-full transition"
@@ -2951,7 +2943,7 @@ function AdminPage() {
         {/* Filters + search */}
         <div className="flex flex-wrap items-center gap-2 justify-between">
           <div className="flex gap-1.5 flex-wrap">
-            {["all","paid","pending_payment","cancelled"].map(s => (
+            {["all","paid","confirmed","pending_payment","pending_checkout","waitlisted","cancelled"].map(s => (
               <button key={s} onClick={() => setFilter(s)}
                 className="ff-body text-xs font-medium px-3 py-1.5 rounded-full transition"
                 style={{ backgroundColor: statusFilter===s ? TEAL : "#F3F1EA", color: statusFilter===s ? "#fff" : "#6B6457" }}>
@@ -2985,6 +2977,8 @@ function AdminPage() {
         <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
           {loading ? (
             <div className="flex justify-center py-16"><Loader2 className="animate-spin text-stone-300"/></div>
+          ) : loadError && bookings.length === 0 ? (
+            <p className="ff-body text-sm text-stone-500 text-center py-16">Booking history could not be loaded. Please retry above.</p>
           ) : filtered.length === 0 ? (
             <p className="ff-body text-sm text-stone-400 text-center py-16">No bookings match this filter.</p>
           ) : (
@@ -3240,8 +3234,7 @@ function BookingApp() {
   const [currentUser, setCurrentUser]       = useState(null);
   const [authLoading, setAuthLoading]       = useState(true);
   const [tab, setTab]                       = useState("classes");
-  const [bookings, setBookings]             = useState([]);
-  const [loading, setLoading]               = useState(true);
+  const { bookings, setBookings, loading, loadError, reloadBookings } = useBookings(!!currentUser);
   const [modalSession, setModalSession]     = useState(null);
   const [modalType, setModalType]           = useState(null);
   const [showOpenDay, setShowOpenDay]       = useState(false);
@@ -3274,17 +3267,6 @@ function BookingApp() {
     })();
   }, []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      let b = [];
-      b = (await storage.get("bookings")) || [];
-      setBookings(b);
-    } finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => { if (currentUser) load(); }, [currentUser, load]);
-
   // Show the Open Day popup once per browser session after login — not on
   // every render/navigation, but again on a fresh session (new tab/browser
   // restart) so returning users still see it once more.
@@ -3307,7 +3289,7 @@ function BookingApp() {
   function getUserBookingType(id) {
     if (!currentUser) return null;
     const b = bookings.find(b => b.sessionId===id && b.status !== "waitlisted" && bookingIsActive(b) && !isTasterBooking(b)
-      && (b.userId===currentUser.id || b.email===currentUser.email));
+      && bookingBelongsToUser(b, currentUser));
     if (!b) return null;
     const plan = (b.plan || "").toLowerCase();
     if (plan.includes("waitlist")) return "waitlist";
@@ -3400,8 +3382,10 @@ function BookingApp() {
 
 
       <main className="mobile-content-padding max-w-3xl mx-auto px-4 py-6">
+        <BookingLoadNotice error={loadError} onRetry={reloadBookings}/>
         {loading
           ? <div className="flex justify-center py-20"><Loader2 className="animate-spin text-stone-400"/></div>
+          : loadError && bookings.length === 0 ? null
           : tab==="classes"
             ? <>
                 <WelcomeHero currentUser={currentUser}/>

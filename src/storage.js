@@ -14,6 +14,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { bookingRowsForUpsert, toCamel, toSnake } from "./storage-shape.js";
+import { readBookings } from "./booking-reader.js";
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -50,12 +51,7 @@ const storage = {
 
     // Bookings → Supabase
     if (key === "bookings") {
-      const { data, error } = await supabase
-        .from("bookings")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) { console.error("[storage] get bookings:", error.message); return []; }
-      return (data || []).map(toCamel);
+      return readBookings(supabase);
     }
 
     // Studio hire enquiries → Supabase

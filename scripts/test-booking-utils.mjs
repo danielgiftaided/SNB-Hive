@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   bookingMatchesClassDate,
   bookingIsActive,
+  bookingBelongsToUser,
   classBookingDates,
   UNDATED_BOOKING,
 } from "../src/booking-utils.js";
@@ -31,5 +32,9 @@ assert.equal(bookingIsActive(bookings[5]), false);
 assert.equal(bookingIsActive(bookings[6]), false);
 assert.equal(bookingIsActive({ type: "class", status: "pending_payment" }), false);
 assert.equal(bookingIsActive({ type: "class", status: "pending_payment", gocardlessPaymentId: "PM123" }), false);
+assert.equal(bookingBelongsToUser({ email: " MEMBER@EXAMPLE.TEST " }, { id: "new-id", email: "member@example.test" }), true);
+assert.equal(bookingBelongsToUser({ userId: "member", email: "old@example.test" }, { id: "member", email: "new@example.test" }), true);
+assert.equal(bookingBelongsToUser({ userId: "other", email: "other@example.test" }, { id: "member", email: "member@example.test" }), false);
+assert.equal(bookingBelongsToUser({}, {}), false);
 
 console.log("PASS bookings only match their recorded lesson date");

@@ -11,6 +11,7 @@
     "test:gocardless-checkout": "node scripts/test-gocardless-checkout.mjs",
     "test:gocardless-webhook": "node scripts/test-gocardless-webhook.mjs",
     "test:booking-utils": "node scripts/test-booking-utils.mjs",
+    "test:booking-reader": "node scripts/test-booking-reader.mjs",
     "test:membership-proration": "node scripts/test-membership-proration.mjs",
     "test:class-bookings": "node scripts/test-class-bookings.mjs",
     "test:taster-database": "node scripts/test-taster-database.mjs"
