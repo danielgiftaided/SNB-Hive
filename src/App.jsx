@@ -404,7 +404,7 @@ function AuthScreen({ onAuth }) {
   const [loginMfaMode, setLoginMfaMode] = useState(false); // true = verify is a post-password login MFA step, not signup
   const [verifyEmail, setVEmail]  = useState("");
   const [code, setCode]           = useState("");
-  const [form, setForm]           = useState({ name:"", email:"", phone:"", password:"", confirm:"" });
+  const [form, setForm]           = useState({ firstName:"", lastName:"", email:"", phone:"", password:"", confirm:"" });
   const [showPw, setShowPw]       = useState(false);
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState("");
@@ -417,7 +417,8 @@ function AuthScreen({ onAuth }) {
   async function getUsers() { return (await storage.get("snb_users")) || []; }
 
   async function handleRegister() {
-    if (!form.name.trim()) return setError("Please enter your full name.");
+    if (!form.firstName.trim()) return setError("Please enter your first name.");
+    if (!form.lastName.trim()) return setError("Please enter your last name.");
     if (!/\S+@\S+\.\S+/.test(form.email)) return setError("Please enter a valid email address.");
     if (form.phone.replace(/\D/g,"").length < 10) return setError("Please enter a valid mobile number.");
     if (!isStrongPassword(form.password)) return setError(PASSWORD_RULE_MSG);
@@ -430,7 +431,7 @@ function AuthScreen({ onAuth }) {
         return setError("An account with that email already exists — please sign in.");
       const salt = generateSalt();
       const passwordHash = await hashPassword(form.password, salt);
-      const user = { id:uid(), name:form.name.trim(), email:form.email.trim().toLowerCase(), phone:form.phone.trim(), passwordHash, salt, createdAt:new Date().toISOString() };
+      const user = { id:uid(), name:`${form.firstName.trim()} ${form.lastName.trim()}`, email:form.email.trim().toLowerCase(), phone:form.phone.trim(), passwordHash, salt, createdAt:new Date().toISOString() };
       await storage.set("snb_users", [...users, user]);
       const session = { id:user.id, name:user.name, email:user.email, phone:user.phone };
       // Send verification code — required before login is granted
@@ -605,12 +606,20 @@ function AuthScreen({ onAuth }) {
             </div>
             <div className="flex flex-col gap-4">
               {mode==="register" && (
-                <div>
-                  <label className="ff-body text-sm font-medium text-stone-700">Full name <span style={{color:"#B3261E",marginLeft:"2px"}}>*</span></label>
-                  <input value={form.name} onChange={e=>f("name",e.target.value)} required
-                    className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
-                    placeholder="Your full name" autoComplete="name"/>
-                </div>
+                <>
+                  <div>
+                    <label htmlFor="signup-first-name" className="ff-body text-sm font-medium text-stone-700">First Name <span style={{color:"#B3261E",marginLeft:"2px"}}>*</span></label>
+                    <input id="signup-first-name" name="firstName" value={form.firstName} onChange={e=>f("firstName",e.target.value)} required
+                      className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
+                      placeholder="Your first name" autoComplete="given-name"/>
+                  </div>
+                  <div>
+                    <label htmlFor="signup-last-name" className="ff-body text-sm font-medium text-stone-700">Last Name <span style={{color:"#B3261E",marginLeft:"2px"}}>*</span></label>
+                    <input id="signup-last-name" name="lastName" value={form.lastName} onChange={e=>f("lastName",e.target.value)} required
+                      className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
+                      placeholder="Your last name" autoComplete="family-name"/>
+                  </div>
+                </>
               )}
               <div>
                 <label className="ff-body text-sm font-medium text-stone-700">
