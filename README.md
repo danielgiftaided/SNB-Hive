@@ -28,7 +28,7 @@ snb-hive-booking/            ← your project root
 ├── tailwind.config.js       ← CSS config
 ├── postcss.config.js        ← CSS config
 ├── public/
-│   └── favicon.svg          ← tab icon
+│   └── logo-pink-gold.png   ← app logo and tab icon
 └── src/
     ├── main.jsx             ← React entry point (do not edit)
     ├── index.css            ← Tailwind directives (do not edit)
