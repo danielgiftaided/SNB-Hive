@@ -111,8 +111,7 @@ body {
   border: 1px solid var(--snb-border);
 }
 
-.snb-welcome-photo,
-.snb-auth-photo {
+.snb-welcome-photo {
   background-image: url('/homepage-hero.jpg');
   background-position: 75% 35%;
   background-size: cover;
@@ -123,10 +122,34 @@ body {
   mask-image: linear-gradient(180deg, #000 85%, transparent 100%);
 }
 
-.snb-auth-photo {
-  height: 180px;
-  margin-top: 1.5rem;
-  border-radius: 1rem;
+.snb-auth-screen {
+  position: relative;
+  isolation: isolate;
+  min-height: 100svh;
+  background-color: var(--snb-background);
+}
+
+/* Fade only the decorative backdrop; controls retain their full contrast. */
+.snb-auth-screen::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(237, 231, 221, 0.74), rgba(237, 231, 221, 0.82)),
+    url('/auth-background.png');
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+.snb-auth-content {
+  position: relative;
+}
+
+.snb-auth-panel {
+  box-shadow: 0 12px 40px rgba(43, 46, 44, 0.14);
 }
 
 @media (min-width: 640px) {

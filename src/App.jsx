@@ -570,17 +570,16 @@ function AuthScreen({ onAuth }) {
   }
 
   return (
-    <div className="snb-page min-h-screen w-full flex flex-col items-center justify-center px-4 py-10" style={{ backgroundColor:BG }}>
-      <div className="w-full max-w-sm">
+    <div className="snb-auth-screen min-h-screen w-full flex flex-col items-center justify-center px-4 py-10">
+      <div className="snb-auth-content w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center rounded-2xl px-6 py-4 mb-3" style={{ backgroundColor:BG }}>
             <img className="snb-logo" src={LOGO} alt="SNB Hive" style={{ height:"160px" }} onError={e => { e.target.style.display = "none"; }}/>
           </div>
-          <p className="ff-body text-sm text-stone-500">{BRAND.tagline}</p>
-          <div className="snb-auth-photo" aria-hidden="true"/>
+          <p className="ff-body text-sm text-stone-700">{BRAND.tagline}</p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-6">
+        <div className="snb-auth-panel bg-white rounded-2xl border border-stone-200 p-6">
 
           {/* register / login */}
           {(mode==="register" || mode==="login") && (<>
@@ -771,7 +770,7 @@ function AuthScreen({ onAuth }) {
           )}
 
         </div>
-        <p className="ff-body text-xs text-stone-400 text-center mt-4">
+        <p className="ff-body text-xs text-stone-600 text-center mt-4">
           Your details are stored securely and used only for booking management.
         </p>
       </div>
