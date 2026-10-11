@@ -116,7 +116,7 @@ const TASTERS_CLOSED = false;
 const INK  = "#1B2B26";
 const TEAL = "#e46478";
 const GOLD = "#C99A4B";
-const BG   = "#f0e8cc";
+const BG   = "#FFF9F4";
 
 const ICONS = { music: Music2, flame: Flame, flower: Flower2, dumbbell: Dumbbell, paintbrush: Paintbrush, shield: ShieldCheck };
 // Logo points to your actual file: public/7 (1).png
@@ -296,14 +296,6 @@ const STATUS_META = {
 };
 
 /* ---- shared UI primitives ---- */
-
-function Fonts() {
-  return <style>{`
-    @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap');
-    .ff-display { font-family:'Fraunces',serif; }
-    .ff-body    { font-family:'Inter',sans-serif; }
-  `}</style>;
-}
 
 function Pill({ children, icon: Icon }) {
   return (
@@ -581,12 +573,11 @@ function AuthScreen({ onAuth }) {
   }
 
   return (
-    <div className="min-h-screen w-full flex flex-col items-center justify-center px-4 py-10" style={{ backgroundColor:BG }}>
-      <Fonts/>
+    <div className="snb-page min-h-screen w-full flex flex-col items-center justify-center px-4 py-10" style={{ backgroundColor:BG }}>
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center rounded-2xl px-6 py-4 mb-3" style={{ backgroundColor:BG }}>
-            <img src={LOGO} alt="SNB Hive" style={{ height:"160px" }} onError={e => { e.target.style.display = "none"; }}/>
+            <img className="snb-logo" src={LOGO} alt="SNB Hive" style={{ height:"160px" }} onError={e => { e.target.style.display = "none"; }}/>
           </div>
           <p className="ff-body text-sm text-stone-500">{BRAND.tagline}</p>
         </div>
@@ -595,11 +586,10 @@ function AuthScreen({ onAuth }) {
 
           {/* register / login */}
           {(mode==="register" || mode==="login") && (<>
-            <div className="flex gap-1 bg-stone-100 rounded-full p-1 mb-6">
+            <div className="snb-tabs flex mb-6">
               {[["register","Create account"],["login","Sign in"]].map(([k,label]) => (
-                <button key={k} onClick={() => switchMode(k)}
-                  className="ff-body flex-1 text-sm font-medium py-1.5 rounded-full transition"
-                  style={{ backgroundColor:mode===k?"#fff":"transparent", color:mode===k?INK:"#8A8478", boxShadow:mode===k?"0 1px 2px rgba(0,0,0,0.08)":"none" }}>
+                <button key={k} onClick={() => switchMode(k)} aria-current={mode===k ? "page" : undefined}
+                  className="snb-tab ff-body text-sm font-medium">
                   {label}
                 </button>
               ))}
@@ -1010,7 +1000,7 @@ function RetreatCard({ retreat, booked, onBook, isSignedUp }) {
 
   return (
     <div className="rounded-2xl p-6 flex flex-col gap-4 shadow-sm text-white relative overflow-hidden" style={{ backgroundColor:TEAL }}>
-      <svg className="absolute inset-0 opacity-[0.07]" width="100%" height="100%" preserveAspectRatio="none">
+      <svg aria-hidden="true" className="absolute inset-0 opacity-[0.07]" width="100%" height="100%" preserveAspectRatio="none">
         <defs>
           <pattern id="lattice" width="34" height="34" patternUnits="userSpaceOnUse">
             <path d="M17 0 L34 17 L17 34 L0 17 Z" fill="none" stroke="white" strokeWidth="1"/>
@@ -2069,19 +2059,19 @@ function WelcomeHero({ currentUser }) {
   const isFirst   = !localStorage.getItem(visitKey);
   useEffect(() => { if (isFirst) localStorage.setItem(visitKey, "1"); }, []);
   return (
-    <div className="rounded-2xl overflow-hidden mb-6 relative" style={{ backgroundColor: TEAL }}>
-      <svg className="absolute inset-0 opacity-[0.07] w-full h-full" preserveAspectRatio="none">
+    <div className="snb-welcome rounded-2xl overflow-hidden mb-6 relative">
+      <svg aria-hidden="true" className="absolute inset-0 opacity-[0.07] w-full h-full" preserveAspectRatio="none">
         <defs><pattern id="wh" width="34" height="34" patternUnits="userSpaceOnUse">
-          <path d="M17 0 L34 17 L17 34 L0 17 Z" fill="none" stroke="white" strokeWidth="1"/>
+          <path d="M17 0 L34 17 L17 34 L0 17 Z" fill="none" stroke="#983b50" strokeWidth="1"/>
         </pattern></defs>
         <rect width="100%" height="100%" fill="url(#wh)"/>
       </svg>
       <div className="relative p-6 sm:p-8">
-        <p className="ff-body text-sm font-medium mb-1" style={{ color: BG }}>{isFirst ? "Welcome" : "Welcome back"}, {firstName} 👋</p>
-        <h2 className="ff-display text-xl sm:text-2xl font-semibold leading-snug" style={{ color: BG }}>
+        <p className="ff-body text-sm font-medium mb-1" style={{ color: "#983b50" }}>{isFirst ? "Welcome" : "Welcome back"}, {firstName} 👋</p>
+        <h2 className="ff-display text-3xl sm:text-4xl font-semibold leading-snug" style={{ color: "#382e31" }}>
           Women&apos;s Fitness &amp; Wellness Classes
         </h2>
-        <p className="ff-body text-sm mt-2 leading-relaxed max-w-sm" style={{ color: "rgba(240,232,204,0.8)" }}>
+        <p className="ff-body text-sm mt-2 leading-relaxed max-w-sm" style={{ color: "#705b63" }}>
           Join our welcoming community. Browse our classes below and find your next session.
           We offer half-priced tasters — email <a className="underline font-semibold" href="mailto:Shams@snbhive.com">Shams@snbhive.com</a> for details.
         </p>
@@ -2190,12 +2180,11 @@ function AccountPage({ currentUser, onUpdate }) {
 
 function PolicyPage({ title, children }) {
   return (
-    <div className="min-h-screen" style={{backgroundColor:BG}}>
-      <Fonts/>
+    <div className="snb-page min-h-screen" style={{backgroundColor:BG}}>
       <div className="max-w-2xl mx-auto px-4 py-10">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center rounded-2xl px-5 py-3" style={{ backgroundColor:BG }}>
-            <img src={LOGO} alt="SNB Hive" style={{ height:"88px" }} onError={e => { e.target.style.display = "none"; }}/>
+            <img className="snb-logo" src={LOGO} alt="SNB Hive" style={{ height:"88px" }} onError={e => { e.target.style.display = "none"; }}/>
           </div>
         </div>
         <div className="bg-white rounded-2xl border border-stone-200 p-8 shadow-sm">
@@ -2876,14 +2865,13 @@ function AdminPage() {
 
   // ── Login screen ───────────────────────────────────────────────────
   if (!unlocked) return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4"
+    <div className="snb-page min-h-screen flex flex-col items-center justify-center px-4"
          style={{ backgroundColor: BG }}>
-      <Fonts/>
       <div className="w-full max-w-xs">
         <div className="text-center mb-8">
           <div className="mx-auto mb-3 flex justify-center">
             <div className="flex items-center justify-center rounded-2xl overflow-hidden" style={{ backgroundColor:BG, padding:"14px 28px" }}>
-              <img src={LOGO} alt="SNB Hive" style={{ height:"288px" }} onError={e => { e.target.style.display = "none"; }}/>
+              <img className="snb-logo" src={LOGO} alt="SNB Hive" style={{ height:"288px" }} onError={e => { e.target.style.display = "none"; }}/>
             </div>
           </div>
           <p className="ff-body text-sm font-semibold" style={{ color: INK }}>Admin Dashboard</p>
@@ -2972,15 +2960,14 @@ function AdminPage() {
   const retreatCount = active.filter(b => b.type === "retreat").length;
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: BG }}>
-      <Fonts/>
+    <div className="snb-page min-h-screen" style={{ backgroundColor: BG }}>
 
       {/* Header */}
       <div style={{ backgroundColor: TEAL }}>
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="flex items-center justify-center rounded-xl overflow-hidden" style={{ backgroundColor:BG, padding:"6px 14px" }}>
-              <img src={LOGO} alt="SNB Hive" style={{ height:"56px" }} onError={e => { e.target.style.display = "none"; }}/>
+              <img className="snb-logo" src={LOGO} alt="SNB Hive" style={{ height:"56px" }} onError={e => { e.target.style.display = "none"; }}/>
             </div>
             <div>
               <p className="ff-display text-base font-semibold" style={{ color: GOLD }}>SNB Hive</p>
@@ -3334,8 +3321,7 @@ function PaymentCompletePage() {
     return () => { active = false; clearTimeout(timer); };
   }, [bookingId, retry]);
   return (
-    <div className="min-h-screen flex items-center justify-center p-5" style={{ backgroundColor:BG }}>
-      <Fonts/>
+    <div className="snb-page min-h-screen flex items-center justify-center p-5" style={{ backgroundColor:BG }}>
       <div className="ff-body bg-white rounded-3xl border border-stone-200 shadow-sm max-w-md w-full p-7 text-center">
         <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto" style={{ backgroundColor:"#E9F1EC" }}>
           {phase === "checking" ? <Loader2 size={27} className="animate-spin" style={{ color:TEAL }}/> : <Check size={27} style={{ color:TEAL }}/>}
@@ -3470,8 +3456,8 @@ function BookingApp() {
 
   // Loading spinner while checking session
   if (authLoading) return (
-    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor:BG }}>
-      <Fonts/><Loader2 className="animate-spin text-stone-400"/>
+    <div className="snb-page min-h-screen flex items-center justify-center" style={{ backgroundColor:BG }}>
+      <Loader2 className="animate-spin text-stone-400"/>
     </div>
   );
 
@@ -3479,31 +3465,30 @@ function BookingApp() {
   if (!currentUser) return <AuthScreen onAuth={s => { setCurrentUser(s); setTab(new URLSearchParams(window.location.search).get("tab") === "bookings" ? "bookings" : "classes"); }}/>;
 
   return (
-    <div className="min-h-screen w-full" style={{ backgroundColor:BG }}>
-      <Fonts/>
+    <div className="snb-page min-h-screen w-full" style={{ backgroundColor:BG }}>
 
-      <header className="mobile-safe-top sticky top-0 z-30 border-b border-stone-200" style={{ backgroundColor:BG }}>
+      <header className="snb-header mobile-safe-top sticky top-0 z-30">
         <div className="max-w-3xl mx-auto px-4 py-2 flex items-center justify-between gap-3">
           <div className="shrink-0 flex items-center gap-2">
-            <img src={LOGO} alt="SNB Hive" style={{ height:"56px" }} onError={e => { e.target.style.display = "none"; }}/>
+            <img className="snb-logo" src={LOGO} alt="SNB Hive" style={{ height:"56px" }} onError={e => { e.target.style.display = "none"; }}/>
             <p className="ff-body text-xs text-stone-500 hidden sm:block">{BRAND.tagline}</p>
           </div>
           <div className="flex items-center gap-2">
-            <nav aria-label="Main navigation" className="hidden md:flex gap-1 bg-stone-200 rounded-full p-1">
-              {customerTabs.map(({ id, label }) => (
-                <button key={id} onClick={() => setTab(id)} aria-current={tab===id ? "page" : undefined}
-                  className="ff-body text-sm font-medium px-3.5 py-1.5 rounded-full transition"
-                  style={{ backgroundColor:tab===id?"#fff":"transparent", color:tab===id?INK:"#6B6457", boxShadow:tab===id?"0 1px 2px rgba(0,0,0,0.08)":"none" }}>
-                  {label}
-                </button>
-              ))}
-            </nav>
             <button onClick={handleSignOut} title="Sign out"
               className="p-2 rounded-full text-stone-400 hover:text-stone-600 hover:bg-stone-200 transition">
               <LogOut size={16}/>
             </button>
           </div>
         </div>
+        <nav aria-label="Main navigation" className="snb-tabs hidden md:flex max-w-3xl mx-auto px-4">
+          {customerTabs.map(({ id, label, icon:TabIcon }) => (
+            <button key={id} onClick={() => setTab(id)} aria-current={tab===id ? "page" : undefined}
+              className="snb-tab ff-body text-sm font-medium">
+              <TabIcon size={16} aria-hidden="true"/>
+              {label}
+            </button>
+          ))}
+        </nav>
       </header>
 
 
@@ -3612,7 +3597,7 @@ function BookingApp() {
         }
       </main>
 
-      <nav aria-label="Main navigation" className="mobile-safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-stone-200 bg-white/95 shadow-[0_-4px_18px_rgba(27,43,38,0.08)] backdrop-blur md:hidden">
+      <nav aria-label="Main navigation" className="snb-mobile-nav mobile-safe-bottom fixed inset-x-0 bottom-0 z-40 backdrop-blur md:hidden">
         <div className="mx-auto grid max-w-lg grid-cols-5 px-1 pt-1.5">
           {customerTabs.map(({ id, shortLabel, icon:TabIcon }) => {
             const active = tab === id;
@@ -3622,8 +3607,7 @@ function BookingApp() {
                 type="button"
                 onClick={() => setTab(id)}
                 aria-current={active ? "page" : undefined}
-                className="ff-body flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[11px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px]"
-                style={{ color:active ? TEAL : "#78716C", backgroundColor:active ? "#FCECEF" : "transparent", outlineColor:TEAL }}
+                className="snb-mobile-tab ff-body flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 px-1 text-[11px] font-semibold transition-colors"
               >
                 <TabIcon size={20} strokeWidth={active ? 2.4 : 1.8} aria-hidden="true"/>
                 <span className="w-full truncate">{shortLabel}</span>
