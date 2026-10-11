@@ -113,16 +113,14 @@ const TASTERS_CLOSED = false;
 
 /* ===================================================================== */
 
-const INK  = "#1B2B26";
-const TEAL = "#e46478";
+const INK  = "#2B2E2C";
+const TEAL = "#4B5D4E";
 const GOLD = "#C99A4B";
-const BG   = "#FFF9F4";
+const BG   = "#EDE7DD";
 
 const ICONS = { music: Music2, flame: Flame, flower: Flower2, dumbbell: Dumbbell, paintbrush: Paintbrush, shield: ShieldCheck };
-// Logo points to your actual file: public/7 (1).png
-// The space and parentheses are URL-encoded below, since raw spaces/special
-// characters aren't valid in a URL/path as-is.
-const LOGO  = "/7%20(1).png";
+// Local copies of the homepage assets keep the app independent of the website.
+const LOGO  = "/logo-website.png";
 
 function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
@@ -287,8 +285,8 @@ function exportCSV(bookings) {
 }
 
 const STATUS_META = {
-  paid:            { label: "Paid",             bg: "#e46478", fg: "#f0e8cc", icon: Banknote },
-  confirmed:       { label: "Booked",           bg: "#e46478", fg: "#f0e8cc", icon: Check },
+  paid:            { label: "Paid",             bg: TEAL, fg: BG, icon: Banknote },
+  confirmed:       { label: "Booked",           bg: TEAL, fg: BG, icon: Check },
   waitlisted:      { label: "Waitlisted",       bg: "#FBF3E3", fg: "#9A7426", icon: Hourglass },
   pending_checkout:{ label: "Checkout not completed", bg: "#F5F5F4", fg: "#78716C", icon: Hourglass },
   pending_payment: { label: "Awaiting payment", bg: "#FBF3E3", fg: "#9A7426", icon: Hourglass },
@@ -580,6 +578,7 @@ function AuthScreen({ onAuth }) {
             <img className="snb-logo" src={LOGO} alt="SNB Hive" style={{ height:"160px" }} onError={e => { e.target.style.display = "none"; }}/>
           </div>
           <p className="ff-body text-sm text-stone-500">{BRAND.tagline}</p>
+          <div className="snb-auth-photo" aria-hidden="true"/>
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-6">
@@ -2060,18 +2059,13 @@ function WelcomeHero({ currentUser }) {
   useEffect(() => { if (isFirst) localStorage.setItem(visitKey, "1"); }, []);
   return (
     <div className="snb-welcome rounded-2xl overflow-hidden mb-6 relative">
-      <svg aria-hidden="true" className="absolute inset-0 opacity-[0.07] w-full h-full" preserveAspectRatio="none">
-        <defs><pattern id="wh" width="34" height="34" patternUnits="userSpaceOnUse">
-          <path d="M17 0 L34 17 L17 34 L0 17 Z" fill="none" stroke="#983b50" strokeWidth="1"/>
-        </pattern></defs>
-        <rect width="100%" height="100%" fill="url(#wh)"/>
-      </svg>
-      <div className="relative p-6 sm:p-8">
-        <p className="ff-body text-sm font-medium mb-1" style={{ color: "#983b50" }}>{isFirst ? "Welcome" : "Welcome back"}, {firstName} 👋</p>
-        <h2 className="ff-display text-3xl sm:text-4xl font-semibold leading-snug" style={{ color: "#382e31" }}>
-          Women&apos;s Fitness &amp; Wellness Classes
+      <div className="snb-welcome-photo" aria-hidden="true"/>
+      <div className="snb-welcome-copy relative p-6 sm:p-8">
+        <p className="ff-body text-sm font-medium mb-3" style={{ color: TEAL }}>{isFirst ? "Welcome" : "Welcome back"}, {firstName} 👋</p>
+        <h2 className="ff-display text-4xl sm:text-5xl font-normal leading-[1.05]" style={{ color: "#211F1A" }}>
+          Women&apos;s Fitness<br/><i style={{ color:TEAL }}>&amp; Wellness Classes</i>
         </h2>
-        <p className="ff-body text-sm mt-2 leading-relaxed max-w-sm" style={{ color: "#705b63" }}>
+        <p className="ff-body text-sm mt-4 leading-relaxed" style={{ color: "#3A3D3B" }}>
           Join our welcoming community. Browse our classes below and find your next session.
           We offer half-priced tasters — email <a className="underline font-semibold" href="mailto:Shams@snbhive.com">Shams@snbhive.com</a> for details.
         </p>

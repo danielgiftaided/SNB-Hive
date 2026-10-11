@@ -3,11 +3,10 @@
 @tailwind utilities;
 
 :root {
-  --snb-background: #fff9f4;
-  --snb-coral: #e46478;
-  --snb-coral-ink: #983b50;
-  --snb-ink: #382e31;
-  --snb-border: #eedbd6;
+  --snb-background: #ede7dd;
+  --snb-accent: #4b5d4e;
+  --snb-ink: #2b2e2c;
+  --snb-border: #d6cfbf;
 }
 
 /* Keep the page palette consistent while the app loads. */
@@ -18,7 +17,7 @@ html, body, #root {
 
 body {
   color: var(--snb-ink);
-  font-family: 'DM Sans', Arial, sans-serif;
+  font-family: 'Inter', Arial, sans-serif;
 }
 
 .snb-logo {
@@ -27,12 +26,13 @@ body {
 
 .snb-page {
   background-image:
-    radial-gradient(ellipse at top left, #fbe6e7 0, transparent 55%),
-    radial-gradient(ellipse at bottom right, #f8efd9 0, transparent 50%);
+    radial-gradient(ellipse 120% 80% at 30% 0%, rgba(255,252,244,0.4), transparent 60%),
+    radial-gradient(ellipse 120% 90% at 80% 100%, rgba(60,64,58,0.05), transparent 60%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E");
 }
 
 .snb-header {
-  background: rgba(255, 249, 244, 0.96);
+  background: rgba(243, 239, 228, 0.96);
   border-bottom: 1px solid var(--snb-border);
   backdrop-filter: blur(12px);
 }
@@ -51,42 +51,45 @@ body {
   min-height: 48px;
   padding: 0.75rem 0.5rem;
   border-bottom: 3px solid transparent;
-  color: #75656a;
+  color: #5c5844;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   transition: color 150ms, background-color 150ms, border-color 150ms;
 }
 
 .snb-tab:hover {
-  background-color: #fceef0;
-  color: var(--snb-coral-ink);
+  background-color: #e7eee8;
+  color: var(--snb-accent);
 }
 
 .snb-tab[aria-current="page"] {
-  color: var(--snb-coral-ink);
-  border-bottom-color: var(--snb-coral);
+  color: var(--snb-accent);
+  border-bottom-color: var(--snb-accent);
   font-weight: 700;
 }
 
 .snb-tab:focus-visible,
 .snb-mobile-tab:focus-visible {
-  outline: 2px solid var(--snb-coral-ink);
+  outline: 2px solid var(--snb-accent);
   outline-offset: -3px;
 }
 
 .snb-mobile-nav {
   border-top: 1px solid var(--snb-border);
-  background: rgba(255, 249, 244, 0.98);
-  box-shadow: 0 -4px 20px rgba(152, 59, 80, 0.06);
+  background: rgba(243, 239, 228, 0.98);
+  box-shadow: 0 -4px 20px rgba(43, 46, 44, 0.06);
 }
 
 .snb-mobile-tab {
   position: relative;
-  color: #75656a;
+  color: #5c5844;
   border-radius: 12px;
 }
 
 .snb-mobile-tab[aria-current="page"] {
-  color: var(--snb-coral-ink);
-  background-color: #fbe8ec;
+  color: var(--snb-accent);
+  background-color: #e7eee8;
 }
 
 .snb-mobile-tab[aria-current="page"]::before {
@@ -96,12 +99,48 @@ body {
   width: 24px;
   height: 3px;
   border-radius: 0 0 3px 3px;
-  background-color: var(--snb-coral);
+  background-color: var(--snb-accent);
 }
 
 .snb-welcome {
-  background: linear-gradient(115deg, #f9e1e6, #fcf0e4);
+  background-color: #cdc6b2;
+  background-image:
+    radial-gradient(ellipse 70% 60% at 22% 15%, rgba(139,132,116,0.55), transparent 60%),
+    radial-gradient(ellipse 60% 70% at 78% 30%, rgba(242,237,221,0.6), transparent 65%),
+    linear-gradient(180deg, #d3ccb9 0%, #c7bfaa 45%, #dad3c1 100%);
   border: 1px solid var(--snb-border);
+}
+
+.snb-welcome-photo,
+.snb-auth-photo {
+  background-image: url('/homepage-hero.jpg');
+  background-position: 75% 35%;
+  background-size: cover;
+}
+
+.snb-welcome-photo {
+  height: 220px;
+  mask-image: linear-gradient(180deg, #000 85%, transparent 100%);
+}
+
+.snb-auth-photo {
+  height: 180px;
+  margin-top: 1.5rem;
+  border-radius: 1rem;
+}
+
+@media (min-width: 640px) {
+  .snb-welcome-photo {
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: 52%;
+    height: auto;
+    mask-image: linear-gradient(90deg, transparent 0%, #000 45%);
+  }
+
+  .snb-welcome-copy {
+    width: 60%;
+  }
 }
 
 .ff-display {
@@ -109,7 +148,7 @@ body {
 }
 
 .ff-body {
-  font-family: 'DM Sans', Arial, sans-serif;
+  font-family: 'Inter', Arial, sans-serif;
 }
 
 /*
