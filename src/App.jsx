@@ -770,9 +770,6 @@ function AuthScreen({ onAuth }) {
           )}
 
         </div>
-        <p className="ff-body text-xs text-stone-600 text-center mt-4">
-          Your details are stored securely and used only for booking management.
-        </p>
       </div>
     </div>
   );
