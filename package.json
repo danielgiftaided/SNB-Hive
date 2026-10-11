@@ -7,6 +7,8 @@
     "dev":     "vite",
     "build":   "vite build",
     "preview": "vite preview",
+    "sync:email-logo": "node scripts/sync-email-logo.mjs",
+    "test:email-branding": "node scripts/test-email-branding.mjs",
     "check:edge-functions": "node scripts/check-edge-functions.mjs",
     "test:gocardless-checkout": "node scripts/test-gocardless-checkout.mjs",
     "test:gocardless-webhook": "node scripts/test-gocardless-webhook.mjs",

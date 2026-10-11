@@ -1,15 +1,24 @@
 import { corsHeaders, json } from "../_shared/http.ts";
 import { CLASS_BANK_ACCOUNT } from "../_shared/class-config.ts";
+import { EMAIL_LOGO_CONTENT } from "../_shared/email-logo.ts";
 
 const RESEND_API = "https://api.resend.com/emails";
 const SENDER_EMAIL = Deno.env.get("SENDER_EMAIL") || "shams@snbhive.com";
 const ADMIN_EMAIL = Deno.env.get("ADMIN_EMAIL") || "shams@snbhive.com";
 const BOOKING_EMAIL = "shams@snbhive.com";
-const LOGO_URL = Deno.env.get("EMAIL_LOGO_URL") || "https://snbhive.com/logo-email.png";
+const LOGO_ID = "snb-hive-logo";
+const BRAND = {
+  background: "#ede7dd",
+  surface: "#f3efe4",
+  accent: "#4b5d4e",
+  ink: "#2b2e2c",
+  border: "#d6cfbf",
+  muted: "#5c5844",
+};
 
 type Payload = Record<string, unknown>;
 type Message = { to: string; subject: string; html: string; attachments?: Attachment[] };
-type Attachment = { filename: string; content: string };
+type Attachment = { filename: string; content: string; content_id?: string };
 
 function value(input: unknown, fallback = "") {
   return String(input ?? fallback);
@@ -26,26 +35,26 @@ function escapeHtml(input: unknown) {
 
 function shell(preheader: string, title: string, content: string) {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-  <body style="margin:0;background:#f0e8cc;font-family:Arial,Helvetica,sans-serif;color:#1B2B26">
+  <body style="margin:0;background:${BRAND.background};font-family:Inter,Arial,Helvetica,sans-serif;color:${BRAND.ink}">
   <div style="display:none;max-height:0;overflow:hidden">${escapeHtml(preheader)}</div>
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:36px 14px">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:580px">
-  <tr><td align="center" style="background:#e46478;padding:30px;border-radius:16px 16px 0 0"><img src="${LOGO_URL}" width="210" alt="SNB Hive" style="display:block;max-width:100%;height:auto"><p style="margin:14px 0 0;color:#f0e8cc;font-size:11px;letter-spacing:2px;text-transform:uppercase">Women's Fitness and Wellness</p></td></tr>
-  <tr><td style="background:#fff;padding:38px 36px"><p style="margin:0 0 12px;color:#C99A4B;font-size:10px;font-weight:bold;letter-spacing:3px;text-transform:uppercase">SNB Hive</p><h1 style="margin:0 0 18px;font-size:23px;line-height:1.35">${escapeHtml(title)}</h1>${content}</td></tr>
-  <tr><td align="center" style="background:#e46478;padding:22px;border-radius:0 0 16px 16px;color:#fff;font-size:12px">Questions? Reply to this email or contact <a href="mailto:${ADMIN_EMAIL}" style="color:#f0e8cc">${ADMIN_EMAIL}</a></td></tr>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:580px;border:1px solid ${BRAND.border};border-radius:16px">
+  <tr><td align="center" style="background:${BRAND.surface};padding:30px;border-radius:16px 16px 0 0"><img src="cid:${LOGO_ID}" width="210" alt="SNB Hive" style="display:block;max-width:100%;height:auto"><p style="margin:14px 0 0;color:${BRAND.muted};font-size:11px;letter-spacing:2px;text-transform:uppercase">Women's Fitness and Wellness</p></td></tr>
+  <tr><td style="background:#fff;padding:32px 24px;overflow-wrap:anywhere"><p style="margin:0 0 12px;color:${BRAND.accent};font-size:10px;font-weight:bold;letter-spacing:3px;text-transform:uppercase">SNB Hive</p><h1 style="margin:0 0 18px;font-family:'Cormorant Garamond',Georgia,serif;font-size:28px;font-weight:500;line-height:1.2;color:${BRAND.ink}">${escapeHtml(title)}</h1>${content}</td></tr>
+  <tr><td align="center" style="background:${BRAND.accent};padding:22px;border-radius:0 0 16px 16px;color:#fff;font-size:12px;line-height:1.6">Questions? Reply to this email or contact <a href="mailto:${escapeHtml(ADMIN_EMAIL)}" style="color:#fff">${escapeHtml(ADMIN_EMAIL)}</a></td></tr>
   </table></td></tr></table></body></html>`;
 }
 
 function paragraph(text: unknown) {
-  return `<p style="margin:0 0 22px;color:#555550;font-size:15px;line-height:1.7">${escapeHtml(text)}</p>`;
+  return `<p style="margin:0 0 22px;color:${BRAND.ink};font-size:15px;line-height:1.7">${escapeHtml(text)}</p>`;
 }
 
 function details(rows: [string, unknown][]) {
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f0e8cc;border-radius:12px"><tr><td style="padding:10px 22px">${rows.map(([label, entry]) => `<p style="margin:10px 0;color:#1B2B26;font-size:14px"><span style="display:block;color:#8A8478;font-size:10px;font-weight:bold;letter-spacing:1px;text-transform:uppercase">${escapeHtml(label)}</span>${escapeHtml(entry || "Not provided")}</p>`).join("")}</td></tr></table>`;
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${BRAND.surface};border:1px solid ${BRAND.border};border-radius:12px"><tr><td style="padding:10px 22px">${rows.map(([label, entry]) => `<p style="margin:10px 0;color:${BRAND.ink};font-size:14px;overflow-wrap:anywhere"><span style="display:block;color:${BRAND.muted};font-size:10px;font-weight:bold;letter-spacing:1px;text-transform:uppercase">${escapeHtml(label)}</span>${escapeHtml(entry || "Not provided")}</p>`).join("")}</td></tr></table>`;
 }
 
 function codeBox(code: unknown) {
-  return `<div style="margin:20px 0;padding:26px;text-align:center;background:#f0e8cc;border-radius:12px"><p style="margin:0 0 8px;color:#8A8478;font-size:10px;text-transform:uppercase;letter-spacing:2px">Your code</p><strong style="font:700 42px 'Courier New',monospace;letter-spacing:10px;color:#e46478">${escapeHtml(code)}</strong><p style="margin:12px 0 0;color:#8A8478;font-size:12px">Expires in 15 minutes</p></div>`;
+  return `<div style="margin:20px 0;padding:22px 12px;text-align:center;background:${BRAND.surface};border:1px solid ${BRAND.border};border-radius:12px"><p style="margin:0 0 8px;color:${BRAND.muted};font-size:10px;text-transform:uppercase;letter-spacing:2px">Your code</p><strong style="font:700 36px 'Courier New',monospace;letter-spacing:6px;color:${BRAND.accent}">${escapeHtml(code)}</strong><p style="margin:12px 0 0;color:${BRAND.muted};font-size:12px">Expires in 15 minutes</p></div>`;
 }
 
 function bookingRows(p: Payload): [string, unknown][] {
@@ -140,7 +149,7 @@ async function send(message: Message, idempotencyKey?: string) {
   const response = await fetch(RESEND_API, {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}) },
-    body: JSON.stringify({ from: `Shams B <${SENDER_EMAIL}>`, to: [message.to], reply_to: ADMIN_EMAIL, subject: message.subject, html: message.html, ...(message.attachments?.length ? { attachments: message.attachments } : {}) }),
+    body: JSON.stringify({ from: `Shams B <${SENDER_EMAIL}>`, to: [message.to], reply_to: ADMIN_EMAIL, subject: message.subject, html: message.html, attachments: [{ filename: "logo-pink-gold.png", content: EMAIL_LOGO_CONTENT, content_id: LOGO_ID }, ...(message.attachments || [])] }),
   });
   if (!response.ok) throw new Error(`Resend ${response.status}: ${await response.text()}`);
 }
