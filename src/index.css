@@ -21,7 +21,9 @@ body {
 }
 
 .snb-logo {
-  mix-blend-mode: multiply;
+  display: block;
+  max-width: 100%;
+  object-fit: contain;
 }
 
 .snb-page {

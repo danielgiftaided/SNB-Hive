@@ -119,7 +119,7 @@ const BG   = "#EDE7DD";
 
 const ICONS = { music: Music2, flame: Flame, flower: Flower2, dumbbell: Dumbbell, paintbrush: Paintbrush, shield: ShieldCheck };
 // Local copies of the homepage assets keep the app independent of the website.
-const LOGO  = "/logo-website.png";
+const LOGO  = "/logo-pink-gold.png";
 
 function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
@@ -2879,7 +2879,7 @@ function AdminPage() {
         <div className="text-center mb-8">
           <div className="mx-auto mb-3 flex justify-center">
             <div className="flex items-center justify-center rounded-2xl overflow-hidden" style={{ backgroundColor:BG, padding:"14px 28px" }}>
-              <img className="snb-logo" src={LOGO} alt="SNB Hive" style={{ height:"288px" }} onError={e => { e.target.style.display = "none"; }}/>
+              <img className="snb-logo" src={LOGO} alt="SNB Hive" style={{ height:"160px" }} onError={e => { e.target.style.display = "none"; }}/>
             </div>
           </div>
           <p className="ff-body text-sm font-semibold" style={{ color: INK }}>Admin Dashboard</p>
