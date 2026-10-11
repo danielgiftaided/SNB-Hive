@@ -5,6 +5,12 @@ import { weeklyDatesInMonth } from "../supabase/functions/_shared/membership-boo
 import { proratedMembershipAmount } from "../supabase/functions/_shared/membership.ts";
 import { bookingIsActive, userTasterBooking, tasterBookingUsed } from "../src/booking-utils.js";
 
+const RealDate = Date;
+let fixtureNow = "2026-10-08T12:00:00Z";
+globalThis.Date = class extends RealDate {
+  constructor(...args) { super(...(args.length ? args : [fixtureNow])); }
+  static now() { return new RealDate(fixtureNow).getTime(); }
+};
 const member = { id:"member-1", name:"Test Member", email:"member@example.test" };
 const pending = { id:"taster-1", sessionId:"zumba", userId:member.id, email:member.email, plan:"Taster (bank transfer)", type:"class", status:"pending_payment" };
 assert.equal(TASTER_AMOUNT, 500);
@@ -63,17 +69,17 @@ try {
   assert.match(emails[1].subject,/taster booking/);
   for (const plan of ["Pay as you go", "Membership — 1 class"]) {
     emails=[];
-    assert.equal((await emailHandler(post({type:"payment_confirmation",email:member.email,name:member.name,session_name:"BoxFit",plan,status:"paid",amount:10,gocardless_payment_id:"PM_SETUP",booking_dates:"Thursday 15 October 2026, Tuesday 20 October 2026, Tuesday 27 October 2026"}))).status,200);
+    assert.equal((await emailHandler(post({type:"payment_confirmation",email:member.email,name:member.name,session_name:"BoxFit",plan,status:"paid",amount:10,gocardless_payment_id:"PM_SETUP",booking_dates:"Thursday 15 October 2026, Thursday 22 October 2026, Thursday 29 October 2026"}))).status,200);
     assert.deepEqual(emails.map(email=>email.to[0]).sort(),[member.email,"shams@snbhive.com"].sort());
     assert.ok(emails[0].html.includes("marked Paid") && emails[0].html.includes("payment setup is complete"));
     assert.ok(emails[1].html.includes("marked Paid"));
     assert.ok(!emails.some(email=>email.html.includes("Payment received")), "successful setup email does not claim bank settlement");
-    assert.ok(emails.every(email=>email.html.includes("BoxFit") && email.html.includes("27 October 2026")));
+    assert.ok(emails.every(email=>email.html.includes("BoxFit") && email.html.includes("29 October 2026")));
   }
   emails=[];
-  assert.equal((await emailHandler(post({type:"booking_cancelled",to_email:member.email,to_name:member.name,user_email:member.email,user_name:member.name,session_name:"BoxFit",booking_date:"Tuesday 20 October 2026"}))).status,200);
+  assert.equal((await emailHandler(post({type:"booking_cancelled",to_email:member.email,to_name:member.name,user_email:member.email,user_name:member.name,session_name:"BoxFit",booking_date:"Thursday 22 October 2026"}))).status,200);
   assert.deepEqual(emails.map(email=>email.to[0]).sort(),[member.email,"shams@snbhive.com"].sort());
-  assert.ok(emails.every(email=>email.html.includes("BoxFit") && email.html.includes("20 October 2026") && email.subject.includes("cancelled")));
+  assert.ok(emails.every(email=>email.html.includes("BoxFit") && email.html.includes("22 October 2026") && email.subject.includes("cancelled")));
   globalThis.fetch=async()=>json({error:"fixture provider unavailable"},503);
   assert.equal((await emailHandler(post({type:"booking_cancelled",to_email:member.email,session_name:"Zumba taster"}))).status,500);
   console.log("PASS actual mail handler sends course/taster confirmations and cancellations to member + Shams, and reports failures");
@@ -113,26 +119,34 @@ try {
   assert.equal((await checkoutHandler(post(checkoutPayload))).status,400);
   assert.equal(calls.length,before,"invalid/used class bookings must not reach payment provider");
   assert.equal((await checkoutHandler(post({...checkoutPayload,session_id:"boxfit",plan:"payg"}))).status,400);
-  assert.deepEqual(CLASS_PAYMENTS.boxfit.dates,["2026-10-15","2026-10-20","2026-10-27"]);
-  assert.equal(CLASS_PAYMENTS.boxfit.weekday,2);
+  assert.deepEqual(CLASS_PAYMENTS.boxfit.dates,["2026-10-15","2026-10-22","2026-10-29"]);
+  assert.equal(CLASS_PAYMENTS.boxfit.weekday,4);
   for (const date of CLASS_PAYMENTS.boxfit.dates) {
     booking={...row,session_id:"boxfit",booking_date:date};calls=[];
     assert.equal((await checkoutHandler(post({...checkoutPayload,session_id:"boxfit"}))).status,200);
     assert.equal(calls[0].body.billing_requests.payment_request.amount,1000);
     assert.match(calls[0].body.billing_requests.payment_request.description,/BoxFit class/);
   }
-  for (const [date,expected] of [["2026-10-15",2625],["2026-10-20",1750],["2026-10-27",875]]) {
+  for (const [date,expected] of [["2026-10-15",2625],["2026-10-22",1750],["2026-10-29",875]]) {
     booking={...row,session_id:"boxfit",plan:"Membership — 1 class",booking_date:date,amount:expected/100};calls=[];
     assert.equal((await checkoutHandler(post({...checkoutPayload,session_id:"boxfit",plan:"membership"}))).status,200);
     assert.equal(calls[0].body.billing_requests.payment_request.amount,expected);
     assert.match(calls[0].body.billing_requests.payment_request.description,/BoxFit membership/);
   }
-  booking={...row,session_id:"boxfit",booking_date:"2026-10-22"};calls=[];
+  booking={...row,session_id:"boxfit",booking_date:"2026-10-20"};calls=[];
   assert.equal((await checkoutHandler(post({...checkoutPayload,session_id:"boxfit"}))).status,400);
-  assert.equal(calls.length,0,"unlisted Thursdays cannot create a BoxFit payment");
+  assert.equal(calls.length,0,"Tuesday dates cannot create a BoxFit payment");
+  fixtureNow="2026-10-30T12:00:00Z";
+  booking={...row,session_id:"boxfit",booking_date:"2026-11-05"};calls=[];
+  assert.equal((await checkoutHandler(post({...checkoutPayload,session_id:"boxfit"}))).status,200);
+  assert.equal(calls[0].body.billing_requests.payment_request.amount,1000);
+  booking={...row,session_id:"boxfit",booking_date:"2026-10-29"};calls=[];
+  assert.equal((await checkoutHandler(post({...checkoutPayload,session_id:"boxfit"}))).status,400);
+  assert.equal(calls.length,0,"past bookings cannot create new payments after rollover");
   console.log("PASS actual checkout handler: GoCardless tasters rejected, safe PAYG retries, live BoxFit dates and shared membership proration");
 
 } finally {
   globalThis.fetch=originalFetch;
   delete globalThis.Deno;
+  globalThis.Date = RealDate;
 }

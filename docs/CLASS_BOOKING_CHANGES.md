@@ -1,17 +1,17 @@
 # Class booking changes
 
 - Boxing is removed from the available class catalogue. Historical bookings remain intact.
-- BoxFit is live with an active Book button and the same £10 PAYG / £35 monthly GoCardless plans as Zumba. October dates are **Thursday 15 October, Tuesday 20 October and Tuesday 27 October 2026, 13:00–14:00**. The card shows Tuesdays and the class time; the exact dates appear after pressing Book. Dates come from the shared payment configuration so the picker, checkout and enrolments agree. The opening Thursday is an exception; subsequent membership renewal months use Tuesdays.
+- BoxFit is live with an active Book button and the same £10 PAYG / £35 monthly GoCardless plans as Zumba. October dates are **Thursday 15 October, Thursday 22 October and Thursday 29 October 2026, 13:00–14:00**. The card shows Thursdays and the class time; the exact dates appear after pressing Book. Dates come from the shared payment configuration so the picker, checkout and enrolments agree. All lessons and membership renewals use Thursdays from 15 October onward.
 - BoxFit's historical tasters no longer appear in the Classes register, counts or date list and do not block a member from booking the new paid classes. Their booking/member records remain available in booking history; no database deletion or SQL migration is needed.
 - Self Defence costs £90 for the full course on Wednesday 18 November, Wednesday 25 November and Wednesday 2 December 2026, 12:00–14:00. Existing waitlist entries do not block a course booking or count as reserved places.
-- Cards are ordered Zumba, BoxFit, Zumba taster, Reformer Pilates, Self Defence, Somatic, Strength & Conditioning. The two TBC classes are last.
-- The separate Zumba taster card uses Zumba's venue, time and current dates from the shared configuration. It costs £5 (half the PAYG price), supports exactly one date, and **uses bank transfer with no GoCardless call or setup**. Its button says Book taster and is greyed out for members who have completed a PAYG or monthly Zumba booking. Tasters count with Zumba in the admin date view and do not prevent subsequent full-price bookings.
-- Both Self Defence and Zumba tasters show these bank details: SNB Hive LTD, account 33053251, sort code 040605, reference the member's name. Reserving saves an awaiting-payment booking visible in My bookings. Administrators mark it Paid after receiving the transfer.
+- Cards are ordered Zumba, BoxFit, Reformer Pilates, Self Defence, Somatic, Strength & Conditioning. The two TBC classes are last.
+- Zumba tasters are no longer offered. The separate card and promotional copy are removed; historical taster bookings remain available for payment/cancellation and admin history.
+- Self Defence and historical Zumba taster confirmations use these bank details: SNB Hive LTD, account 33053251, sort code 040605, reference the member's name. Reserving saves an awaiting-payment booking visible in My bookings. Administrators mark it Paid after receiving the transfer.
 - Every member can book one lifetime taster per class. The database retains a claim by class, normalized email and member ID, including historical free tasters. The first saved bank-transfer taster uses eligibility immediately; cancellation and deletion do not restore it. A failed database write does not consume eligibility. The migration preserves historical duplicates and prevents new ones.
 - Reservation confirmations, payment receipts and cancellation emails go to the member and `shams@snbhive.com`, even if the admin login email differs. Member and administrator cancellations both notify these recipients. Marking either bank transfer Paid sends a receipt to both. Email delivery failures are reported in the UI.
 - Ordinary Zumba and live BoxFit payments retain GoCardless. Failed payment receipts remain retryable through its signed webhook; Resend idempotency keys prevent repeats during a retry.
 
-## Card order and first-time Zumba taster rollout
+## Historical first-time Zumba taster rollout (offer now retired)
 
 Before merging/deploying this change, copy the entire [`supabase/SQL_EDITOR_ZUMBA_TASTER_ELIGIBILITY.sql`](../supabase/SQL_EDITOR_ZUMBA_TASTER_ELIGIBILITY.sql) into the existing Supabase SQL Editor and Run. The original lifetime-taster schema must already be present. This script adds eligibility claims and replaces trigger functions; it does not delete or update any booking. It is safe to rerun. The equivalent CLI migration is `20261008010000_regular_zumba_taster_eligibility.sql`, and the full class/taster SQL includes the rule for fresh installations. The deployment workflow does not apply SQL.
 
@@ -25,9 +25,17 @@ The database retains the completed regular booking's eligibility claim even afte
 
 The BoxFit launch builds on merged PR #46 and needs no additional Supabase SQL or credentials. Merge/deploy the launch PR so both the frontend and shared configuration used by checkout/webhook/sync are updated. The existing deployment workflow redeploys payment/email functions when the shared configuration changes.
 
-PAYG selects one or multiple of the three October dates at £10 each. Membership selects a joining date and enrols every remaining confirmed class that month. Zumba's four-lesson valuation applies: 15 October costs £26.25 initially (three lessons), 20 October £17.50 (two), and 27 October £8.75 (one). The recurring subscription is £35 from the first of the next month and allocates Tuesdays in that charge month. Successful verified setup immediately appears as Paid in My bookings and admin. Confirmation and cancellation emails use the same handlers and member/Shams recipients as Zumba.
+PAYG selects one or multiple of the three October dates at £10 each. Membership selects a joining date and enrols every remaining confirmed class that month. Zumba's four-lesson valuation applies: 15 October costs £26.25 initially (three lessons), 22 October £17.50 (two), and 29 October £8.75 (one). The recurring subscription is £35 from the first of the next month and allocates Thursdays in that charge month. Successful verified setup immediately appears as Paid in My bookings and admin. Confirmation and cancellation emails use the same handlers and member/Shams recipients as Zumba.
 
-Confirm after deployment that the BoxFit Classes selector offers 15, 20 and 27 October with no old taster-only or undated entries, then check PAYG and monthly booking/return/cancellation flows. Historical tasters stay in the full Bookings history, and Zumba's live tasters still count toward their selected Zumba lesson.
+Confirm after deployment that the BoxFit Classes selector offers 15, 22 and 29 October with no old taster-only or undated entries, then check PAYG and monthly booking/return/cancellation flows. Historical tasters stay in the full Bookings history, and Zumba's live tasters still count toward their selected Zumba lesson.
+
+## Automatic date rollover
+
+The browser and checkout function share weekly schedule generation. Booking choices contain the remaining lessons in the current month; after its last lesson, the next month opens automatically. Today is still available; earlier dates disappear at the end of their London calendar day. Open screens refresh at least once per minute and on focus/visibility changes.
+
+My bookings shows upcoming dates only. A course shows its remaining dates and closes when all dates have passed. Stored bookings, amounts, statuses, membership/payment references, undated records and admin history are retained. Initial membership recovery uses the original booking month even when its dates are now historical.
+
+Deploy the frontend and the shared payment functions together through the existing deployment workflow. If members already have future BoxFit reservations for 20 or 27 October, use the admin Classes date controls to move them to 22 or 29 October when those reservations should follow the new schedule. Recovery preserves an already-saved October Tuesday schedule to avoid creating duplicate reservations. Existing payment amounts and references should be retained.
 
 ## Supabase SQL file to copy
 
@@ -90,6 +98,7 @@ Node.js 24 or newer runs the existing direct TypeScript imports.
 
 ```sh
 npm run test:booking-utils
+npm run test:booking-dates
 npm run test:booking-reader
 npm run test:membership-proration
 npm run test:gocardless-checkout
@@ -117,6 +126,7 @@ The optional browser regression script requires Python Playwright and Chromium a
 VITE_SUPABASE_URL=https://fixture.supabase.test VITE_SUPABASE_ANON_KEY=test-public-key npm run dev -- --host 127.0.0.1 --port 5174 --strictPort
 # Second terminal:
 python scripts/test-class-booking-ui.py
+python scripts/test-booking-date-ui.py
 ```
 
-It refuses non-fixture settings and intercepts the fixture API. It covers card order, first-time taster eligibility, desktop/mobile cards, bank details, a single-date bank-transfer taster, failed-save retry, lifetime eligibility after cancellation, full-price Zumba availability and admin payment/cancellation email requests. It also verifies paginated admin history, pending/cancelled filters and CSV, failed-refresh preservation, initial error/retry, immediate allocation on return, PAYG date selection, monthly proration/dates, automatic member/admin recovery of the reported three bookings and immediate Paid status. It asserts no GoCardless request occurs for tasters.
+Both browser scripts refuse non-fixture settings and intercept the fixture API. The class regression covers the removed Zumba taster offer, Thursday BoxFit, desktop/mobile layouts, bank-transfer save retries, legacy payment/cancellation emails, paginated admin history and CSV, failed-refresh preservation, verified checkout returns, PAYG selection and monthly proration/allocation. The date regression simulates London midnight from a different browser timezone, checks stale selections and expired bookings disappear without database writes, opens November automatically, preserves membership signup protection and closes completed courses.
