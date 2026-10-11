@@ -203,17 +203,17 @@ try {
   console.log("PASS combined confirmation retries, return-page mail outages, out-of-order payout recovery, existing Paid members, denied setups and invalid webhook signatures");
 
   const boxfitRow = (id, date, plan = "Pay as you go", group = id) => ({ ...row(id, date, plan, group), session_id: "boxfit", session_name: "BoxFit" });
-  rows = [boxfitRow("box-payg", "2026-10-15"), boxfitRow("box-payg-2", "2026-10-27", "Pay as you go", "box-payg")];
+  rows = [boxfitRow("box-payg", "2026-10-15"), boxfitRow("box-payg-2", "2026-10-29", "Pay as you go", "box-payg")];
   requests.set("BRBOXPAYG", billing("BRBOXPAYG", "box-payg", "PMBOXPAYG")); payment("PMBOXPAYG");
   await webhook(fulfilled("BRBOXPAYG"));
-  assert.deepEqual(rows.map(item => item.booking_date), ["2026-10-15", "2026-10-27"]);
+  assert.deepEqual(rows.map(item => item.booking_date), ["2026-10-15", "2026-10-29"]);
   assert.ok(rows.every(item => item.status === "paid" && bookingIsActive(toCamel(item))));
   assert.equal(notices.at(-1).session_name, "BoxFit");
-  assert.match(notices.at(-1).booking_dates, /Thursday.*15 October 2026.*Tuesday.*27 October 2026/);
+  assert.match(notices.at(-1).booking_dates, /Thursday.*15 October 2026.*Thursday.*29 October 2026/);
   rows = [boxfitRow("box-month", "2026-10-15", "Membership — 1 class")];rows[0].amount = 26.25;
   requests.set("BRBOXMONTH", billing("BRBOXMONTH", "box-month", "PMBOXMONTH", "membership"));payment("PMBOXMONTH", "pending_submission", "2026-10-19", 2625);
   assert.equal((await sync("box-month")).allocated,true);
-  assert.deepEqual(rows.map(item => item.booking_date), ["2026-10-15", "2026-10-20", "2026-10-27"], "monthly allocation follows confirmed dates, not Thursdays inferred from the opening lesson");
+  assert.deepEqual(rows.map(item => item.booking_date), ["2026-10-15", "2026-10-22", "2026-10-29"], "monthly allocation follows confirmed dates, including every Thursday from the opening lesson");
   assert.ok(rows.every(item => item.status === "paid"));
   assert.equal(rows.reduce((sum,item) => sum + item.amount,0),26.25);
   const boxSubscription = [...subscriptions.values()].find(item => item.metadata.booking_id === "box-month");
@@ -225,10 +225,16 @@ try {
   payment("PMBOXRENEW", "pending_submission", "2026-11-01", 3500);
   await webhook(event("PMBOXRENEW", "created", boxSubscription.id));
   const boxRenewal = rows.filter(item => item.gocardless_payment_id === "PMBOXRENEW");
-  assert.deepEqual(boxRenewal.map(item => item.booking_date),["2026-11-03","2026-11-10","2026-11-17","2026-11-24"]);
+  assert.deepEqual(boxRenewal.map(item => item.booking_date),["2026-11-05","2026-11-12","2026-11-19","2026-11-26"]);
   assert.ok(boxRenewal.every(item => item.status === "paid"));
   assert.equal(boxRenewal.reduce((sum,item) => sum + item.amount,0),35);
   await webhook(event("PMBOXRENEW", "created", boxSubscription.id));
   assert.equal(rows.filter(item => item.gocardless_payment_id === "PMBOXRENEW").length,4);
-  console.log("PASS live BoxFit: chosen PAYG dates, mixed-weekday October membership, immediate Paid confirmations, preserved cancellations and Tuesday renewals without duplicates");
+  rows = [boxfitRow("legacy-box", "2026-10-15", "Membership — 1 class"), boxfitRow("legacy-box-2", "2026-10-20", "Membership — 1 class", "legacy-box")];
+  const legacyBefore = structuredClone(rows);
+  const { fillInitialMembership } = await import("../supabase/functions/_shared/gocardless-bookings.ts");
+  await fillInitialMembership(rows, "PMLEGACYBOX", "BRLEGACYBOX");
+  assert.deepEqual(rows.map(item => item.booking_date), ["2026-10-15", "2026-10-20", "2026-10-27"], "old Tuesday memberships cannot acquire a duplicate Thursday schedule during recovery");
+  assert.deepEqual(rows.slice(0, 2), legacyBefore, "existing legacy dates/amounts/statuses remain intact");
+  console.log("PASS live BoxFit: chosen PAYG dates, Thursday October membership, immediate Paid confirmations, preserved cancellations and Thursday renewals without duplicates");
 } finally { globalThis.fetch = originalFetch; delete globalThis.Deno; }

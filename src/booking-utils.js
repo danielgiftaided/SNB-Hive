@@ -1,4 +1,12 @@
+import { bookingToday, upcomingBookingDates } from "../supabase/functions/_shared/class-config.ts";
+
 export const UNDATED_BOOKING = "undated";
+
+export function bookingIsUpcoming(booking, today = bookingToday(), courseDates = []) {
+  if (courseDates.length) return upcomingBookingDates(courseDates, today).length > 0;
+  const date = normalizedBookingDate(booking?.bookingDate);
+  return !date || date >= today;
+}
 
 export function bookingBelongsToUser(booking, user) {
   if (!booking || !user) return false;

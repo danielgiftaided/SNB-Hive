@@ -8,11 +8,12 @@ import {
 } from "lucide-react";
 import storage, { supabase } from "./storage.js";
 import { useBookings } from "./use-bookings.js";
-import { bookingIsActive, bookingIsClassRegistration, bookingBelongsToUser, classPaymentIsPending, classUsesGoCardless, bookingSyncIds, bookingMatchesClassDate, classBookingDates, UNDATED_BOOKING, isTasterBooking, userHasBookedRegularClass, userTasterBooking, tasterBookingUsed } from "./booking-utils.js";
+import { useBookingDay } from "./use-booking-day.js";
+import { bookingIsActive, bookingIsUpcoming, bookingIsClassRegistration, bookingBelongsToUser, classPaymentIsPending, classUsesGoCardless, bookingSyncIds, bookingMatchesClassDate, classBookingDates, UNDATED_BOOKING, isTasterBooking, userHasBookedRegularClass, userTasterBooking, tasterBookingUsed } from "./booking-utils.js";
 import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../supabase/functions/_shared/membership.ts";
 import { membershipDatesFrom } from "../supabase/functions/_shared/membership-bookings.ts";
 import { checkoutErrorDetail, singleMembershipBooking } from "./checkout.js";
-import { CLASS_PAYMENTS, PAYG_AMOUNT, TASTER_AMOUNT, SELF_DEFENCE_DATES, SELF_DEFENCE_PRICE, CLASS_BANK_ACCOUNT, classPaymentConfig } from "../supabase/functions/_shared/class-config.ts";
+import { CLASS_PAYMENTS, PAYG_AMOUNT, TASTER_AMOUNT, SELF_DEFENCE_DATES, SELF_DEFENCE_PRICE, CLASS_BANK_ACCOUNT, classPaymentConfig, upcomingBookingDates } from "../supabase/functions/_shared/class-config.ts";
 
 /* =====================================================================
    CONFIG — edit these to customise the app.
@@ -54,14 +55,12 @@ const DEFAULT_CLASSES = [
   { id:"strength", name:"Strength & Conditioning", tagline:"Build strength, build power", day:"TBC", time:"TBC", capacity:20, icon:"dumbbell",color:"#1F4A42", tasterStatus:"tbc", 
     venue:"6 Dispensary Lane, London E8 1FT", venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
     whatToBring:"Gym clothes and trainers and bring a water bottle.", icsStart:"20260924T110000", icsEnd:"20260924T114500", description:"Strength training is one of the most beneficial forms of exercise for women, particularly as we navigate the demands of motherhood, work and daily life.\n\nThis class focuses on building functional strength, improving mobility and helping women feel stronger and more capable in their everyday activities.\n\nUsing bodyweight exercises, resistance bands and light equipment, sessions are designed to be accessible while still providing an effective workout.\n\nBenefits include:\n• Increased muscle tone and strength\n• Support with sustainable fat loss and body composition goals\n• Improved posture and reduced aches and pains\n• Better balance and stability\n• Increased energy levels\n• Stronger bones and joints\n• Improved confidence in daily movement\n• Support for healthy ageing and long-term wellbeing\n\nRather than focusing on appearance alone, this class encourages women to appreciate what their bodies can do and develop strength that carries into everyday life.\n\nSuitable for all fitness levels and can be adapted to individual needs." },
-  { id: "boxfit", name: "BoxFit", tagline: "Cardio, conditioning & pad work", day: "Tuesdays", time: "13:00–14:00", capacity: 18, icon: "flame", color: "#D06B4F",
+  { id: "boxfit", name: "BoxFit", tagline: "Cardio, conditioning & pad work", day: "Thursdays", time: "13:00–14:00", capacity: 18, icon: "flame", color: "#D06B4F",
     venue: "6 Dispensary Lane, London E8 1FT", venueMap: "https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT", whatToBring: "Bring boxing gloves and pads if you have them. Wear comfortable workout clothes and trainers. Bring a water bottle", description: "A high-energy boxing-inspired fitness class combining cardio, conditioning and boxing drills. Suitable for beginners and all fitness levels."},
   { id:"self_defence", name:"Self Defence", tagline:"Intensive 3-week course", day:"3-week course", time:"Wednesdays, 12:00–14:00", capacity:11, icon:"shield", color:"#6F596E", bookingKind:"bank_transfer", price:SELF_DEFENCE_PRICE, courseDates:SELF_DEFENCE_DATES,
     venue:"6 Dispensary Lane, London E8 1FT", venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
     details:["Wednesday 18th November", "Wednesday 25th November", "Wednesday 2nd December", "2-hour session each week for 3 weeks", "£90 per person"], description:"A three-week Self Defence course. Pay by bank transfer using your name as the reference." },
 ];
-
-const ZUMBA_TASTER = { ...DEFAULT_CLASSES.find(cls => cls.id === "zumba"), name:"Zumba taster", tagline:"Try Zumba for half price", bookingKind:"paid_taster", details:["£5 for one session", "One taster per person, per class"] };
 
 // Paid weekly classes share one monthly membership tier.
 const PILATES_BASE = {
@@ -109,7 +108,7 @@ const TASTER_MODE = false;
 // Set to true to stop new taster bookings across every class (existing
 // bookings/cancellations are unaffected — this only blocks NEW bookings).
 // Flip back to false whenever you want to reopen taster bookings.
-const TASTERS_CLOSED = false;
+const TASTERS_CLOSED = true;
 
 /* ===================================================================== */
 
@@ -789,6 +788,8 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = 
   const Icon = ICONS[cls.icon] || Sparkles;
   const full = booked >= cls.capacity;
   const isMember = bookingType === "membership";
+  const today = useBookingDay();
+  const courseClosed = !!cls.courseDates && !upcomingBookingDates(cls.courseDates, today).length;
   const isWaitlist = cls.bookingKind === "waitlist";
   const isTaster = TASTER_MODE || ["taster", "paid_taster"].includes(cls.bookingKind);
   const isTbc = cls.tasterStatus === "tbc";
@@ -801,7 +802,7 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = 
     !isBooked;
 
   const disabled =
-    cls.bookingPaused || tasterUsed || tasterIneligible ||
+    courseClosed || cls.bookingPaused || tasterUsed || tasterIneligible ||
     isTbc ||
     !paymentsAvailable ||
     (isBooked && !canBookAnotherPayg) ||
@@ -877,7 +878,7 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = 
 
       {cls.details && (
         <ul className="ff-body text-sm text-stone-600 space-y-1">
-          {cls.details.map(detail => (
+          {cls.details.filter((_, index) => !cls.courseDates?.[index] || cls.courseDates[index] >= today).map(detail => (
             <li key={detail}>
               • {detail}
             </li>
@@ -898,14 +899,14 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = 
           title={tasterIneligible ? "Zumba tasters are only for people who have not booked a PAYG or monthly Zumba class." : undefined}
           className="ff-body inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full transition disabled:cursor-not-allowed"
           style={{
-            backgroundColor: cls.bookingPaused || tasterUsed || tasterIneligible || isTbc
+            backgroundColor: courseClosed || cls.bookingPaused || tasterUsed || tasterIneligible || isTbc
               ? "#E3DFD3"
               : isBooked && !canBookAnotherPayg
                 ? "#D4EBD9"
                 : !isWaitlist && ((full && !PAID_CLASS_IDS.has(cls.id)) || isClosed)
                   ? "#E3DFD3"
                   : TEAL,
-            color: cls.bookingPaused || tasterUsed || tasterIneligible || isTbc
+            color: courseClosed || cls.bookingPaused || tasterUsed || tasterIneligible || isTbc
               ? "#8A8478"
               : isBooked && !canBookAnotherPayg
                 ? "#2D6B40"
@@ -915,7 +916,7 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = 
             opacity: disabled ? 0.85 : 1,
           }}
         >
-          {cls.bookingPaused ? "Book" : tasterUsed ? "Taster already booked" : !paymentsAvailable
+          {courseClosed ? "Course finished" : cls.bookingPaused ? "Book" : tasterUsed ? "Taster already booked" : !paymentsAvailable
             ? "Coming soon"
             : isTbc
             ? "TBC"
@@ -1056,8 +1057,16 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
   const [bankRef, setBankRef]     = useState("");
   const [error, setError]         = useState("");
   const [emailNotice, setEmailNotice] = useState("");
-  const availableDates = classPaymentConfig(session.id)?.dates || fridayBookingDates();
+  const today = useBookingDay();
+  const availableDates = classPaymentConfig(session.id, new Date(`${today}T12:00:00Z`))?.dates || upcomingBookingDates(fridayBookingDates(), today);
   const [selectedDates, setSelectedDates] = useState([previousTaster?.bookingDate && availableDates.includes(previousTaster.bookingDate) ? previousTaster.bookingDate : availableDates[0]]);
+
+  useEffect(() => {
+    setSelectedDates(current => {
+      const remaining = current.filter(date => availableDates.includes(date));
+      return remaining.length ? remaining : availableDates.slice(0, 1);
+    });
+  }, [today, session.id]);
 
   function toggleDate(date) {
     setSelectedDates(current => current.includes(date)
@@ -1089,18 +1098,21 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
     ? (plan==="payg" ? PAYG_PRICE * selectedDates.length : firstMembershipAmount)
     : (plan==="deposit" ? session.deposit : session.price);
 
-  const bankBookingDates = isPaidTaster ? selectedDates : session.courseDates;
+  const bankBookingDates = isPaidTaster ? selectedDates : upcomingBookingDates(session.courseDates || [], today);
 
   async function handleConfirm() {
     let pendingBookingId = null;
     if (saving) return;
+    if (isPaidTaster && TASTERS_CLOSED) return setError("Zumba tasters are no longer available.");
     if (session.bookingPaused) return setError("Booking opens when dates and times are confirmed.");
     if (isPaidTaster && tasterBookingUsed(previousTaster)) return setError("You have already booked your Zumba taster. Only one taster is available per class, even after cancellation.");
     if (isPaidTaster && userHasBookedRegularClass(bookings, currentUser, session.id)) return setError("Zumba tasters are only for people who have not booked a PAYG or monthly Zumba class.");
+    const currentDates = classPaymentConfig(session.id)?.dates || availableDates;
     if (type === "class" && !isTaster && (!isBankTransfer || isPaidTaster) &&
-        (!selectedDates.length || selectedDates.some(date => !availableDates.includes(date)))) {
+        (!selectedDates.length || selectedDates.some(date => !currentDates.includes(date)))) {
       return setError("Please choose an available lesson date.");
     }
+    if (isBankTransfer && !bankBookingDates.length) return setError("There are no upcoming course dates available.");
     if (isBankTransfer) {
       setSaving(true); setError("");
       try {
@@ -1267,7 +1279,7 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
             ? <button onClick={() => setStep(s=>s-1)} className="text-stone-400"><ChevronLeft size={20}/></button>
             : <div className="w-5"/>}
           <h4 className="font-semibold text-sm text-stone-700">{session.name}</h4>
-          <button onClick={onClose} className="text-stone-400"><X size={20}/></button>
+          <button onClick={onClose} className="text-stone-400" aria-label="Close booking"><X size={20}/></button>
         </div>
 
         <div className="p-5">
@@ -1813,12 +1825,15 @@ function MyBookings({ bookings, currentUser, onCancel }) {
   const [cancelNotice, setCancelNotice] = useState("");
   const [recoveryNotice, setRecoveryNotice] = useState("");
   const attemptedRecovery = useRef(false);
+  const today = useBookingDay();
+  const isUpcoming = b => bookingIsUpcoming(b, today, getSessionInfo(b.sessionId)?.courseDates);
   const mine = bookings
     .filter(b => bookingBelongsToUser(b, currentUser))
-    .filter(bookingIsActive);
+    .filter(bookingIsActive)
+    .filter(isUpcoming);
   const pendingPayments = bookings
-    .filter(b => bookingBelongsToUser(b, currentUser) && classUsesGoCardless(b) && !bookingIsActive(b));
-  const recoveryIds = bookingSyncIds(bookings.filter(b => bookingBelongsToUser(b, currentUser)));
+    .filter(b => bookingBelongsToUser(b, currentUser) && classUsesGoCardless(b) && !bookingIsActive(b) && isUpcoming(b));
+  const recoveryIds = bookingSyncIds(bookings.filter(b => bookingBelongsToUser(b, currentUser) && isUpcoming(b)));
   async function recoverPendingPayments() {
     setRecoveryNotice("");
     try {
@@ -1843,7 +1858,7 @@ function MyBookings({ bookings, currentUser, onCancel }) {
     <div className="max-w-md mx-auto flex flex-col gap-3">
       {mine.length===0 && pendingPayments.length===0
         ? <div className="text-center py-12">
-            <p className="text-sm text-stone-500">No bookings yet.</p>
+            <p className="text-sm text-stone-500">No upcoming bookings.</p>
           </div>
         : mine.slice().sort((a, b) => String(a.bookingDate || a.createdAt || "").localeCompare(String(b.bookingDate || b.createdAt || ""))).map(b => {
           const cls = getSessionInfo(b.sessionId);
@@ -1862,7 +1877,7 @@ function MyBookings({ bookings, currentUser, onCancel }) {
                   <span className="font-semibold text-sm" style={{ color: INK }}>{b.sessionName}</span>
                   <StatusBadge status={b.status}/>
                 </div>
-                {cls?.day && cls?.time && <p className="text-xs text-stone-500 mt-1">{cls.courseDates ? cls.courseDates.map(formatBookingDate).join(" · ") : b.bookingDate ? formatBookingDate(b.bookingDate) : cls.day} · {cls.time}</p>}
+                {cls?.day && cls?.time && <p className="text-xs text-stone-500 mt-1">{cls.courseDates ? upcomingBookingDates(cls.courseDates, today).map(formatBookingDate).join(" · ") : b.bookingDate ? formatBookingDate(b.bookingDate) : cls.day} · {cls.time}</p>}
                 {classPaymentIsPending(b) && <p className="text-xs text-stone-500 mt-1">Your place is reserved. We're checking your original payment setup.</p>}
                 {cls?.venue && (
                   <a href={cls.venueMap} target="_blank" rel="noopener noreferrer"
@@ -2067,7 +2082,7 @@ function WelcomeHero({ currentUser }) {
         </h2>
         <p className="ff-body text-sm mt-4 leading-relaxed" style={{ color: "#3A3D3B" }}>
           Join our welcoming community. Browse our classes below and find your next session.
-          We offer half-priced tasters — email <a className="underline font-semibold" href="mailto:Shams@snbhive.com">Shams@snbhive.com</a> for details.
+          For help choosing a class, email <a className="underline font-semibold" href="mailto:Shams@snbhive.com">Shams@snbhive.com</a> for details.
         </p>
       </div>
     </div>
@@ -3390,13 +3405,15 @@ function BookingApp() {
   // valid at all" cap, this is "sign out if nobody's actually using it".
   useIdleLogout(!!currentUser, handleSignOut, 30);
 
+  const today = useBookingDay();
   function bookedCount(id) {
-    return bookings.filter(b => b.sessionId===id && bookingIsClassRegistration(b)).length;
+    return bookings.filter(b => b.sessionId===id && bookingIsClassRegistration(b) && bookingIsUpcoming(b, today, getSessionInfo(id)?.courseDates)).length;
   }
   function getUserBookingType(id) {
     if (!currentUser) return null;
     const b = bookings.find(b => b.sessionId===id && b.status !== "waitlisted" && bookingIsActive(b) && !isTasterBooking(b)
-      && bookingBelongsToUser(b, currentUser));
+      && bookingBelongsToUser(b, currentUser) &&
+      (String(b.plan || "").toLowerCase().includes("membership") || bookingIsUpcoming(b, today, getSessionInfo(id)?.courseDates)));
     if (!b) return null;
     const plan = (b.plan || "").toLowerCase();
     if (plan.includes("waitlist")) return "waitlist";
@@ -3526,11 +3543,6 @@ function BookingApp() {
         onWaitlist={joinWaitlist}
       />
     ))}
-
-  <ClassCard cls={ZUMBA_TASTER} booked={bookedCount("zumba")}
-    tasterUsed={tasterBookingUsed(userTasterBooking(bookings, currentUser, "zumba"))}
-    tasterIneligible={userHasBookedRegularClass(bookings, currentUser, "zumba")}
-    onBook={() => { setModalSession(ZUMBA_TASTER); setModalType("class"); }}/>
 
   {/* Pilates comes immediately before Self Defence */}
   <PilatesCard

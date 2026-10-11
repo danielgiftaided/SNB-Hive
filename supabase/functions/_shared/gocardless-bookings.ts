@@ -1,4 +1,4 @@
-import { classPaymentConfig } from "./class-config.ts";
+import { classPaymentConfig, classDatesInMonth } from "./class-config.ts";
 import { weeklyDatesInMonth } from "./membership-bookings.ts";
 import { MEMBERSHIP_MONTHLY_AMOUNT } from "./membership.ts";
 
@@ -68,8 +68,13 @@ export async function fillInitialMembership(group: Booking[], paymentId: string,
     const session = classPaymentConfig(sessionId);
     if (!anchor || !session || session.weekday === null || sessionRows.every(row => row.status === "cancelled")) continue;
     const start = sessionRows.map(row => row.booking_date).filter((date): date is string => !!date).sort()[0];
-    const configuredDates = session.dates.filter(date => date.slice(0, 7) === start.slice(0, 7));
-    const monthDates = configuredDates.length ? configuredDates : weeklyDatesInMonth(start, session.weekday);
+    // Keep already-saved October Tuesday memberships on their original dates
+    // until an admin moves them; recovery must not create a second schedule.
+    const legacyBoxfit = sessionId === "boxfit" && start.slice(0, 7) === "2026-10" &&
+      sessionRows.some(row => ["2026-10-20", "2026-10-27"].includes(String(row.booking_date)));
+    const monthDates = legacyBoxfit
+      ? ["2026-10-15", "2026-10-20", "2026-10-27"]
+      : classDatesInMonth(sessionId, start);
     for (const date of monthDates.filter(date => date >= start)) {
       if (sessionRows.some(row => row.booking_date === date)) continue;
       missing.push({ id: `membership-${anchor.payment_group_id || anchor.id}-${sessionId}-${date}`,
