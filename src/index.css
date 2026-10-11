@@ -2,10 +2,114 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Prevent white flash on load */
+:root {
+  --snb-background: #fff9f4;
+  --snb-coral: #e46478;
+  --snb-coral-ink: #983b50;
+  --snb-ink: #382e31;
+  --snb-border: #eedbd6;
+}
+
+/* Keep the page palette consistent while the app loads. */
 html, body, #root {
   min-height: 100vh;
-  background-color: #F5F3EC;
+  background-color: var(--snb-background);
+}
+
+body {
+  color: var(--snb-ink);
+  font-family: 'DM Sans', Arial, sans-serif;
+}
+
+.snb-logo {
+  mix-blend-mode: multiply;
+}
+
+.snb-page {
+  background-image:
+    radial-gradient(ellipse at top left, #fbe6e7 0, transparent 55%),
+    radial-gradient(ellipse at bottom right, #f8efd9 0, transparent 50%);
+}
+
+.snb-header {
+  background: rgba(255, 249, 244, 0.96);
+  border-bottom: 1px solid var(--snb-border);
+  backdrop-filter: blur(12px);
+}
+
+.snb-tabs {
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--snb-border);
+}
+
+.snb-tab {
+  flex: 1;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 48px;
+  padding: 0.75rem 0.5rem;
+  border-bottom: 3px solid transparent;
+  color: #75656a;
+  transition: color 150ms, background-color 150ms, border-color 150ms;
+}
+
+.snb-tab:hover {
+  background-color: #fceef0;
+  color: var(--snb-coral-ink);
+}
+
+.snb-tab[aria-current="page"] {
+  color: var(--snb-coral-ink);
+  border-bottom-color: var(--snb-coral);
+  font-weight: 700;
+}
+
+.snb-tab:focus-visible,
+.snb-mobile-tab:focus-visible {
+  outline: 2px solid var(--snb-coral-ink);
+  outline-offset: -3px;
+}
+
+.snb-mobile-nav {
+  border-top: 1px solid var(--snb-border);
+  background: rgba(255, 249, 244, 0.98);
+  box-shadow: 0 -4px 20px rgba(152, 59, 80, 0.06);
+}
+
+.snb-mobile-tab {
+  position: relative;
+  color: #75656a;
+  border-radius: 12px;
+}
+
+.snb-mobile-tab[aria-current="page"] {
+  color: var(--snb-coral-ink);
+  background-color: #fbe8ec;
+}
+
+.snb-mobile-tab[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: 24px;
+  height: 3px;
+  border-radius: 0 0 3px 3px;
+  background-color: var(--snb-coral);
+}
+
+.snb-welcome {
+  background: linear-gradient(115deg, #f9e1e6, #fcf0e4);
+  border: 1px solid var(--snb-border);
+}
+
+.ff-display {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+}
+
+.ff-body {
+  font-family: 'DM Sans', Arial, sans-serif;
 }
 
 /*
