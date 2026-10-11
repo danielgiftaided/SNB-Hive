@@ -573,7 +573,7 @@ function AuthScreen({ onAuth }) {
     <div className="snb-auth-screen min-h-screen w-full flex flex-col items-center justify-center px-4 py-10">
       <div className="snb-auth-content w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center rounded-2xl px-6 py-4 mb-3" style={{ backgroundColor:BG }}>
+          <div className="inline-flex items-center justify-center px-6 py-4 mb-3">
             <img className="snb-logo" src={LOGO} alt="SNB Hive" style={{ height:"160px" }} onError={e => { e.target.style.display = "none"; }}/>
           </div>
           <p className="ff-body text-sm text-stone-700">{BRAND.tagline}</p>
