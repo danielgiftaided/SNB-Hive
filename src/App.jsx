@@ -414,7 +414,7 @@ function CapacityRing({ booked, capacity, color }) {
 /* ---- AUTH SCREEN ---- */
 
 function AuthScreen({ onAuth }) {
-  const [mode, setMode]           = useState("register"); // register | login | forgot | verify | new_password
+  const [mode, setMode]           = useState("login"); // register | login | forgot | verify | new_password
   const [resetMode, setResetMode] = useState(false);      // true = verify is for password reset
   const [loginMfaMode, setLoginMfaMode] = useState(false); // true = verify is a post-password login MFA step, not signup
   const [verifyEmail, setVEmail]  = useState("");
@@ -609,14 +609,9 @@ function AuthScreen({ onAuth }) {
 
           {/* register / login */}
           {(mode==="register" || mode==="login") && (<>
-            <div className="snb-tabs flex mb-6">
-              {[["register","Create account"],["login","Sign in"]].map(([k,label]) => (
-                <button key={k} onClick={() => switchMode(k)} aria-current={mode===k ? "page" : undefined}
-                  className="snb-tab ff-body text-sm font-medium">
-                  {label}
-                </button>
-              ))}
-            </div>
+            <h2 className="ff-display text-2xl font-semibold text-center mb-6" style={{ color:INK }}>
+              {mode==="login" ? "Sign in" : "Create account"}
+            </h2>
             <div className="flex flex-col gap-4">
               {mode==="register" && (
                 <>
@@ -697,6 +692,14 @@ function AuthScreen({ onAuth }) {
                   Forgot your password?
                 </button>
               )}
+              <p className="ff-body text-sm text-stone-600 text-center">
+                {mode==="login" ? "New to SNB Hive? " : "Already have an account? "}
+                <button type="button" onClick={() => switchMode(mode==="login" ? "register" : "login")}
+                  className="inline-flex min-h-11 items-center px-1 font-semibold underline underline-offset-2 rounded focus-visible:outline-none focus-visible:ring-2"
+                  style={{ color:TEAL }}>
+                  {mode==="login" ? "Register" : "Sign in"}
+                </button>
+              </p>
             </div>
           </>)}
 
@@ -796,9 +799,6 @@ function AuthScreen({ onAuth }) {
           )}
 
         </div>
-        <p className="ff-body text-xs text-stone-600 text-center mt-4">
-          Your details are stored securely and used only for booking management.
-        </p>
       </div>
     </div>
   );
