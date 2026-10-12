@@ -266,11 +266,12 @@ try {
   assert.equal(boxRenewal.reduce((sum,item) => sum + item.amount,0),35);
   await webhook(event("PMBOXRENEW", "created", boxSubscription.id));
   assert.equal(rows.filter(item => item.gocardless_payment_id === "PMBOXRENEW").length,4);
-  rows = [boxfitRow("legacy-box", "2026-10-15", "Membership — 1 class"), boxfitRow("legacy-box-2", "2026-10-20", "Membership — 1 class", "legacy-box")];
+  rows = [boxfitRow("legacy-box", "2026-10-15", "Membership — 1 class"), boxfitRow("legacy-box-2", "2026-10-22", "Membership — 1 class", "legacy-box"),
+    { ...boxfitRow("legacy-box-cancelled", "2026-10-29", "Membership — 1 class", "legacy-box"), status: "cancelled" }];
   const legacyBefore = structuredClone(rows);
   const { fillInitialMembership } = await import("../supabase/functions/_shared/gocardless-bookings.ts");
   await fillInitialMembership(rows, "PMLEGACYBOX", "BRLEGACYBOX");
-  assert.deepEqual(rows.map(item => item.booking_date), ["2026-10-15", "2026-10-20", "2026-10-27"], "old Tuesday memberships cannot acquire a duplicate Thursday schedule during recovery");
-  assert.deepEqual(rows.slice(0, 2), legacyBefore, "existing legacy dates/amounts/statuses remain intact");
+  assert.deepEqual(rows.map(item => item.booking_date), ["2026-10-15", "2026-10-22", "2026-10-29"], "migrated memberships cannot recreate Tuesday dates or cancelled Thursday reservations");
+  assert.deepEqual(rows, legacyBefore, "migrated dates/amounts/statuses remain intact without duplicate bookings");
   console.log("PASS live BoxFit: chosen PAYG dates, Thursday October membership, immediate Paid confirmations, preserved cancellations and Thursday renewals without duplicates");
 } finally { globalThis.fetch = originalFetch; delete globalThis.Deno; console.info = originalInfo; console.error = originalError; }

@@ -13,7 +13,7 @@ import { bookingIsActive, bookingIsUpcoming, bookingIsClassRegistration, booking
 import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../supabase/functions/_shared/membership.ts";
 import { membershipDatesFrom } from "../supabase/functions/_shared/membership-bookings.ts";
 import { checkoutErrorDetail, singleMembershipBooking } from "./checkout.js";
-import { CLASS_PAYMENTS, PAYG_AMOUNT, TASTER_AMOUNT, SELF_DEFENCE_DATES, SELF_DEFENCE_PRICE, CLASS_BANK_ACCOUNT, classPaymentConfig, upcomingBookingDates } from "../supabase/functions/_shared/class-config.ts";
+import { CLASS_PAYMENTS, PAYG_AMOUNT, TASTER_AMOUNT, SELF_DEFENCE_DATES, SELF_DEFENCE_PRICE, CLASS_BANK_ACCOUNT, classPaymentConfig, classBookingSchedule, upcomingBookingDates } from "../supabase/functions/_shared/class-config.ts";
 
 /* =====================================================================
    CONFIG — edit these to customise the app.
@@ -59,19 +59,30 @@ const DEFAULT_CLASSES = [
     venue: "6 Dispensary Lane, London E8 1FT", venueMap: "https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT", whatToBring: "Bring boxing gloves and pads if you have them. Wear comfortable workout clothes and trainers. Bring a water bottle", description: "A high-energy boxing-inspired fitness class combining cardio, conditioning and boxing drills. Suitable for beginners and all fitness levels."},
   { id:"self_defence", name:"Self Defence", tagline:"Intensive 3-week course", day:"3-week course", time:"Wednesdays, 12:00–14:00", capacity:11, icon:"shield", color:"#6F596E", bookingKind:"bank_transfer", price:SELF_DEFENCE_PRICE, courseDates:SELF_DEFENCE_DATES,
     venue:"6 Dispensary Lane, London E8 1FT", venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
-    details:["Wednesday 18th November", "Wednesday 25th November", "Wednesday 2nd December", "2-hour session each week for 3 weeks", "£90 per person"], description:"A three-week Self Defence course. Pay by bank transfer using your name as the reference." },
+    details:[...SELF_DEFENCE_DATES.map(formatCourseDate), "2-hour session each week for 3 weeks", "£90 per person"], description:"A three-week Self Defence course. Pay by bank transfer using your name as the reference." },
 ];
 
 // Paid weekly classes share one monthly membership tier.
 const PILATES_BASE = {
   name: "Reformer Pilates", tagline: "Strength, Core, Balance",
   color: "#9b7ecb",
+  scheduleNote: "Exact taster and weekly session dates will be sent by email.",
   venue: "6 Dispensary Lane, London E8 1FT",
   venueMap: "https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
   whatToBring: "Wear comfortable clothes and grip socks",
 };
 const PILATES_SESSIONS = [
   { id:"pilates_taster" },
+];
+
+// One catalogue fixes the position of each card in both customer and admin views.
+const CLASS_CATALOGUE = [
+  DEFAULT_CLASSES.find(cls => cls.id === "zumba"),
+  DEFAULT_CLASSES.find(cls => cls.id === "boxfit"),
+  { ...PILATES_BASE, ...PILATES_SESSIONS[0], icon: "sparkles" },
+  DEFAULT_CLASSES.find(cls => cls.id === "self_defence"),
+  DEFAULT_CLASSES.find(cls => cls.id === "somatic"),
+  DEFAULT_CLASSES.find(cls => cls.id === "strength"),
 ];
 
 const MEMBERSHIP_TIERS = [{ activities: 1, price: MEMBERSHIP_MONTHLY_AMOUNT / 100 }];
@@ -125,20 +136,35 @@ function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
-function fridayBookingDates(from = new Date(), count = 4) {
-  const date = new Date(from.getFullYear(), from.getMonth(), from.getDate() + 1);
-  while (date.getDay() !== 5) date.setDate(date.getDate() + 1);
-  return Array.from({ length: count }, (_, index) => {
-    const friday = new Date(date);
-    friday.setDate(date.getDate() + index * 7);
-    return `${friday.getFullYear()}-${String(friday.getMonth() + 1).padStart(2, "0")}-${String(friday.getDate()).padStart(2, "0")}`;
-  });
-}
-
 function formatBookingDate(date) {
   if (!date) return "";
   return new Intl.DateTimeFormat("en-GB", { weekday:"long", day:"numeric", month:"long", year:"numeric", timeZone:"UTC" })
     .format(new Date(`${date}T12:00:00Z`));
+}
+
+function formatCourseDate(date) {
+  const day = Number(date.slice(8, 10));
+  const suffix = day >= 11 && day <= 13 ? "th" : ({ 1:"st", 2:"nd", 3:"rd" }[day % 10] || "th");
+  const weekday = new Intl.DateTimeFormat("en-GB", { weekday:"long", timeZone:"UTC" }).format(new Date(`${date}T12:00:00Z`));
+  const month = new Intl.DateTimeFormat("en-GB", { month:"long", timeZone:"UTC" }).format(new Date(`${date}T12:00:00Z`));
+  return `${weekday} ${day}${suffix} ${month}`;
+}
+
+function ClassSchedule({ cls, children }) {
+  if (cls.scheduleNote) return <p className="ff-body text-sm text-stone-500 leading-relaxed">{cls.scheduleNote}</p>;
+  return <div className="flex flex-wrap gap-2">
+    <Pill icon={Calendar}>{cls.day}</Pill>
+    <Pill icon={Clock}>{cls.time}</Pill>
+    {children}
+  </div>;
+}
+
+function ClassDetails({ cls, today }) {
+  if (!cls.details) return null;
+  return <ul className="ff-body text-sm text-stone-600 space-y-1">
+    {cls.details.filter((_, index) => !cls.courseDates?.[index] || cls.courseDates[index] >= today)
+      .map(detail => <li key={detail}>• {detail}</li>)}
+  </ul>;
 }
 
 // ── Supabase Edge Function caller ─────────────────────────────────────────────
@@ -845,15 +871,7 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = 
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <Pill icon={Calendar}>
-          {cls.day}
-        </Pill>
-
-        <Pill icon={Clock}>
-          {cls.time}
-        </Pill>
-
+      <ClassSchedule cls={cls}>
         {isMember && !isTaster && (
           <Pill icon={Check}>
             <span style={{ color: TEAL }}>
@@ -861,7 +879,7 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = 
             </span>
           </Pill>
         )}
-      </div>
+      </ClassSchedule>
 
       {cls.venue && (
         <a
@@ -875,15 +893,7 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = 
         </a>
       )}
 
-      {cls.details && (
-        <ul className="ff-body text-sm text-stone-600 space-y-1">
-          {cls.details.filter((_, index) => !cls.courseDates?.[index] || cls.courseDates[index] >= today).map(detail => (
-            <li key={detail}>
-              • {detail}
-            </li>
-          ))}
-        </ul>
-      )}
+      <ClassDetails cls={cls} today={today}/>
 
       <div className="flex items-center justify-end pt-2 border-t border-stone-100 mt-auto">
         <button
@@ -1057,7 +1067,7 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
   const [error, setError]         = useState("");
   const [emailNotice, setEmailNotice] = useState("");
   const today = useBookingDay();
-  const availableDates = classPaymentConfig(session.id, new Date(`${today}T12:00:00Z`))?.dates || upcomingBookingDates(fridayBookingDates(), today);
+  const availableDates = classBookingSchedule(session, today);
   const [selectedDates, setSelectedDates] = useState([previousTaster?.bookingDate && availableDates.includes(previousTaster.bookingDate) ? previousTaster.bookingDate : availableDates[0]]);
 
   useEffect(() => {
@@ -2252,9 +2262,7 @@ function PilatesCard({ onBook }) {
         </div>
       </div>
 
-      <p className="ff-body text-sm text-stone-500 leading-relaxed">
-        Exact taster and weekly session dates will be sent by email.
-      </p>
+      <ClassSchedule cls={PILATES_BASE}/>
 
       {PILATES_BASE.venue && (
         <a href={PILATES_BASE.venueMap} target="_blank" rel="noopener noreferrer"
@@ -2598,57 +2606,82 @@ function StudioHireForm({ currentUser }) {
 
 function AdminClassCard({ cls, bookings, onMoveBooking }) {
   const Icon = ICONS[cls.icon] || Sparkles;
-  const upcomingDates = classPaymentConfig(cls.id)?.dates || fridayBookingDates();
-  const dates = classBookingDates(bookings, cls.id, upcomingDates);
-  const [selectedDate, setSelectedDate] = useState(dates[0]);
+  const today = useBookingDay();
+  const upcomingDates = classBookingSchedule(cls, today);
+  const historyDates = classBookingDates(bookings, cls.id, []).filter(date => !upcomingDates.includes(date));
+  const [showHistory, setShowHistory] = useState(false);
+  const [scheduledDate, setScheduledDate] = useState(upcomingDates[0]);
+  const [historyDate, setHistoryDate] = useState(historyDates[0]);
+  const viewingHistory = showHistory && historyDates.length > 0;
+  const dates = viewingHistory ? historyDates : upcomingDates;
+  const chosenDate = viewingHistory ? historyDate : scheduledDate;
+  const selectedDate = dates.includes(chosenDate) ? chosenDate : dates[0];
   const clsBookings = bookings
     .filter(b => b.sessionId === cls.id && bookingIsClassRegistration(b))
-    .filter(b => !PAID_CLASS_IDS.has(cls.id) || bookingMatchesClassDate(b, selectedDate))
+    .filter(b => cls.courseDates?.includes(selectedDate) && String(b.plan).toLowerCase().includes("course")
+      ? !b.bookingDate || b.bookingDate.slice(0, 10) <= selectedDate
+      : bookingMatchesClassDate(b, selectedDate))
     .sort((a,b) => new Date(a.createdAt||0) - new Date(b.createdAt||0));
+  const hasCapacity = Number.isFinite(cls.capacity);
   const pct = Math.min(100, cls.capacity ? (clsBookings.length / cls.capacity) * 100 : 0);
-  const full = clsBookings.length >= cls.capacity;
+  const full = hasCapacity && clsBookings.length >= cls.capacity;
   return (
     <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
       {/* Class header */}
-      <div className="p-4 border-b border-stone-100 flex items-start justify-between gap-3">
+      <div className="p-5 border-b border-stone-100 flex flex-col gap-4">
+        <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+          <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
             style={{ backgroundColor: cls.color + "1A" }}>
-            <Icon size={18} style={{ color: cls.color }}/>
+            <Icon size={20} style={{ color: cls.color }}/>
           </div>
           <div>
-            <p className="ff-body font-semibold text-sm" style={{ color: INK }}>{cls.name}</p>
-            <p className="ff-body text-xs text-stone-400 mt-0.5">{cls.day} · {cls.time}</p>
+            <h3 className="ff-display text-lg font-semibold" style={{ color: INK }}>{cls.name}</h3>
+            <p className="ff-body text-sm text-stone-500">{cls.tagline}</p>
           </div>
         </div>
-        <div className="text-right shrink-0">
+        {hasCapacity && <div className="text-right shrink-0">
           <p className="ff-display text-2xl font-bold" style={{ color: full ? "#B3261E" : TEAL }}>
             {clsBookings.length}
           </p>
           <p className="ff-body text-xs text-stone-400">of {cls.capacity}</p>
+        </div>}
         </div>
+        <ClassSchedule cls={cls}/>
+        {cls.venue && <a href={cls.venueMap} target="_blank" rel="noopener noreferrer"
+          className="ff-body inline-flex items-center gap-1.5 text-xs text-stone-400 hover:text-stone-600 transition -mt-1">
+          <MapPin size={11}/>{cls.venue}
+        </a>}
+        <ClassDetails cls={cls} today={today}/>
       </div>
 
       {/* Progress bar */}
       <div className="px-4 pt-3 pb-2">
-        {PAID_CLASS_IDS.has(cls.id) && (
+        {historyDates.length > 0 && <div className="flex flex-wrap gap-2 mb-3">
+          <button onClick={() => setShowHistory(false)} aria-pressed={!viewingHistory}
+            className="ff-body text-xs rounded-full border px-3 py-1.5">Upcoming lessons</button>
+          <button onClick={() => setShowHistory(true)} aria-pressed={viewingHistory}
+            className="ff-body text-xs rounded-full border px-3 py-1.5">Previous / other dates</button>
+        </div>}
+        {viewingHistory && <p className="ff-body text-xs text-stone-500 mb-3">Saved booking dates outside the current customer schedule.</p>}
+        {dates.length > 0 ? (
           <label className="ff-body block text-xs font-semibold text-stone-500 mb-3">
-            Lesson date
-            <select value={selectedDate} onChange={event => setSelectedDate(event.target.value)}
+            {viewingHistory ? "Saved booking date" : "Lesson date"}
+            <select value={selectedDate} onChange={event => viewingHistory ? setHistoryDate(event.target.value) : setScheduledDate(event.target.value)}
               className="mt-1.5 block w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm font-normal text-stone-700">
               {dates.map(date => <option key={date} value={date}>
                 {date === UNDATED_BOOKING ? "Date not recorded" : formatBookingDate(date)}
               </option>)}
             </select>
           </label>
-        )}
-        <div className="w-full bg-stone-100 rounded-full h-1.5">
+        ) : <p className="ff-body text-xs text-stone-500 mb-3">{cls.courseDates ? "No upcoming course dates." : "No confirmed lesson dates."}</p>}
+        {hasCapacity && <><div className="w-full bg-stone-100 rounded-full h-1.5">
           <div className="h-1.5 rounded-full transition-all"
             style={{ width: pct + "%", backgroundColor: full ? "#B3261E" : cls.color }}/>
         </div>
         <p className="ff-body text-xs mt-1.5" style={{ color: full ? "#B3261E" : "#8A8478" }}>
           {full ? "Class full" : `${cls.capacity - clsBookings.length} spaces remaining`}
-        </p>
+        </p></>}
       </div>
 
       {/* Registered members list */}
@@ -3030,15 +3063,15 @@ function AdminPage() {
         </div>
 
         {/* Tab navigation */}
-        <div className="flex gap-1 bg-stone-100 rounded-full p-1 w-fit">
+        <div className="flex flex-wrap gap-1 bg-stone-100 rounded-2xl sm:rounded-full p-1 w-fit max-w-full">
           {[["members","Members"],["bookings","Bookings"],["classes","Classes"],["studio-hire","Studio Hire"]].map(([key, label]) => {
             const count = key==="members" ? members.length
-              : key==="classes" ? DEFAULT_CLASSES.length
+              : key==="classes" ? CLASS_CATALOGUE.length
               : key==="studio-hire" ? enquiries.length
               : bookings.length;
             return (
               <button key={key} onClick={() => setAdminTab(key)}
-                className="ff-body text-sm font-medium px-5 py-1.5 rounded-full transition"
+                className="ff-body text-xs sm:text-sm font-medium px-3 sm:px-5 py-1.5 rounded-full transition"
                 style={{
                   backgroundColor: adminTab===key ? "#fff" : "transparent",
                   color: adminTab===key ? INK : "#8A8478",
@@ -3266,8 +3299,8 @@ function AdminPage() {
 
         {/* ── CLASSES TAB ── */}
         {adminTab === "classes" && (
-          <div className="grid sm:grid-cols-2 gap-4">
-            {DEFAULT_CLASSES.map(cls => <AdminClassCard key={cls.id} cls={cls} bookings={bookings} onMoveBooking={moveBooking}/>) }
+          <div className="grid sm:grid-cols-2 gap-4 w-full max-w-3xl mx-auto">
+            {CLASS_CATALOGUE.map(cls => <AdminClassCard key={cls.id} cls={cls} bookings={bookings} onMoveBooking={moveBooking}/>) }
           </div>
         )}
 
@@ -3546,50 +3579,12 @@ function BookingApp() {
                   </div>
                 )}
                 <div className="grid sm:grid-cols-2 gap-4">
-  {/* Live paid classes lead the catalogue. */}
-  {DEFAULT_CLASSES
-    .filter(cls => ["zumba", "boxfit"].includes(cls.id))
-    .map(cls => (
-      <ClassCard key={cls.id}
-        cls={cls}
-        booked={bookedCount(cls.id)}
-        bookingType={getUserBookingType(cls.id)}
-        onBook={() => {
-          setModalSession(cls);
-          setModalType("class");
-        }}
-        onWaitlist={joinWaitlist}
-      />
-    ))}
-
-  {/* Pilates comes immediately before Self Defence */}
-  <PilatesCard
-    onBook={() => setShowPilatesEnquiry(true)}
-  />
-
-  {/* Self Defence comes immediately after Pilates */}
-  {DEFAULT_CLASSES
-    .filter(cls => cls.id === "self_defence")
-    .map(cls => (
-      <ClassCard
-        key={cls.id}
-        cls={cls}
-        booked={bookedCount(cls.id)}
-        bookingType={getUserBookingType(cls.id)}
-        onBook={() => {
-          setModalSession(cls);
-          setModalType("class");
-        }}
-        onWaitlist={joinWaitlist}
-      />
-    ))}
-
-  {/* Classes with unconfirmed dates are last. */}
-  {DEFAULT_CLASSES.filter(cls => ["somatic", "strength"].includes(cls.id)).map(cls => (
-    <ClassCard key={cls.id} cls={cls} booked={bookedCount(cls.id)}
-      bookingType={getUserBookingType(cls.id)} onWaitlist={joinWaitlist}
-      onBook={() => { setModalSession(cls); setModalType("class"); }}/>
-  ))}
+  {CLASS_CATALOGUE.map(cls => cls.id === PILATES_SESSIONS[0].id
+    ? <PilatesCard key={cls.id} onBook={() => setShowPilatesEnquiry(true)}/>
+    : <ClassCard key={cls.id} cls={cls} booked={bookedCount(cls.id)}
+        bookingType={getUserBookingType(cls.id)} onWaitlist={joinWaitlist}
+        onBook={() => { setModalSession(cls); setModalType("class"); }}/>
+  )}
 </div>
               </>
             : tab==="workshops"

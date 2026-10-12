@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { bookingToday, classPaymentConfig, classDatesInMonth, upcomingBookingDates } from "../supabase/functions/_shared/class-config.ts";
+import { bookingToday, classPaymentConfig, classDatesInMonth, classBookingSchedule, upcomingBookingDates } from "../supabase/functions/_shared/class-config.ts";
 import { bookingIsUpcoming } from "../src/booking-utils.js";
 
 const on = value => new Date(value);
@@ -17,6 +17,11 @@ assert.deepEqual(classDatesInMonth("zumba", "2026-09-01"), ["2026-09-04", "2026-
 assert.equal(classPaymentConfig("unknown"), null);
 
 const course = ["2026-11-18", "2026-11-25", "2026-12-02"];
+assert.deepEqual(classBookingSchedule({ id:"boxfit" }, "2026-10-12"), ["2026-10-15", "2026-10-22", "2026-10-29"]);
+assert.deepEqual(classBookingSchedule({ id:"boxfit" }, "2026-10-30"), ["2026-11-05", "2026-11-12", "2026-11-19", "2026-11-26"]);
+assert.deepEqual(classBookingSchedule({ id:"self_defence", courseDates:course }, "2026-11-19"), ["2026-11-25", "2026-12-02"]);
+assert.deepEqual(classBookingSchedule({ id:"self_defence", courseDates:course }, "2026-12-03"), []);
+for (const id of ["somatic", "strength", "pilates_taster"]) assert.deepEqual(classBookingSchedule({ id }, "2026-10-12"), [], "Unconfirmed classes must not invent Friday dates");
 assert.deepEqual(upcomingBookingDates(course, "2026-11-19"), ["2026-11-25", "2026-12-02"]);
 assert.equal(bookingIsUpcoming({}, "2026-12-03", course), false);
 assert.equal(bookingIsUpcoming({}, "2026-12-02", course), true);

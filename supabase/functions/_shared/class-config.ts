@@ -35,6 +35,13 @@ export function upcomingBookingDates(dates: readonly string[], today = bookingTo
   return dates.filter(date => date.slice(0, 10) >= today);
 }
 
+// Customer booking choices and the admin's current lesson list use this same
+// schedule. Unconfirmed classes have no invented dates.
+export function classBookingSchedule(session: { id?: unknown; courseDates?: readonly string[] }, today = bookingToday()): string[] {
+  return classPaymentConfig(session.id, new Date(`${today}T12:00:00Z`))?.dates
+    || upcomingBookingDates(session.courseDates || [], today);
+}
+
 // Historical payment recovery uses the original month, independent of today.
 export function classDatesInMonth(id: unknown, month: string): string[] {
   if (typeof id !== "string" || !Object.hasOwn(CLASS_PAYMENTS, id)) return [];
