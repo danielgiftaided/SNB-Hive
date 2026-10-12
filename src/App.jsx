@@ -325,7 +325,7 @@ function useIdleLogout(active, onTimeout, minutes = 30) {
 function exportCSV(bookings) {
   const headers = ["Name","Email","Phone","Session","Lesson date","Type","Plan","Amount (£)","Status","Booked at"];
   const rows = bookings.map(b => [b.name,b.email,b.phone,b.sessionName,b.bookingDate,b.type,b.plan,b.amount,b.status,b.createdAt]);
-  downloadCSV(headers, rows, `snb-bookings-${new Date().toISOString().slice(0,10)}.csv`);
+  downloadCSV(headers, rows, `snb-bookings-${new Date().toISOString().slice(0,10)}.csv`, { textColumns: [2] });
 }
 
 const STATUS_META = {
@@ -3135,7 +3135,7 @@ function AdminPage() {
                 const session = getSessionInfo(b.sessionId);
                 return [b.name,b.email,b.phone,b.sessionName,b.bookingDate||session?.day||"",session?.time||"",b.plan,b.amount,b.status,b.createdAt];
               });
-              downloadCSV(headers, rows, `snb-bookings-${new Date().toISOString().slice(0,10)}.csv`);
+              downloadCSV(headers, rows, `snb-bookings-${new Date().toISOString().slice(0,10)}.csv`, { textColumns: [2] });
             }} className="ff-body inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border border-stone-200 bg-white text-stone-600 hover:bg-stone-50">
               <Download size={13}/> Export CSV
             </button>
@@ -3253,7 +3253,7 @@ function AdminPage() {
               <button onClick={() => {
                 const headers = ["Name","Email","Phone","Signed Up"];
                 const rows = members.map(m => [m.name, m.email, m.phone||"", m.createdAt ? new Date(m.createdAt).toLocaleDateString("en-GB") : ""]);
-                downloadCSV(headers, rows, "snb-members.csv");
+                downloadCSV(headers, rows, "snb-members.csv", { textColumns: [2] });
               }} className="ff-body inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border border-stone-200 bg-white text-stone-600 hover:bg-stone-50">
                 <Download size={13}/> Export CSV
               </button>
