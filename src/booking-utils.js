@@ -46,6 +46,29 @@ export function bookingSyncIds(bookings) {
   return [...groups.values()];
 }
 
+export function bookingSyncIssue(result) {
+  switch (result?.reason) {
+    case "checkout_pending":
+      return result.billing_request_status
+        ? `GoCardless checkout status is ${result.billing_request_status}; it has not been fulfilled.`
+        : "GoCardless has not marked this checkout as fulfilled.";
+    case "payment_not_authorised":
+      return result.payment_status
+        ? `GoCardless payment status is ${result.payment_status}; it has not been authorised.`
+        : "GoCardless has not authorised this payment.";
+    case "checkout_not_found":
+      return "No fulfilled GoCardless checkout matches this booking.";
+    case "booking_group_not_found":
+      return "The original booking exists, but its payment group could not be found.";
+    case "booking_not_updated":
+      return "The payment was verified, but its reference was not saved to the booking.";
+    case "cancelled":
+      return "This booking has been cancelled.";
+    default:
+      return "The payment check did not restore this booking. Check the gocardless-sync response or logs.";
+  }
+}
+
 export function classUsesGoCardless(booking) {
   const plan = String(booking?.plan || "").toLowerCase();
   return booking?.type === "class" && ["pending_checkout", "pending_payment", "confirmed", "paid"].includes(booking.status) &&

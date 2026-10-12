@@ -126,7 +126,8 @@ export async function fulfillBillingRequest(billingRequestId: string, expectedBo
   const { billing_requests: request } = await gc(`/billing_requests/${encodeURIComponent(billingRequestId)}`);
   const bookingId = request.metadata?.booking_id;
   if (!bookingId || (expectedBookingId && bookingId !== expectedBookingId)) throw new Error("Checkout does not match this booking");
-  if (request.status !== "fulfilled") return { allocated: false, reason: "checkout_pending" };
+  const checkoutDetails = { billing_request_id: billingRequestId, billing_request_status: request.status };
+  if (request.status !== "fulfilled") return { allocated: false, reason: "checkout_pending", ...checkoutDetails };
   // These are the actual payment/mandate links in the GoCardless API. The
   // similarly named payment_request/mandate_request links are request IDs.
   const paymentId = request.links?.payment_request_payment || request.payment_request?.links?.payment;
@@ -138,10 +139,12 @@ export async function fulfillBillingRequest(billingRequestId: string, expectedBo
   if (request.metadata?.payment_group_id && request.metadata.payment_group_id !== groupId) throw new Error("Checkout group does not match this booking");
   const filter: Record<string, string> = anchor.payment_group_id ? { payment_group_id: `eq.${groupId}` } : { id: `eq.${bookingId}` };
   let group = await groupFor(anchor);
-  if (group.every(row => row.status === "cancelled")) return { allocated: false, reason: "cancelled" };
+  if (!group.length) return { allocated: false, reason: "booking_group_not_found", ...checkoutDetails };
+  if (group.every(row => row.status === "cancelled")) return { allocated: false, reason: "cancelled", ...checkoutDetails };
   const { payments: payment } = await gc(`/payments/${encodeURIComponent(paymentId)}`);
+  const paymentDetails = { ...checkoutDetails, payment_id: paymentId, payment_status: payment.status };
   if (!acceptedPaymentStatuses.includes(payment.status)) {
-    return { allocated: false, reason: "payment_not_authorised" };
+    return { allocated: false, reason: "payment_not_authorised", ...paymentDetails };
   }
   await patch({ ...filter, status: "in.(pending_checkout,pending_payment,confirmed,paid)" }, {
     gocardless_payment_id: paymentId, gocardless_billing_request_id: billingRequestId,
@@ -175,7 +178,8 @@ export async function fulfillBillingRequest(billingRequestId: string, expectedBo
     emailPending = true;
   }
   group = await groupFor({ ...anchor, payment_group_id: groupId });
-  return { allocated: group.some(row => row.status !== "cancelled" && !!row.gocardless_payment_id), count: group.filter(row => row.status !== "cancelled").length, email_pending: emailPending };
+  const allocated = group.some(row => row.status !== "cancelled" && !!row.gocardless_payment_id);
+  return { allocated, reason: allocated ? undefined : "booking_not_updated", count: group.filter(row => row.status !== "cancelled").length, email_pending: emailPending, ...paymentDetails };
 }
 
 export async function enrollRecurringMembership(paymentId: string, subscriptionId: string) {
@@ -237,7 +241,7 @@ export async function syncBooking(bookingId: string, tolerateEmailFailure = true
   let verifiedPayment;
   if (anchor.gocardless_payment_id?.startsWith("PM")) {
     const { payments: payment } = await gc(`/payments/${encodeURIComponent(anchor.gocardless_payment_id)}`);
-    if (!acceptedPaymentStatuses.includes(payment.status)) return { allocated: false, reason: "payment_not_authorised" };
+    if (!acceptedPaymentStatuses.includes(payment.status)) return { allocated: false, reason: "payment_not_authorised", payment_id: anchor.gocardless_payment_id, payment_status: payment.status };
     if (payment.metadata?.booking_id && payment.metadata.booking_id !== originalId && !payment.links?.subscription) throw new Error("Payment does not match this booking");
     verifiedPayment = payment;
     if (payment.links?.subscription) {
