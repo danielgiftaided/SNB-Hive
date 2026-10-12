@@ -9,6 +9,15 @@ const settings = { SUPABASE_URL: "https://fixture.supabase.test", SUPABASE_SERVI
   GOCARDLESS_API_URL: "https://fixture.gocardless.test", GOCARDLESS_ACCESS_TOKEN: "test-token", GOCARDLESS_WEBHOOK_SECRET: "test-webhook-key" };
 globalThis.Deno = { env: { get: key => settings[key] }, serve: fn => { handler = fn; } };
 const originalFetch = globalThis.fetch;
+const originalInfo = console.info;
+const originalError = console.error;
+const syncEvents = [];
+const captureSyncEvent = (original, args) => {
+  if (args[0] === "[gocardless-sync]") syncEvents.push(JSON.parse(args[1]));
+  else original(...args);
+};
+console.info = (...args) => captureSyncEvent(originalInfo, args);
+console.error = (...args) => captureSyncEvent(originalError, args);
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
 let rows = [], requests = new Map(), payments = new Map(), subscriptions = new Map(), notices = [], subscriptionKeys = new Map();
 let failReceipt = false, providerCalls = [], writes = [];
@@ -82,7 +91,14 @@ try {
   const sync = async (id, expectedStatus = 200) => {
     const result = await syncHandler(new Request("https://fixture.supabase.test/sync", { method: "POST", body: JSON.stringify({ booking_id: id }) }));
     assert.equal(result.status, expectedStatus);
-    return result.json();
+    const response = await result.json();
+    assert.equal(response.sync_version, "booking-recovery-v1");
+    const event = syncEvents.filter(event => event.booking_id === id).at(-1);
+    assert.equal(event.event, expectedStatus === 200 ? "completed" : "failed");
+    if (expectedStatus === 200) assert.equal(event.allocated, response.allocated);
+    else assert.equal(event.error, response.error);
+    assert.ok(!JSON.stringify(event).includes("member@example.test") && !JSON.stringify(event).includes("test-token"), "Diagnostic logs omit member details and credentials");
+    return response;
   };
   const fulfilled = id => [{ resource_type: "billing_requests", action: "fulfilled", links: { billing_request: id } }];
   const event = (id, action, subscription) => [{ resource_type: "payments", action, links: { payment: id, ...(subscription ? { subscription } : {}) } }];
@@ -149,7 +165,13 @@ try {
   rows = [{ ...row("return-pending", "2026-10-09"), gocardless_billing_request_id: "BRPENDING", status: "pending_checkout" }];
   requests.set("BRPENDING", billing("BRPENDING", "return-pending", "PMPENDING", "payg", "pending"));
   const snapshot = JSON.stringify(rows);
-  assert.equal((await sync("return-pending")).allocated, false); assert.equal(JSON.stringify(rows), snapshot);
+  const pendingCheckout = await sync("return-pending");
+  assert.equal(pendingCheckout.allocated, false);
+  assert.equal(pendingCheckout.reason, "checkout_pending");
+  assert.equal(pendingCheckout.billing_request_id, "BRPENDING");
+  assert.equal(pendingCheckout.billing_request_status, "pending");
+  assert.equal(syncEvents.at(-1).billing_request_status, "pending");
+  assert.equal(JSON.stringify(rows), snapshot);
   requests.get("BRPENDING").status = "fulfilled"; payment("PMPENDING", "pending_submission", "2026-10-12", 1000);
   assert.equal((await sync("return-pending")).allocated, true);
   assert.equal(rows[0].status, "paid");
@@ -196,8 +218,22 @@ try {
   console.log("PASS existing-member reconciliation: already-Paid monthly dates repaired, original canonical payment verified without old request, failed payment stays unpaid");
   rows = [{ ...row("not-authorised", "2026-10-09"), gocardless_billing_request_id: "BRDENIED" }];
   requests.set("BRDENIED", billing("BRDENIED", "not-authorised", "PMDENIED")); payment("PMDENIED", "customer_approval_denied");
-  assert.equal((await sync("not-authorised")).allocated, false);
+  const deniedPayment = await sync("not-authorised");
+  assert.equal(deniedPayment.allocated, false);
+  assert.equal(deniedPayment.reason, "payment_not_authorised");
+  assert.equal(deniedPayment.payment_id, "PMDENIED");
+  assert.equal(deniedPayment.payment_status, "customer_approval_denied");
+  assert.equal(syncEvents.at(-1).payment_status, "customer_approval_denied");
   assert.equal(rows[0].gocardless_payment_id, null);
+  rows = [{ ...row("not-updated", "2026-10-09"), status: "legacy_waiting", gocardless_billing_request_id: "BRNOTUPDATED" }];
+  requests.set("BRNOTUPDATED", billing("BRNOTUPDATED", "not-updated", "PMNOTUPDATED")); payment("PMNOTUPDATED", "confirmed");
+  const unchanged = JSON.stringify(rows);
+  const notUpdated = await sync("not-updated");
+  assert.equal(notUpdated.allocated, false);
+  assert.equal(notUpdated.reason, "booking_not_updated");
+  assert.equal(notUpdated.payment_status, "confirmed");
+  assert.equal(JSON.stringify(rows), unchanged, "Unexpected booking states are diagnosed without overriding them");
+  console.log("PASS recovery diagnostics: HTTP 200 non-allocation reasons/statuses logged, failed requests logged, verified-but-unmodified bookings distinguished, no member details/credentials logged");
   const result = await webhookHandler(new Request("https://fixture.supabase.test/webhook", { method: "POST", body: "{}", headers: { "Webhook-Signature": "bad" } }));
   assert.equal(result.status, 498);
   console.log("PASS combined confirmation retries, return-page mail outages, out-of-order payout recovery, existing Paid members, denied setups and invalid webhook signatures");
@@ -237,4 +273,4 @@ try {
   assert.deepEqual(rows.map(item => item.booking_date), ["2026-10-15", "2026-10-20", "2026-10-27"], "old Tuesday memberships cannot acquire a duplicate Thursday schedule during recovery");
   assert.deepEqual(rows.slice(0, 2), legacyBefore, "existing legacy dates/amounts/statuses remain intact");
   console.log("PASS live BoxFit: chosen PAYG dates, Thursday October membership, immediate Paid confirmations, preserved cancellations and Thursday renewals without duplicates");
-} finally { globalThis.fetch = originalFetch; delete globalThis.Deno; }
+} finally { globalThis.fetch = originalFetch; delete globalThis.Deno; console.info = originalInfo; console.error = originalError; }

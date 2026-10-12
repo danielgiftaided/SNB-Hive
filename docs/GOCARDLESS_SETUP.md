@@ -388,7 +388,22 @@ Common causes are:
 | `Invalid APP_URL: …` | Set `APP_URL` to the valid `https://` production/customer-facing origin, then redeploy checkout. |
 | `Booking could not be verified (…)` | Deploy the current checkout function, then use the reason in parentheses and the matching function log; the saved booking is missing or has an unexpected group, session, status, or PAYG amount. |
 | Webhook shows `Invalid signature` | The secret belongs to a different endpoint/environment or was copied incorrectly. |
-| Booking stays at **Awaiting payment** | Check the webhook endpoint delivery in GoCardless, then inspect `gocardless-webhook` logs. |
+| Booking stays at **Awaiting payment** | Use **Restore completed bookings** in admin Bookings and read the reason under **Bookings needing attention**. Check the webhook endpoint delivery in GoCardless and the `gocardless-sync` / `gocardless-webhook` logs. |
+
+An Edge Runtime `shutdown` / `EarlyDrop` entry is a worker lifecycle message;
+it does not identify a failed payment. A sync request can return HTTP 200 with
+`allocated: false`. The sync function now logs each valid sync
+request as `[gocardless-sync]` `started`, followed by `completed` or `failed`.
+The result includes a reason, available GoCardless checkout/payment statuses,
+and a `sync_version` so the deployed diagnostics can be identified. These
+logs contain booking/payment references, not customer details or credentials.
+
+For `checkout_pending`, check the returned `billing_request_status`; for
+`payment_not_authorised`, check `payment_status`. If only worker shutdown
+entries appear, use the browser Network panel to inspect the `gocardless-sync`
+request's response and confirm that the new function deployment has completed.
+Browser recovery checks: start the fixture-only Vite server documented in
+`CLASS_BOOKING_CHANGES.md`, then run `python scripts/test-booking-recovery-ui.py`.
 | Sandbox request reaches the live API | `GOCARDLESS_API_URL` must be `https://api-sandbox.gocardless.com`. |
 
 #### Does “Booking could not be verified” require SQL?

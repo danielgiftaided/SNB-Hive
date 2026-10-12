@@ -9,7 +9,7 @@ import {
 import storage, { supabase } from "./storage.js";
 import { useBookings } from "./use-bookings.js";
 import { useBookingDay } from "./use-booking-day.js";
-import { bookingIsActive, bookingIsUpcoming, bookingIsClassRegistration, bookingBelongsToUser, classPaymentIsPending, classUsesGoCardless, bookingSyncIds, bookingMatchesClassDate, classBookingDates, UNDATED_BOOKING, isTasterBooking, userHasBookedRegularClass, userTasterBooking, tasterBookingUsed } from "./booking-utils.js";
+import { bookingIsActive, bookingIsUpcoming, bookingIsClassRegistration, bookingBelongsToUser, classPaymentIsPending, classUsesGoCardless, bookingSyncIds, bookingSyncIssue, bookingMatchesClassDate, classBookingDates, UNDATED_BOOKING, isTasterBooking, userHasBookedRegularClass, userTasterBooking, tasterBookingUsed } from "./booking-utils.js";
 import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../supabase/functions/_shared/membership.ts";
 import { membershipDatesFrom } from "../supabase/functions/_shared/membership-bookings.ts";
 import { checkoutErrorDetail, singleMembershipBooking } from "./checkout.js";
@@ -2707,6 +2707,7 @@ function AdminPage() {
   const { bookings, setBookings, loading, loadError, reloadBookings } = useBookings(unlocked);
   const [recoveringBookings, setRecoveringBookings] = useState(false);
   const [bookingRecoveryNotice, setBookingRecoveryNotice] = useState("");
+  const [bookingRecoveryIssues, setBookingRecoveryIssues] = useState([]);
   const attemptedBookingRecovery = useRef(false);
   const [members, setMembers]     = useState([]);
   const [enquiries, setEnquiries] = useState([]);
@@ -2811,7 +2812,7 @@ function AdminPage() {
     if (status === "check_payment") {
       const result = await callEdgeFunction("gocardless-sync", { booking_id: id });
       await reloadBookings();
-      if (!result.allocated) throw new Error("No completed checkout was found. Check GoCardless before requesting another payment.");
+      if (!result.allocated) throw new Error(bookingSyncIssue(result));
       return;
     }
     const { error } = await supabase.from("bookings").update({ status }).eq("id", id);
@@ -2837,17 +2838,29 @@ function AdminPage() {
   }
 
   async function recoverExistingBookings() {
-    setRecoveringBookings(true); setBookingRecoveryNotice("");
+    setRecoveringBookings(true); setBookingRecoveryNotice(""); setBookingRecoveryIssues([]);
     let restored = 0, unchecked = 0;
+    const issues = [];
+    const ids = bookingSyncIds(bookings);
     try {
-      for (const id of bookingSyncIds(bookings)) {
+      for (const id of ids) {
         try {
           const result = await callEdgeFunction("gocardless-sync", { booking_id: id });
-          if (result.allocated) restored++; else unchecked++;
-        } catch { unchecked++; }
+          if (result.allocated) restored++;
+          else {
+            unchecked++;
+            issues.push({ id, message: bookingSyncIssue(result) });
+          }
+        } catch (error) {
+          unchecked++;
+          issues.push({ id, message: error instanceof Error ? error.message : "The payment check could not be completed." });
+        }
       }
       await reloadBookings();
-      setBookingRecoveryNotice(`${restored} completed booking group(s) restored and marked Paid. ${unchecked} group(s) need checking in GoCardless. No new payment was requested.`);
+      setBookingRecoveryIssues(issues);
+      setBookingRecoveryNotice(ids.length
+        ? `${restored} completed booking group(s) restored and marked Paid. ${unchecked} group(s) need checking in GoCardless. No new payment was requested.`
+        : "No Direct Debit booking groups were eligible for checking. Check the booking plan and type.");
     } finally { setRecoveringBookings(false); }
   }
 
@@ -2993,6 +3006,12 @@ function AdminPage() {
       <div className="max-w-5xl mx-auto px-4 py-6 flex flex-col gap-6">
         <BookingLoadNotice error={loadError} onRetry={reloadBookings}/>
         {bookingRecoveryNotice && <p role="status" className="ff-body text-sm text-stone-600">{bookingRecoveryNotice}</p>}
+        {bookingRecoveryIssues.length > 0 && <section aria-label="Booking recovery issues" className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <h2 className="ff-body text-sm font-semibold text-stone-700 mb-2">Bookings needing attention</h2>
+          <ul className="ff-body text-sm text-stone-700 list-disc pl-5 space-y-2">
+            {bookingRecoveryIssues.map(issue => <li key={issue.id} className="break-words">Booking {issue.id}: {issue.message}</li>)}
+          </ul>
+        </section>}
 
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
