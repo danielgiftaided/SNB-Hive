@@ -4,7 +4,7 @@ import {
   Loader2, Sparkles, RotateCcw, Music2, Flame, Dumbbell, Flower2,
   ShieldCheck, Search, ArrowUpRight, Lock, Download, Eye, EyeOff, LogOut,
   Banknote, Hourglass, Ban, Undo2, LayoutDashboard, Mail, Send, Bell,
-  Paintbrush, UserPlus, Trash2
+  Paintbrush, UserPlus, Trash2, Info
 } from "lucide-react";
 import storage, { supabase } from "./storage.js";
 import { useBookings } from "./use-bookings.js";
@@ -248,6 +248,28 @@ function isStrongPassword(pw) {
   return pw.length >= 10 && /[a-zA-Z]/.test(pw) && /[0-9]/.test(pw);
 }
 const PASSWORD_RULE_MSG = "Password must be at least 10 characters and include both letters and numbers.";
+
+function PasswordRequirements() {
+  const [open, setOpen] = useState(false);
+  const trigger = useRef(null);
+  return <span className="relative inline-flex"
+    onMouseEnter={() => setOpen(true)}
+    onMouseLeave={() => { if (document.activeElement !== trigger.current) setOpen(false); }}>
+    <button ref={trigger} type="button" aria-label="Password requirements"
+      aria-expanded={open} aria-describedby={open ? "signup-password-help" : undefined}
+      onFocus={() => setOpen(true)} onBlur={() => setOpen(false)} onClick={() => setOpen(true)}
+      onKeyDown={event => { if (event.key === "Escape") setOpen(false); }}
+      className="inline-flex h-8 w-8 items-center justify-center rounded-full text-stone-500 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2">
+      <Info size={16} aria-hidden="true"/>
+    </button>
+    {open && <span id="signup-password-help" role="tooltip"
+      className="absolute bottom-full right-0 z-20 w-56 max-w-[calc(100vw-2rem)] pb-2">
+      <span className="ff-body block rounded-lg bg-stone-800 p-3 text-xs font-normal leading-relaxed text-white shadow-lg">
+        {PASSWORD_RULE_MSG} Capital letters and symbols are optional.
+      </span>
+    </span>}
+  </span>;
+}
 
 // ── Session length ──────────────────────────────────────────────────────────
 // How long a "remember me" login stays valid before requiring a fresh sign
@@ -619,51 +641,54 @@ function AuthScreen({ onAuth }) {
                     <label htmlFor="signup-first-name" className="ff-body text-sm font-medium text-stone-700">First Name <span style={{color:"#B3261E",marginLeft:"2px"}}>*</span></label>
                     <input id="signup-first-name" name="firstName" value={form.firstName} onChange={e=>f("firstName",e.target.value)} required
                       className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
-                      placeholder="Your first name" autoComplete="given-name"/>
+                      autoComplete="given-name"/>
                   </div>
                   <div>
                     <label htmlFor="signup-last-name" className="ff-body text-sm font-medium text-stone-700">Last Name <span style={{color:"#B3261E",marginLeft:"2px"}}>*</span></label>
                     <input id="signup-last-name" name="lastName" value={form.lastName} onChange={e=>f("lastName",e.target.value)} required
                       className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
-                      placeholder="Your last name" autoComplete="family-name"/>
+                      autoComplete="family-name"/>
                   </div>
                 </>
               )}
               <div>
-                <label className="ff-body text-sm font-medium text-stone-700">
-                  Email address{mode==="register" ? " — this is your username" : ""}<span style={{color:"#B3261E",marginLeft:"2px"}}>*</span>
+                <label htmlFor="auth-email" className="ff-body text-sm font-medium text-stone-700">
+                  Email address<span style={{color:"#B3261E",marginLeft:"2px"}}>*</span>
                 </label>
-                <input value={form.email} onChange={e=>f("email",e.target.value)} type="email"
+                <input id="auth-email" name="email" value={form.email} onChange={e=>f("email",e.target.value)} type="email"
                   className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
-                  placeholder="you@example.com" autoComplete="email"/>
+                  autoComplete="email"/>
               </div>
               {mode==="register" && (
                 <div>
-                  <label className="ff-body text-sm font-medium text-stone-700">Mobile number <span style={{color:"#B3261E",marginLeft:"2px"}}>*</span></label>
-                  <input value={form.phone} onChange={e=>f("phone",e.target.value)} type="tel" required
+                  <label htmlFor="signup-phone" className="ff-body text-sm font-medium text-stone-700">Mobile number <span style={{color:"#B3261E",marginLeft:"2px"}}>*</span></label>
+                  <input id="signup-phone" name="phone" value={form.phone} onChange={e=>f("phone",e.target.value)} type="tel" required
                     className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
-                    placeholder="07…" autoComplete="tel"/>
+                    autoComplete="tel"/>
                 </div>
               )}
               <div>
-                <label className="ff-body text-sm font-medium text-stone-700">Password <span style={{color:"#B3261E",marginLeft:"2px"}}>*</span></label>
+                <label htmlFor="auth-password" className="ff-body text-sm font-medium text-stone-700">Password <span style={{color:"#B3261E",marginLeft:"2px"}}>*</span></label>
                 <div className="relative mt-1">
-                  <input value={form.password} onChange={e=>f("password",e.target.value)} type={showPw?"text":"password"}
-                    className="ff-body w-full rounded-xl border border-stone-200 px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2"
-                    placeholder={mode==="register"?"At least 10 characters, incl. a letter and a number":"Your password"}
+                  <input id="auth-password" name="password" value={form.password} onChange={e=>f("password",e.target.value)} type={showPw?"text":"password"}
+                    className={`ff-body w-full rounded-xl border border-stone-200 px-3 py-2.5 ${mode==="register" ? "pr-20" : "pr-10"} text-sm focus:outline-none focus:ring-2`}
                     autoComplete={mode==="register"?"new-password":"current-password"}
                     onKeyDown={e=>{if(e.key==="Enter"&&mode==="login")handleLogin();}}/>
-                  <button onClick={()=>setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400">
-                    {showPw?<EyeOff size={16}/>:<Eye size={16}/>}
-                  </button>
+                  <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    {mode==="register" && <PasswordRequirements/>}
+                    <button type="button" onClick={()=>setShowPw(!showPw)} aria-label={showPw ? "Hide password" : "Show password"}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-full text-stone-400 focus-visible:outline-none focus-visible:ring-2">
+                      {showPw?<EyeOff size={16}/>:<Eye size={16}/>}
+                    </button>
+                  </div>
                 </div>
               </div>
               {mode==="register" && (
                 <div>
-                  <label className="ff-body text-sm font-medium text-stone-700">Confirm password <span style={{color:"#B3261E",marginLeft:"2px"}}>*</span></label>
-                  <input value={form.confirm} onChange={e=>f("confirm",e.target.value)} type={showPw?"text":"password"} required
+                  <label htmlFor="signup-confirm-password" className="ff-body text-sm font-medium text-stone-700">Confirm password <span style={{color:"#B3261E",marginLeft:"2px"}}>*</span></label>
+                  <input id="signup-confirm-password" name="confirmPassword" value={form.confirm} onChange={e=>f("confirm",e.target.value)} type={showPw?"text":"password"} required
                     className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
-                    placeholder="Repeat password" autoComplete="new-password"/>
+                    autoComplete="new-password"/>
                 </div>
               )}
               {mode==="register" && (
