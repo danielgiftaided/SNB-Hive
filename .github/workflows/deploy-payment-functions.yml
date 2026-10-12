@@ -9,6 +9,7 @@ on:
       - "supabase/functions/gocardless-sync/**"
       - "supabase/functions/send-email/**"
       - "supabase/functions/_shared/**"
+      - "supabase/migrations/20261012000000_move_boxfit_booking_dates.sql"
       - "supabase/config.toml"
       - ".github/workflows/deploy-payment-functions.yml"
   workflow_dispatch:
@@ -39,6 +40,31 @@ jobs:
 
       - name: Check Edge Functions
         run: node scripts/check-edge-functions.mjs
+
+      # Apply the agreed date correction before deploying membership recovery
+      # that follows the Thursday schedule. The UPDATE is safe to re-run.
+      - name: Move October BoxFit reservations to Thursdays
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from 'node:fs';
+          const query = readFileSync('supabase/migrations/20261012000000_move_boxfit_booking_dates.sql', 'utf8');
+          writeFileSync(process.env.RUNNER_TEMP + '/boxfit-date-update.json', JSON.stringify({ query }));
+          NODE
+          curl --fail --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            --header "Content-Type: application/json" \
+            --data-binary "@$RUNNER_TEMP/boxfit-date-update.json" \
+            --output "$RUNNER_TEMP/boxfit-date-update-result.json" \
+            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query"
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const result = JSON.parse(readFileSync(process.env.RUNNER_TEMP + '/boxfit-date-update-result.json', 'utf8'));
+          if (!Array.isArray(result) || result.length !== 1 || !/^\d+$/.test(String(result[0]?.moved_bookings))) {
+            throw new Error('Supabase did not confirm the BoxFit date correction; stop before deploying payment functions.');
+          }
+          console.log('BoxFit bookings moved:', result[0].moved_bookings);
+          NODE
 
       - name: Deploy email sender
         run: supabase functions deploy send-email --no-verify-jwt --project-ref "$SUPABASE_PROJECT_REF"
