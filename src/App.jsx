@@ -736,10 +736,10 @@ function AuthScreen({ onAuth }) {
                 <p className="ff-body text-xs text-stone-500 mt-1">Enter your email and we'll send a reset code</p>
               </div>
               <div>
-                <label className="ff-body text-sm font-medium text-stone-700">Email address</label>
-                <input value={form.email} onChange={e=>f("email",e.target.value)} type="email"
+                <label htmlFor="reset-email" className="ff-body text-sm font-medium text-stone-700">Email address</label>
+                <input id="reset-email" name="email" value={form.email} onChange={e=>f("email",e.target.value)} type="email"
                   className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
-                  placeholder="you@example.com" autoComplete="email"/>
+                  autoComplete="email"/>
               </div>
               {error   && <div className="ff-body text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>}
               {success && <div className="ff-body text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2">{success}</div>}
