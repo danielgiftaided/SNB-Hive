@@ -13,6 +13,7 @@ import { bookingIsActive, bookingIsUpcoming, bookingIsClassRegistration, booking
 import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../supabase/functions/_shared/membership.ts";
 import { membershipDatesFrom } from "../supabase/functions/_shared/membership-bookings.ts";
 import { checkoutErrorDetail, singleMembershipBooking } from "./checkout.js";
+import { downloadCSV, plainDashes } from "./csv.js";
 import { CLASS_PAYMENTS, PAYG_AMOUNT, TASTER_AMOUNT, SELF_DEFENCE_DATES, SELF_DEFENCE_PRICE, CLASS_BANK_ACCOUNT, classPaymentConfig, classBookingSchedule, upcomingBookingDates } from "../supabase/functions/_shared/class-config.ts";
 
 /* =====================================================================
@@ -323,12 +324,8 @@ function useIdleLogout(active, onTimeout, minutes = 30) {
 
 function exportCSV(bookings) {
   const headers = ["Name","Email","Phone","Session","Lesson date","Type","Plan","Amount (£)","Status","Booked at"];
-  const esc = v => `"${String(v ?? "").replace(/"/g,'""')}"`;
   const rows = bookings.map(b => [b.name,b.email,b.phone,b.sessionName,b.bookingDate,b.type,b.plan,b.amount,b.status,b.createdAt]);
-  const csv = [headers,...rows].map(r => r.map(esc).join(",")).join("\n");
-  const url = URL.createObjectURL(new Blob([csv], { type:"text/csv;charset=utf-8;" }));
-  const a = Object.assign(document.createElement("a"), { href:url, download:`snb-bookings-${new Date().toISOString().slice(0,10)}.csv` });
-  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  downloadCSV(headers, rows, `snb-bookings-${new Date().toISOString().slice(0,10)}.csv`);
 }
 
 const STATUS_META = {
@@ -3138,9 +3135,7 @@ function AdminPage() {
                 const session = getSessionInfo(b.sessionId);
                 return [b.name,b.email,b.phone,b.sessionName,b.bookingDate||session?.day||"",session?.time||"",b.plan,b.amount,b.status,b.createdAt];
               });
-              const csv = [headers,...rows].map(r => r.map(v => `"${String(v||"").replace(/"/g,'""')}"`).join(",")).join("\n");
-              const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([csv],{type:"text/csv"})), download: `snb-bookings-${new Date().toISOString().slice(0,10)}.csv` });
-              document.body.appendChild(a); a.click(); document.body.removeChild(a);
+              downloadCSV(headers, rows, `snb-bookings-${new Date().toISOString().slice(0,10)}.csv`);
             }} className="ff-body inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border border-stone-200 bg-white text-stone-600 hover:bg-stone-50">
               <Download size={13}/> Export CSV
             </button>
@@ -3180,23 +3175,23 @@ function AdminPage() {
                     return (
                       <tr key={b.id} className="hover:bg-stone-50 transition align-middle">
                         <td className="px-3 py-3 min-w-0">
-                          <p className="ff-body font-medium text-sm truncate" style={{ color: INK }}>{b.name || "—"}</p>
-                          <p className="ff-body text-xs text-stone-500 truncate" title={b.email}>{b.email || "—"}</p>
-                          <p className="ff-body text-xs text-stone-400 truncate">{b.phone || "—"}</p>
+                          <p className="ff-body font-medium text-sm truncate" style={{ color: INK }}>{b.name || "-"}</p>
+                          <p className="ff-body text-xs text-stone-500 truncate" title={b.email}>{b.email || "-"}</p>
+                          <p className="ff-body text-xs text-stone-400 truncate">{b.phone || "-"}</p>
                         </td>
                         <td className="px-3 py-3 min-w-0">
-                          <p className="ff-body text-sm font-medium">{b.sessionName || "—"}</p>
+                          <p className="ff-body text-sm font-medium">{b.sessionName || "-"}</p>
                           {session?.day && session?.time && (
-                            <p className="ff-body text-xs text-stone-500">{b.bookingDate ? formatBookingDate(b.bookingDate) : session.day} · {session.time}</p>
+                            <p className="ff-body text-xs text-stone-500">{b.bookingDate ? formatBookingDate(b.bookingDate) : session.day} · {plainDashes(session.time)}</p>
                           )}
-                          <p className="ff-body text-xs text-stone-400 mt-0.5">{b.plan}</p>
+                          <p className="ff-body text-xs text-stone-400 mt-0.5">{plainDashes(b.plan)}</p>
                         </td>
                         <td className="ff-body text-sm font-semibold px-2 py-3 text-right whitespace-nowrap">
                           £{typeof b.amount === "number" ? b.amount.toFixed(2) : b.amount}
                         </td>
                         <td className="px-3 py-3"><AdminBookingStatus booking={b}/></td>
                         <td className="ff-body text-xs text-stone-600 px-3 py-3">
-                          {hasValidBookedOn ? bookedOn.toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" }) : "—"}
+                          {hasValidBookedOn ? bookedOn.toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" }) : "-"}
                         </td>
                         <td className="px-3 py-3">
                           <div className="flex justify-end">
@@ -3216,22 +3211,22 @@ function AdminPage() {
                     <div key={b.id} className="p-4 flex flex-col gap-3">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="ff-body font-semibold text-sm truncate" style={{ color: INK }}>{b.name || "—"}</p>
-                          <p className="ff-body text-xs text-stone-500 break-all">{b.email || "—"}</p>
-                          <p className="ff-body text-xs text-stone-400">{b.phone || "—"}</p>
+                          <p className="ff-body font-semibold text-sm truncate" style={{ color: INK }}>{b.name || "-"}</p>
+                          <p className="ff-body text-xs text-stone-500 break-all">{b.email || "-"}</p>
+                          <p className="ff-body text-xs text-stone-400">{b.phone || "-"}</p>
                         </div>
                         <AdminBookingStatus booking={b}/>
                       </div>
                       <div className="flex justify-between gap-3">
                         <div>
-                          <p className="ff-body text-sm font-medium">{b.sessionName || "—"}</p>
-                          {session?.day && session?.time && <p className="ff-body text-xs text-stone-500">{b.bookingDate ? formatBookingDate(b.bookingDate) : session.day} · {session.time}</p>}
-                          <p className="ff-body text-xs text-stone-400">{b.plan}</p>
+                          <p className="ff-body text-sm font-medium">{b.sessionName || "-"}</p>
+                          {session?.day && session?.time && <p className="ff-body text-xs text-stone-500">{b.bookingDate ? formatBookingDate(b.bookingDate) : session.day} · {plainDashes(session.time)}</p>}
+                          <p className="ff-body text-xs text-stone-400">{plainDashes(b.plan)}</p>
                         </div>
                         <p className="ff-body text-sm font-semibold whitespace-nowrap">£{typeof b.amount === "number" ? b.amount.toFixed(2) : b.amount}</p>
                       </div>
                       <div className="flex items-center justify-between border-t border-stone-100 pt-2">
-                        <p className="ff-body text-xs text-stone-500">Booked {bookedOn && !Number.isNaN(bookedOn.getTime()) ? bookedOn.toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" }) : "—"}</p>
+                        <p className="ff-body text-xs text-stone-500">Booked {bookedOn && !Number.isNaN(bookedOn.getTime()) ? bookedOn.toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" }) : "-"}</p>
                         <BookingActions booking={b} onStatusChange={updateStatus}/>
                       </div>
                     </div>
@@ -3258,9 +3253,7 @@ function AdminPage() {
               <button onClick={() => {
                 const headers = ["Name","Email","Phone","Signed Up"];
                 const rows = members.map(m => [m.name, m.email, m.phone||"", m.createdAt ? new Date(m.createdAt).toLocaleDateString("en-GB") : ""]);
-                const csv = [headers,...rows].map(r => r.map(v => `"${String(v||"").replace(/"/g,"")}`).join(",")).join("\n");
-                const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([csv],{type:"text/csv"})), download: "snb-members.csv" });
-                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                downloadCSV(headers, rows, "snb-members.csv");
               }} className="ff-body inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border border-stone-200 bg-white text-stone-600 hover:bg-stone-50">
                 <Download size={13}/> Export CSV
               </button>
