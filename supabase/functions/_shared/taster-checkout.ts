@@ -41,16 +41,38 @@ export async function tasterPaymentRequest(sessionId: keyof typeof CLASS_TASTERS
     if (matches.length !== 1) throw new Error(`Expected exactly one GoCardless template named ${name}. Check its name or configure its template ID.`);
     template = matches[0];
   }
-  if (!template?.id || template.name?.trim().toLowerCase() !== name.toLowerCase() ||
-      Number(template.payment_request_amount) !== TASTER_AMOUNT || template.payment_request_currency !== "GBP" ||
-      (template.payment_request_scheme && template.payment_request_scheme !== "bacs") ||
-      (template.mandate_request_scheme && template.mandate_request_scheme !== "bacs") ||
-      (template.mandate_request_currency && template.mandate_request_currency !== "GBP")) {
-    throw new Error(`The ${name} template must be a £5 GBP Direct Debit payment.`);
+  if (!template?.id || template.name?.trim().toLowerCase() !== name.toLowerCase()) {
+    throw new Error(`The configured template does not match ${name}.`);
+  }
+  // A template may leave fields open for the checkout to supply. The amount
+  // and currency always come from the app's validated £5 booking, not input
+  // entered by the customer on a reusable payment link.
+  const amount = String(template.payment_request_amount ?? "").trim();
+  if (amount && Number(amount) !== TASTER_AMOUNT) {
+    const display = Number.isFinite(Number(amount)) ? `£${(Number(amount) / 100).toFixed(2)}` : "an invalid amount";
+    throw new Error(`The ${name} template specifies ${display}. Set its payment amount to £5 or leave it open for the app to set £5.`);
+  }
+  const currency = template.payment_request_currency?.trim().toUpperCase();
+  if (currency && currency !== "GBP") throw new Error(`The ${name} template uses ${currency}. Set its payment currency to GBP.`);
+  const paymentScheme = template.payment_request_scheme?.trim().toLowerCase();
+  const mandateScheme = template.mandate_request_scheme?.trim().toLowerCase();
+  const mandateCurrency = template.mandate_request_currency?.trim().toUpperCase();
+  if (paymentScheme && !["bacs", "faster_payments"].includes(paymentScheme)) {
+    throw new Error(`The ${name} template uses unsupported payment scheme ${paymentScheme}. Choose UK Direct Debit or Pay by Bank + DD Set up.`);
+  }
+  if (mandateScheme && mandateScheme !== "bacs") throw new Error(`The ${name} template uses mandate scheme ${mandateScheme}. Choose Bacs for UK Direct Debit.`);
+  if (mandateCurrency && mandateCurrency !== "GBP") throw new Error(`The ${name} template uses mandate currency ${mandateCurrency}. Set it to GBP.`);
+  const ukMandate = mandateScheme === "bacs" || (!mandateScheme && mandateCurrency === "GBP");
+  if (paymentScheme === "faster_payments" && !ukMandate) {
+    throw new Error(`The ${name} template offers Pay by Bank without a UK Direct Debit setup. Enable Bacs Direct Debit setup for this template.`);
   }
   return {
     templateId: template.id,
+    // Dashboard "Pay by Bank + DD Set up" templates combine Faster Payments
+    // with a Bacs mandate. The booking app collects the £5 by Direct Debit,
+    // so use that mandate's Bacs scheme rather than its instant-payment leg.
     paymentRequest: { amount: TASTER_AMOUNT, currency: "GBP", scheme: "bacs",
       description: template.payment_request_description || name },
+    mandateRequest: { scheme: "bacs" },
   };
 }

@@ -77,6 +77,12 @@ try {
     assert.ok(emails.every(email=>email.html.includes("BoxFit") && email.html.includes("29 October 2026")));
   }
   emails=[];
+  assert.equal((await emailHandler(post({type:"payment_confirmation",email:member.email,name:member.name,session_name:"BoxFit Taster",plan:"Taster (GoCardless)",status:"paid",amount:5,gocardless_payment_id:"PM_TASTER",booking_dates:"Thursday 22 October 2026"}))).status,200);
+  assert.deepEqual(emails.map(email=>email.to[0]).sort(),[member.email,"shams@snbhive.com"].sort());
+  assert.ok(emails.every(email=>email.html.includes("£5") && email.html.includes("marked Paid")));
+  assert.ok(emails[0].html.includes("Direct Debit automatically"));
+  assert.ok(!emails.some(email=>email.html.includes("Payment received")), "a taster Direct Debit setup must not claim bank settlement");
+  emails=[];
   assert.equal((await emailHandler(post({type:"booking_cancelled",to_email:member.email,to_name:member.name,user_email:member.email,user_name:member.name,session_name:"BoxFit",booking_date:"Thursday 22 October 2026"}))).status,200);
   assert.deepEqual(emails.map(email=>email.to[0]).sort(),[member.email,"shams@snbhive.com"].sort());
   assert.ok(emails.every(email=>email.html.includes("BoxFit") && email.html.includes("22 October 2026") && email.subject.includes("cancelled")));
