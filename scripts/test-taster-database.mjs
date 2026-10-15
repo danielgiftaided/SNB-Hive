@@ -96,6 +96,39 @@ try {
   await db.exec("reset role; set role service_role");
   assert.ok((await db.query("select * from public.class_taster_claims")).rows.length > 0);
   await db.exec("reset role");
+  const tasterCardSql = await readFile(new URL('../supabase/migrations/20261015000000_taster_card_eligibility.sql', import.meta.url), 'utf8');
+  const beforeTasterCard = (await snapshot()).rows;
+  await db.exec(tasterCardSql);
+  await db.exec(tasterCardSql);
+  assert.deepEqual((await snapshot()).rows, beforeTasterCard, "availability migration does not change bookings");
+  const availability = async (id, email) => (await db.query(
+    'select * from public.class_taster_eligibility($1, $2) order by session_id', [id, email])).rows;
+  assert.deepEqual(await availability('fresh', 'fresh@example.test'), [
+    { session_id: 'boxfit', eligible: true }, { session_id: 'zumba', eligible: true },
+  ]);
+  assert.deepEqual(await availability('past-member', ' PAST@EXAMPLE.TEST '), [
+    { session_id: 'boxfit', eligible: true }, { session_id: 'zumba', eligible: false },
+  ], "cancelled historical tasters hide only their class");
+  assert.deepEqual(await availability('paid-member', 'changed@example.test'), [
+    { session_id: 'boxfit', eligible: true }, { session_id: 'zumba', eligible: false },
+  ], "deleted regular-Zumba claims keep the existing first-class restriction");
+  await db.query("insert into bookings (id,session_id,email,user_id,plan,status,amount,booking_date,payment_group_id) values ('gc-taster','boxfit','fresh@example.test','fresh','Taster (GoCardless)','pending_payment',5,'2026-10-15','gc-taster')");
+  assert.equal((await availability('fresh', 'fresh@example.test'))[0].eligible, false, "saving checkout hides the offer immediately");
+  await assert.rejects(insert('gc-repeat','fresh','FRESH@example.test','boxfit'), /Only one lifetime taster/);
+  await db.query("update bookings set status='paid',gocardless_payment_id='PM_TASTER' where id='gc-taster'");
+  await db.query("update bookings set status='cancelled' where id='gc-taster'");
+  await db.query("delete from bookings where id='gc-taster'");
+  await db.exec("set role anon");
+  assert.deepEqual(await availability('fresh', 'changed-fresh@example.test'), [
+    { session_id: 'boxfit', eligible: false }, { session_id: 'zumba', eligible: true },
+  ], "private lifetime history survives deletion and changed email, while the other class stays available");
+  assert.deepEqual(await availability('new-email-id', ' FRESH@EXAMPLE.TEST '), [
+    { session_id: 'boxfit', eligible: false }, { session_id: 'zumba', eligible: true },
+  ]);
+  assert.ok((await availability('', '')).every(row => !row.eligible), "missing member details cannot show offers");
+  await assert.rejects(db.query("select * from public.class_taster_claims"), /permission denied/);
+  await db.exec("reset role");
+  console.log("PASS taster card PostgreSQL availability: only boolean flags, lifetime/history isolation, pending/paid/cancelled/deleted claims, normalized identity and private records");
   const beforeDiagnostics = (await snapshot()).rows;
   await db.exec(await readFile(new URL('../supabase/SQL_EDITOR_BOOKING_DIAGNOSTICS.sql', import.meta.url), 'utf8'));
   assert.deepEqual((await snapshot()).rows, beforeDiagnostics, "read-only diagnostics preserve all bookings");

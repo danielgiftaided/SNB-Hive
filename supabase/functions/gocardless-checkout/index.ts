@@ -1,6 +1,7 @@
 import { corsHeaders, json } from "../_shared/http.ts";
 import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../_shared/membership.ts";
-import { classPaymentConfig, PAYG_AMOUNT } from "../_shared/class-config.ts";
+import { classPaymentConfig, CLASS_TASTERS, PAYG_AMOUNT, TASTER_AMOUNT } from "../_shared/class-config.ts";
+import { tasterPaymentRequest } from "../_shared/taster-checkout.ts";
 import {
   bookingRowsValidationIssue,
   canStartCheckoutAfterLookupFailure,
@@ -11,8 +12,8 @@ import {
 
 const GC_API = Deno.env.get("GOCARDLESS_API_URL") || "https://api.gocardless.com";
 const GC_VERSION = "2015-07-06";
-const PRICES = { payg: PAYG_AMOUNT, membership: MEMBERSHIP_MONTHLY_AMOUNT } as const;
-const CHECKOUT_VERSION = "class-payments-v3";
+const PRICES = { payg: PAYG_AMOUNT, membership: MEMBERSHIP_MONTHLY_AMOUNT, taster: TASTER_AMOUNT } as const;
+const CHECKOUT_VERSION = "class-payments-v4-tasters";
 
 async function getBooking(id: string) {
   const url = Deno.env.get("SUPABASE_URL");
@@ -227,13 +228,15 @@ Deno.serve(async request => {
       ? proratedMembershipAmount(membershipStartDate)
       : expectedAmount;
     const metadata = checkoutMetadata(booking_id, booking.payment_group_id, plan as CheckoutPlan);
+    const taster = plan === "taster" ? await tasterPaymentRequest(session_id as keyof typeof CLASS_TASTERS) : null;
     const requestBody = plan !== "membership"
       ? {
           payment_request: {
+            ...(taster?.paymentRequest || {}),
             amount: expectedAmount,
             currency: "GBP",
-            description: `SNB Hive ${session.name} class`,
-            metadata: { booking_id },
+            description: taster?.paymentRequest.description || `SNB Hive ${session.name} class`,
+            metadata: { booking_id, ...(taster ? { taster_template_id: taster.templateId } : {}) },
           },
           mandate_request: { scheme: "bacs" },
           metadata,

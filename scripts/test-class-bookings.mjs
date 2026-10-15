@@ -102,7 +102,7 @@ try {
   };
   const checkoutPayload={booking_id:row.id,session_id:"zumba",plan:"payg",return_url:"https://app.example.test/payment-complete",exit_url:"https://app.example.test/"};
   assert.equal((await checkoutHandler(post({...checkoutPayload,plan:"taster"}))).status,400);
-  assert.equal(calls.length,0,"tasters must never reach GoCardless");
+  assert.equal(calls.length,0,"ordinary class rows cannot claim a discounted taster checkout");
   assert.equal((await checkoutHandler(post(checkoutPayload))).status,200);
   assert.equal(calls[0].body.billing_requests.payment_request.amount,1000);
   assert.equal(calls[0].body.billing_requests.metadata.payment_plan,"payg");
@@ -143,7 +143,7 @@ try {
   booking={...row,session_id:"boxfit",booking_date:"2026-10-29"};calls=[];
   assert.equal((await checkoutHandler(post({...checkoutPayload,session_id:"boxfit"}))).status,400);
   assert.equal(calls.length,0,"past bookings cannot create new payments after rollover");
-  console.log("PASS actual checkout handler: GoCardless tasters rejected, safe PAYG retries, live BoxFit dates and shared membership proration");
+  console.log("PASS actual checkout handler: unverified taster discounts rejected, safe PAYG retries, live BoxFit dates and shared membership proration");
 
 } finally {
   globalThis.fetch=originalFetch;

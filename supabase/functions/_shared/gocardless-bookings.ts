@@ -231,7 +231,8 @@ export async function reconcilePayment(paymentId: string) {
 export async function syncBooking(bookingId: string, tolerateEmailFailure = true) {
   const [anchor] = await bookings({ id: `eq.${bookingId}`, select: "*", limit: "1" });
   if (!anchor) throw new Error("Booking could not be found");
-  if (!String(anchor.plan).toLowerCase().includes("membership") && !String(anchor.plan).toLowerCase().includes("pay as you go")) throw new Error("This booking does not use Direct Debit");
+  const plan = String(anchor.plan).toLowerCase();
+  if (plan.includes("bank transfer") || (!plan.includes("membership") && !plan.includes("pay as you go") && plan !== "taster (gocardless)")) throw new Error("This booking does not use Direct Debit");
   if (anchor.status === "cancelled") return { allocated: false, reason: "cancelled" };
   const originalId = anchor.payment_group_id || anchor.id;
   if (anchor.gocardless_billing_request_id) return fulfillBillingRequest(anchor.gocardless_billing_request_id, originalId, tolerateEmailFailure);

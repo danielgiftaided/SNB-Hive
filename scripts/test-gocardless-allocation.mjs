@@ -90,7 +90,7 @@ try {
   };
   const sync = async (id, expectedStatus = 200) => {
     const result = await syncHandler(new Request("https://fixture.supabase.test/sync", { method: "POST", body: JSON.stringify({ booking_id: id }) }));
-    assert.equal(result.status, expectedStatus);
+    assert.equal(result.status, expectedStatus, await result.clone().text());
     const response = await result.json();
     assert.equal(response.sync_version, "booking-recovery-v1");
     const event = syncEvents.filter(event => event.booking_id === id).at(-1);
@@ -274,4 +274,31 @@ try {
   assert.deepEqual(rows.map(item => item.booking_date), ["2026-10-15", "2026-10-22", "2026-10-29"], "migrated memberships cannot recreate Tuesday dates or cancelled Thursday reservations");
   assert.deepEqual(rows, legacyBefore, "migrated dates/amounts/statuses remain intact without duplicate bookings");
   console.log("PASS live BoxFit: chosen PAYG dates, Thursday October membership, immediate Paid confirmations, preserved cancellations and Thursday renewals without duplicates");
+  for (const sessionId of ["zumba", "boxfit"]) {
+    const id = `${sessionId}-gc-taster`;
+    rows = [{ ...row(id, sessionId === "boxfit" ? "2026-10-22" : "2026-10-23", "Taster (GoCardless)"),
+      session_id: sessionId, session_name: `${sessionId} Taster`, amount: 5 }];
+    requests.set(`BR-${id}`, billing(`BR-${id}`, id, `PM-${id}`, "taster"));
+    payment(`PM-${id}`, "pending_submission", "2026-10-15", 500);
+    const subscriptionsBefore = subscriptions.size;
+    notices = [];
+    await webhook(fulfilled(`BR-${id}`));
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].status, "paid");
+    assert.equal(rows[0].gocardless_payment_id, `PM-${id}`);
+    assert.equal(rows[0].amount, 5);
+    assert.equal(subscriptions.size, subscriptionsBefore, "£5 tasters never create recurring subscriptions");
+    assert.equal(notices.length, 1);
+    assert.equal(notices[0].type, "payment_confirmation");
+    assert.equal(notices[0].amount, 5);
+    await webhook(event(`PM-${id}`, "paid_out"));
+    assert.equal(notices.length, 1, "later settlement cannot duplicate taster receipts");
+    rows[0].gocardless_payment_id = null; rows[0].status = "pending_payment";
+    assert.equal((await sync(id)).allocated, true);
+    assert.equal(rows[0].gocardless_payment_id, `PM-${id}`);
+    rows[0].status = "cancelled";
+    assert.equal((await sync(id)).allocated, false);
+    assert.equal(rows[0].status, "cancelled");
+  }
+  console.log("PASS £5 BoxFit/Zumba tasters: signed webhook, canonical payment ID, one receipt, recovery, preserved cancellation and no subscription/monthly allocation");
 } finally { globalThis.fetch = originalFetch; delete globalThis.Deno; console.info = originalInfo; console.error = originalError; }

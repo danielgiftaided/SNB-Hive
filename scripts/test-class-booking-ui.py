@@ -6,6 +6,7 @@ with urlopen('http://127.0.0.1:5174/src/storage.js') as response:
 assert 'https://fixture.supabase.test' in source and 'test-public-key' in source, 'Start the fixture-only Vite server from the documented command before running this test.'
 
 import json,time,re
+from taster_fixtures import taster_availability
 from urllib.parse import parse_qs,urlparse
 from playwright.sync_api import sync_playwright
 rows=[]; emails=[]; checkout=[]; writes=[]; sync_calls=[]; fail_checkout=False; fail_booking=False; fail_read=False; sync_ready=True
@@ -37,6 +38,7 @@ def route_api(route):
     if row.get(key)==value: row.update(req.post_data_json)
    response=[]
   else: raise AssertionError(req.method)
+ elif '/rest/v1/rpc/class_taster_eligibility' in req.url: response=taster_availability(rows,req.post_data_json)
  elif '/rest/v1/users' in req.url: response=[user]
  elif '/rest/v1/studio_hire_enquiries' in req.url: response=[]
  elif '/functions/v1/send-email' in req.url:
@@ -74,7 +76,8 @@ with sync_playwright() as p:
  page=context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
  page.goto('http://127.0.0.1:5174/');page.get_by_role('heading',name='Zumba',exact=True).wait_for()
  assert page.get_by_role('heading',name='Boxing',exact=True).count()==0
- assert page.locator('main h3').all_text_contents()==['Zumba','BoxFit','Reformer Pilates','Self Defence','Somatic','Strength & Conditioning']
+ page.get_by_role('region',name='Tasters',exact=True).wait_for()
+ assert page.locator('main h3').all_text_contents()==['Zumba','BoxFit','Reformer Pilates','Self Defence','Somatic','Strength & Conditioning','Tasters']
  assert card(page,'BoxFit').get_by_role('button',name='Book',exact=True).is_enabled()
  assert 'taster' not in card(page,'BoxFit').inner_text().lower()
  for date in ['Thursday, 15 October 2026','Thursday, 22 October 2026','Thursday, 29 October 2026']:
@@ -335,8 +338,9 @@ with sync_playwright() as p:
   rows=[];checkout=[];page.goto('http://127.0.0.1:5174/')
   card(page,'BoxFit').get_by_role('button',name='Book',exact=True).click()
   page.get_by_role('button',name=re.compile('^Monthly membership')).click()
-  assert page.get_by_role('radio').count()==3
-  page.get_by_role('radio',name=start,exact=True).check()
+  first_lesson=page.get_by_role('group',name='Choose your first lesson date')
+  assert first_lesson.get_by_role('radio').count()==3
+  first_lesson.get_by_role('radio',name=start,exact=True).check()
   page.get_by_role('button',name='Continue to payment',exact=True).click()
   page.get_by_role('heading',name="You're booked! 🎉",exact=True).wait_for()
   assert sorted(row['booking_date'] for row in rows)==expected_dates
