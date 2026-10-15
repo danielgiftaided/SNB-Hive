@@ -1,3 +1,4 @@
+import TermsContent from "./TermsContent.jsx";
 import { useState, useEffect, useRef } from "react";
 import {
   Calendar, MapPin, Clock, Check, X, ArrowRight, ChevronLeft,
@@ -2401,14 +2402,8 @@ function PrivacyPage() {
 
 function TermsPage() {
   return (
-    <PolicyPage title="Terms & Conditions">
-      <p><strong>1. Taster sessions</strong> — Taster sessions are half price and subject to availability. Each person can book only one taster per class; cancellation does not restore eligibility. Booking a taster does not guarantee a place on a regular class.</p>
-      <p><strong>2. Cancellations</strong> — Please cancel at least 24 hours in advance if you cannot attend. This allows us to offer your place to someone on the waitlist.</p>
-      <p><strong>3. Health & safety</strong> — By booking a taster you confirm you are in good health and able to participate. Please inform the instructor of any injuries before the session.</p>
-      <p><strong>4. Your account</strong> — You are responsible for keeping your login details secure. Contact shams@snbhive.com immediately if you suspect unauthorised access.</p>
-      <p><strong>5. Changes</strong> — We reserve the right to change session dates, times or venues. We will notify you by email if this affects a booking you have made.</p>
-      <p><strong>6. Governing law</strong> — These terms are governed by the laws of England and Wales.</p>
-      <p><strong>Last updated:</strong> July 2026</p>
+    <PolicyPage title="Class, Booking &amp; Membership Terms and Conditions">
+      <TermsContent/>
     </PolicyPage>
   );
 }
