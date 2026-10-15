@@ -1,4 +1,4 @@
-import CancellationPolicyNotice from "./CancellationPolicyNotice.jsx";
+import { useCheckoutPolicy } from "./use-checkout-policy.jsx";
 import TermsContent from "./TermsContent.jsx";
 import { useState, useEffect, useRef } from "react";
 import {
@@ -83,8 +83,9 @@ const PILATES_SESSIONS = [
 const CLASS_CATALOGUE = [
   DEFAULT_CLASSES.find(cls => cls.id === "zumba"),
   DEFAULT_CLASSES.find(cls => cls.id === "boxfit"),
-  { ...PILATES_BASE, ...PILATES_SESSIONS[0], icon: "sparkles" },
+  { id: "tasters" },
   DEFAULT_CLASSES.find(cls => cls.id === "self_defence"),
+  { ...PILATES_BASE, ...PILATES_SESSIONS[0], icon: "sparkles" },
   DEFAULT_CLASSES.find(cls => cls.id === "somatic"),
   DEFAULT_CLASSES.find(cls => cls.id === "strength"),
 ];
@@ -920,8 +921,7 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = 
 
       <ClassDetails cls={cls} today={today}/>
 
-      <div className={`flex justify-end pt-2 border-t border-stone-100 mt-auto ${cls.bookingKind === "gocardless_course" ? "flex-col items-end gap-3" : "items-center"}`}>
-        {cls.bookingKind === "gocardless_course" && !isBooked && !courseClosed && !full && <CancellationPolicyNotice/>}
+      <div className="flex items-center justify-end pt-2 border-t border-stone-100 mt-auto">
         <button
           onClick={() => {
             if (isWaitlist) {
@@ -994,7 +994,7 @@ async function openSinglePaymentCheckout(booking, date = booking.bookingDate) {
   window.location.assign(result.authorisation_url);
 }
 
-function TasterCard({ classes, bookings, onBook, admin = false, currentUser }) {
+function TasterCard({ classes, bookings, onBook, admin = false, currentUser, bookingForm = false, busy = false }) {
   const today = useBookingDay();
   const [classId, setClassId] = useState(classes[0]?.id);
   const [date, setDate] = useState("");
@@ -1009,8 +1009,27 @@ function TasterCard({ classes, bookings, onBook, admin = false, currentUser }) {
     booking.status !== "cancelled" && bookingMatchesClassDate(booking, selectedDate));
   const full = dates.length > 0 && bookings.filter(booking => booking.sessionId === cls.id &&
     bookingIsClassRegistration(booking) && bookingMatchesClassDate(booking, selectedDate)).length >= cls.capacity;
-  return (
+  if (!admin && !bookingForm) return (
     <section aria-label="Tasters" className="bg-white rounded-2xl border border-stone-200 p-5 flex flex-col gap-4 shadow-sm">
+      <div className="flex items-start gap-3">
+        <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: "#FBF3E3" }}>
+          <Sparkles size={20} style={{ color: GOLD }}/>
+        </div>
+        <div>
+          <h3 className="ff-display text-lg font-semibold" style={{ color: INK }}>Tasters</h3>
+          <p className="ff-body text-sm text-stone-500">Discover a new class</p>
+        </div>
+      </div>
+      <p className="ff-body text-sm text-stone-600">Try something new with a one-off taster session.</p>
+      <div className="flex justify-end pt-2 border-t border-stone-100 mt-auto">
+        <button onClick={() => onBook()} className="ff-body inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full" style={{ backgroundColor: TEAL, color: "#fff" }}>
+          Book<ArrowRight size={14}/>
+        </button>
+      </div>
+    </section>
+  );
+  return (
+    <section aria-label="Tasters" className={bookingForm ? "flex flex-col gap-4" : "bg-white rounded-2xl border border-stone-200 p-5 flex flex-col gap-4 shadow-sm"}>
       <div className="flex items-start gap-3">
         <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: "#FBF3E3" }}>
           <Sparkles size={20} style={{ color: GOLD }}/>
@@ -1022,12 +1041,13 @@ function TasterCard({ classes, bookings, onBook, admin = false, currentUser }) {
       </div>
       <p className="ff-body text-sm text-stone-600">Pay as you go. One taster per class, even after cancellation.</p>
       <label className="ff-body text-sm font-medium text-stone-700" htmlFor={`${prefix}-class`}>Taster class
-        <select id={`${prefix}-class`} value={cls.id} onChange={event => { setClassId(event.target.value); setDate(""); }}
+        <select id={`${prefix}-class`} disabled={busy} value={cls.id} onChange={event => { setClassId(event.target.value); setDate(""); }}
           className="mt-1.5 block w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm font-normal">
           {classes.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select>
       </label>
       <ClassSchedule cls={cls}/>
+      {bookingForm && <p className="ff-body text-sm text-stone-600">{cls.venue}</p>}
       {admin ? (
         <label className="ff-body text-sm font-medium text-stone-700" htmlFor={`${prefix}-date`}>Taster date
           <select id={`${prefix}-date`} value={selectedDate || ""} onChange={event => setDate(event.target.value)}
@@ -1040,7 +1060,7 @@ function TasterCard({ classes, bookings, onBook, admin = false, currentUser }) {
           <legend className="ff-body px-1 text-sm font-medium text-stone-700">Choose your taster date</legend>
           <div className="flex flex-col gap-2">
             {dates.map(value => <label key={value} className="ff-body flex items-center gap-2.5 rounded-lg bg-stone-50 px-3 py-2 text-sm cursor-pointer">
-              <input type="radio" name="taster-card-date" value={value} checked={selectedDate === value} onChange={() => setDate(value)}/>
+              <input disabled={busy} type="radio" name="taster-card-date" value={value} checked={selectedDate === value} onChange={() => setDate(value)}/>
               <span>{formatBookingDate(value)}</span>
             </label>)}
           </div>
@@ -1058,10 +1078,10 @@ function TasterCard({ classes, bookings, onBook, admin = false, currentUser }) {
       ) : (
         <div className="flex items-center justify-between pt-2 border-t border-stone-100 mt-auto">
           <p className="ff-body text-sm font-semibold" style={{ color: INK }}>£5.00 per taster</p>
-          <button disabled={!selectedDate || full} onClick={() => onBook(cls, selectedDate)}
+          <button disabled={busy || !selectedDate || full} onClick={() => onBook(cls, selectedDate)}
             className="ff-body inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full disabled:opacity-50"
             style={{ backgroundColor: TEAL, color: "#fff" }}>
-            {full ? "Class full" : "Book taster"}<ArrowRight size={14}/>
+            {busy ? "Opening secure payment…" : full ? "Class full" : "Continue to payment"}<ArrowRight size={14}/>
           </button>
         </div>
       )}
@@ -1069,47 +1089,45 @@ function TasterCard({ classes, bookings, onBook, admin = false, currentUser }) {
   );
 }
 
-function TasterBookingModal({ session, date, currentUser, previousBooking, onConfirm, onClose }) {
-  const bookingRef = useRef(previousBooking || null);
+function TasterBookingModal({ classes, bookings, currentUser, onConfirm, onClose }) {
+  const attempts = useRef(new Map());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const today = useBookingDay();
-  const available = classBookingSchedule(session, today).includes(date);
-  async function confirm() {
-    if (saving || !available) return;
+  const { requestPolicy, policyDialog } = useCheckoutPolicy();
+  async function confirm(session, date) {
+    if (saving) return;
     setSaving(true); setError("");
+    let booking = attempts.current.get(session.id) || userTasterBooking(bookings, currentUser, session.id);
+    let saved = !!booking;
     try {
-      if (!bookingRef.current) {
+      if (!await requestPolicy()) return;
+      if (!classBookingSchedule(session).includes(date)) throw new Error("This date is no longer available. Choose an upcoming date.");
+      if (tasterBookingUsed(booking)) throw new Error("You have already booked a taster for this class.");
+      if (!booking) {
         const id = uid();
-        const booking = { id, paymentGroupId: id, type: "class", sessionId: session.id,
+        booking = { id, paymentGroupId: id, type: "class", sessionId: session.id,
           sessionName: `${session.name} Taster`, bookingDate: date,
           userId: currentUser.id, name: currentUser.name, email: currentUser.email, phone: currentUser.phone,
           plan: "Taster (GoCardless)", amount: TASTER_AMOUNT / 100, status: "pending_payment", createdAt: new Date().toISOString() };
         await onConfirm(booking);
-        bookingRef.current = booking;
+        attempts.current.set(session.id, booking);
+        saved = true;
       }
-      await openSinglePaymentCheckout(bookingRef.current, date);
+      await openSinglePaymentCheckout(booking, date);
     } catch (error) {
-      setError(`${checkoutErrorDetail(error)}${bookingRef.current ? " Your booking is saved. Retry here or continue payment from My bookings." : ""}`);
+      setError(`${checkoutErrorDetail(error)}${saved ? " Your booking is saved. Retry here or continue payment from My bookings." : ""}`);
     } finally { setSaving(false); }
   }
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
       <div role="dialog" aria-modal="true" aria-labelledby="taster-booking-title" className="ff-body bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md max-h-[92vh] overflow-y-auto p-5 flex flex-col gap-4">
         <div className="flex items-center justify-between gap-3">
-          <h4 id="taster-booking-title" className="ff-display text-xl font-semibold" style={{ color: INK }}>{session.name} Taster</h4>
+          <h4 id="taster-booking-title" className="ff-display text-xl font-semibold" style={{ color: INK }}>Book a taster</h4>
           <button aria-label="Close taster booking" onClick={onClose} disabled={saving} className="text-stone-400"><X size={20}/></button>
         </div>
-        <p className="text-sm text-stone-600">{formatBookingDate(date)} · {session.time}</p>
-        <p className="text-sm text-stone-600">{session.venue}</p>
-        <p className="text-sm font-semibold" style={{ color: INK }}>Pay as you go: £5.00</p>
-        <p className="text-xs text-stone-500">One taster for this class. Pay securely through GoCardless.</p>
-        {!available && <p role="alert" className="text-sm text-red-600">This date is no longer available. Close this window and choose an upcoming date.</p>}
+        <TasterCard classes={classes} bookings={bookings} currentUser={currentUser} bookingForm busy={saving} onBook={confirm}/>
         {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
-        <CancellationPolicyNotice/>
-        <button onClick={confirm} disabled={saving || !available} className="inline-flex items-center justify-center gap-2 font-semibold text-sm py-3 rounded-full disabled:opacity-50" style={{ backgroundColor: TEAL, color: "#fff" }}>
-          {saving ? <><Loader2 size={15} className="animate-spin"/>Opening secure payment…</> : <>Continue to payment<ArrowRight size={15}/></>}
-        </button>
+        {policyDialog}
       </div>
     </div>
   );
@@ -1215,6 +1233,7 @@ function RetreatCard({ retreat, booked, onBook, isSignedUp }) {
    ---- */
 
 function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm, onPaymentFailure }) {
+  const { requestPolicy, policyDialog } = useCheckoutPolicy();
   const isPaidTaster = session.bookingKind === "paid_taster";
   const isBankTransfer = isPaidTaster || session.bookingKind === "bank_transfer";
   const isTaster = !isPaidTaster && !isBankTransfer && type === "class" && (TASTER_MODE || session.bookingKind === "taster");
@@ -1283,6 +1302,12 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
       return setError("Please choose an available lesson date.");
     }
     if (isBankTransfer && !bankBookingDates.length) return setError("There are no upcoming course dates available.");
+    if (type === "class" && !isBankTransfer && !isTaster) {
+      if (!await requestPolicy()) return;
+      if (selectedDates.some(date => !classBookingSchedule(session).includes(date))) {
+        return setError("Please choose an available lesson date.");
+      }
+    }
     if (isBankTransfer) {
       setSaving(true); setError("");
       try {
@@ -1443,6 +1468,7 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+      {policyDialog}
       <div className="ff-body bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md max-h-[92vh] overflow-y-auto">
         <div className="sticky top-0 bg-white flex items-center justify-between px-5 py-4 border-b border-stone-100">
           {step > 1 && step < 2
@@ -1467,7 +1493,6 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
                 </div>
               </div>
               {error && <p className="text-xs text-red-600">{error}</p>}
-              {type === "class" && <CancellationPolicyNotice/>}
               <button onClick={handleConfirm} disabled={saving}
                 className="inline-flex items-center justify-center gap-1.5 font-semibold text-sm py-3 rounded-full transition"
                 style={{ backgroundColor:TEAL, color:"#fff" }}>
@@ -1591,7 +1616,6 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
 
               {error && <p className="text-xs text-red-600">{error}</p>}
 
-              {type === "class" && <CancellationPolicyNotice/>}
               <button onClick={handleConfirm} disabled={saving}
                 className="inline-flex items-center justify-center gap-1.5 font-semibold text-sm py-3 rounded-full transition"
                 style={{ backgroundColor:TEAL, color:"#fff" }}>
@@ -1627,7 +1651,6 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
               <p className="text-xs text-stone-500">Use your name as the payment reference. Your booking will show as awaiting payment until we receive your transfer.</p>
               {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
               {emailNotice && <p role="status" className="text-xs text-amber-700">{emailNotice}</p>}
-              {step !== 2 && type === "class" && <CancellationPolicyNotice/>}
               <button onClick={step === 2 ? onClose : handleConfirm} disabled={saving}
                 className="inline-flex items-center justify-center gap-1.5 font-semibold text-sm py-3 rounded-full disabled:opacity-50" style={{ backgroundColor:TEAL, color:"#fff" }}>
                 {saving ? <Loader2 size={15} className="animate-spin"/> : step === 2 ? "Got it, thank you" : "Reserve my place"}
@@ -1993,6 +2016,7 @@ function cancellationEmail(booking, fallback = {}) {
 }
 
 function MyBookings({ bookings, currentUser, onCancel }) {
+  const { requestPolicy, policyDialog } = useCheckoutPolicy();
   const [confirmCancel, setConfirmCancel] = useState(null);
   const [cancelling, setCancelling] = useState(null);
   const [cancelNotice, setCancelNotice] = useState("");
@@ -2030,6 +2054,7 @@ function MyBookings({ bookings, currentUser, onCancel }) {
   }, [recoveryIds.length]);
   return (
     <div className="max-w-md mx-auto flex flex-col gap-3">
+      {policyDialog}
       {mine.length===0 && pendingPayments.length===0
         ? <div className="text-center py-12">
             <p className="text-sm text-stone-500">No upcoming bookings.</p>
@@ -2102,11 +2127,10 @@ function MyBookings({ bookings, currentUser, onCancel }) {
             : "Payment setup needs checking. We need to check your original payment before you try to pay again."}</p>
           <a href="mailto:Shams@snbhive.com" className="text-xs font-semibold underline" style={{ color: TEAL }}>Contact Shams</a>
           {(isGoCardlessTaster(b) || isGoCardlessCourse(b)) && !b.gocardlessPaymentId && <>
-          <CancellationPolicyNotice/>
           <button disabled={!!resumingTaster}
             onClick={async () => {
               setResumingTaster(b.id); setRecoveryNotice("");
-              try { await openSinglePaymentCheckout(b); }
+              try { if (await requestPolicy()) await openSinglePaymentCheckout(b); }
               catch (error) { setRecoveryNotice(checkoutErrorDetail(error)); }
               finally { setResumingTaster(null); }
             }} className="text-xs font-semibold underline self-start disabled:opacity-50" style={{ color: TEAL }}>
@@ -3237,7 +3261,7 @@ function AdminPage() {
         <div className="flex flex-wrap gap-1 bg-stone-100 rounded-2xl sm:rounded-full p-1 w-fit max-w-full">
           {[["members","Members"],["bookings","Bookings"],["classes","Classes"],["studio-hire","Studio Hire"]].map(([key, label]) => {
             const count = key==="members" ? members.length
-              : key==="classes" ? CLASS_CATALOGUE.length + 1
+              : key==="classes" ? CLASS_CATALOGUE.length
               : key==="studio-hire" ? enquiries.length
               : bookings.length;
             return (
@@ -3467,8 +3491,9 @@ function AdminPage() {
         {/* ── CLASSES TAB ── */}
         {adminTab === "classes" && (
           <div className="grid sm:grid-cols-2 gap-4 w-full max-w-3xl mx-auto">
-            {CLASS_CATALOGUE.map(cls => <AdminClassCard key={cls.id} cls={cls} bookings={bookings} onMoveBooking={moveBooking}/>) }
-            <TasterCard classes={TASTER_CLASSES} bookings={bookings} admin/>
+            {CLASS_CATALOGUE.map(cls => cls.id === "tasters"
+              ? <TasterCard key={cls.id} classes={TASTER_CLASSES} bookings={bookings} admin/>
+              : <AdminClassCard key={cls.id} cls={cls} bookings={bookings} onMoveBooking={moveBooking}/>)}
           </div>
         )}
 
@@ -3572,12 +3597,16 @@ function PaymentCompletePage() {
 }
 
 function BookingApp() {
+  const { requestPolicy, policyDialog } = useCheckoutPolicy();
   const [currentUser, setCurrentUser]       = useState(null);
   const [authLoading, setAuthLoading]       = useState(true);
   const [tab, setTab]                       = useState(() => new URLSearchParams(window.location.search).get("tab") === "bookings" ? "bookings" : "classes");
   const { bookings, setBookings, loading, loadError, reloadBookings } = useBookings(!!currentUser);
   const eligibleTasters = useTasterEligibility(currentUser, bookings);
-  const [tasterBooking, setTasterBooking] = useState(null);
+  const [tasterBooking, setTasterBooking] = useState(false);
+  const availableTasters = TASTER_CLASSES.filter(cls => eligibleTasters.includes(cls.id) &&
+    !tasterBookingUsed(userTasterBooking(bookings, currentUser, cls.id)) &&
+    !(cls.id === "zumba" && userHasBookedRegularClass(bookings, currentUser, cls.id)));
   const [openingCourse, setOpeningCourse] = useState(false);
   const courseAttempt = useRef(null);
   const [courseError, setCourseError] = useState("");
@@ -3663,6 +3692,7 @@ function BookingApp() {
     courseAttempt.current = true;
     setOpeningCourse(true); setCourseError("");
     try {
+      if (!await requestPolicy()) return;
       if (loadError) throw new Error("We couldn't load your bookings. Refresh before booking the course.");
       const dates = classBookingSchedule(session);
       if (!dates.length) throw new Error("There are no upcoming course dates available.");
@@ -3779,17 +3809,15 @@ function BookingApp() {
                 )}
                 {courseError && <p role="alert" className="ff-body text-sm text-red-600 mb-4">{courseError}</p>}
                 <div className="grid sm:grid-cols-2 gap-4">
-  {CLASS_CATALOGUE.map(cls => cls.id === PILATES_SESSIONS[0].id
+  {CLASS_CATALOGUE.map(cls => cls.id === "tasters"
+    ? !loadError && <TasterCard key={cls.id} bookings={bookings} currentUser={currentUser} classes={availableTasters} onBook={() => setTasterBooking(true)}/>
+    : cls.id === PILATES_SESSIONS[0].id
     ? <PilatesCard key={cls.id} onBook={() => setShowPilatesEnquiry(true)}/>
     : <ClassCard key={cls.id} cls={cls} booked={bookedCount(cls.id)}
         bookingType={getUserBookingType(cls.id)} onWaitlist={joinWaitlist}
         openingPayment={cls.bookingKind === "gocardless_course" && openingCourse}
         onBook={() => { if (cls.bookingKind === "gocardless_course") { bookCourse(cls); return; } setModalSession(cls); setModalType("class"); }}/>
   )}
-  {!loadError && <TasterCard bookings={bookings} currentUser={currentUser} classes={TASTER_CLASSES.filter(cls =>
-    eligibleTasters.includes(cls.id) && !tasterBookingUsed(userTasterBooking(bookings, currentUser, cls.id)) &&
-    !(cls.id === "zumba" && userHasBookedRegularClass(bookings, currentUser, cls.id)))}
-    onBook={(session, date) => setTasterBooking({ session, date, previousBooking: userTasterBooking(bookings, currentUser, session.id) })}/>}
 </div>
               </>
             : tab==="workshops"
@@ -3843,13 +3871,14 @@ function BookingApp() {
 
 
 
+      {policyDialog}
       {modalSession && (
         <BookingModal session={modalSession} type={modalType} currentUser={currentUser} bookings={bookings}
           onClose={() => setModalSession(null)} onConfirm={handleConfirmBooking}
           onPaymentFailure={id => updateStatus(id, "cancelled")}/>
       )}
-      {tasterBooking && <TasterBookingModal session={tasterBooking.session} date={tasterBooking.date}
-        currentUser={currentUser} previousBooking={tasterBooking.previousBooking}
+      {tasterBooking && availableTasters.length > 0 && <TasterBookingModal classes={availableTasters} bookings={bookings}
+        currentUser={currentUser}
         onConfirm={handleConfirmBooking} onClose={() => setTasterBooking(null)}/>}
 
       {workshopModal && (

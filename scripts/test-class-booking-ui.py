@@ -1,3 +1,4 @@
+from checkout_policy_fixtures import accept_checkout_policy
 # Browser regression checks against a local Vite server with fixture settings.
 # Requires Python Playwright and /usr/bin/chromium; see CLASS_BOOKING_CHANGES.md.
 from urllib.request import urlopen
@@ -77,7 +78,7 @@ with sync_playwright() as p:
  page.goto('http://127.0.0.1:5174/');page.get_by_role('heading',name='Zumba',exact=True).wait_for()
  assert page.get_by_role('heading',name='Boxing',exact=True).count()==0
  page.get_by_role('region',name='Tasters',exact=True).wait_for()
- assert page.locator('main h3').all_text_contents()==['Zumba','BoxFit','Reformer Pilates','Self Defence','Somatic','Strength & Conditioning','Tasters']
+ assert page.locator('main h3').all_text_contents()==['Zumba','BoxFit','Tasters','Self Defence','Reformer Pilates','Somatic','Strength & Conditioning']
  assert card(page,'BoxFit').get_by_role('button',name='Book',exact=True).is_enabled()
  assert 'taster' not in card(page,'BoxFit').inner_text().lower()
  for date in ['Thursday, 15 October 2026','Thursday, 22 October 2026','Thursday, 29 October 2026']:
@@ -93,6 +94,7 @@ with sync_playwright() as p:
  self_card=card(page,'Self Defence')
  for date in ['Wednesday 18th November','Wednesday 25th November','Wednesday 2nd December']: assert date in self_card.inner_text()
  self_card.get_by_role('button',name='Book',exact=True).click()
+ accept_checkout_policy(page)
  page.get_by_role('heading',name="You're booked! 🎉",exact=True).wait_for()
  assert len(rows)==1 and rows[0]['amount']==90 and rows[0]['status']=='paid'
  assert rows[0]['plan']=='Course (GoCardless)' and checkout[-1]['plan']=='course'
@@ -111,14 +113,17 @@ with sync_playwright() as p:
  context.add_init_script('localStorage.setItem("snb_session",'+json.dumps(json.dumps(user))+');')
  context.route('https://fixture.supabase.test/**',route_api);context.route('https://fonts.googleapis.com/**',lambda route:route.abort())
  page=context.new_page();page.goto('http://127.0.0.1:5174/');card(page,'Self Defence').get_by_role('button',name='Book',exact=True).click()
+ accept_checkout_policy(page)
  page.get_by_role('alert').wait_for()
  assert len(rows)==0 and not checkout
  fail_booking=False;fail_checkout=True
  card(page,'Self Defence').get_by_role('button',name='Book',exact=True).click()
+ accept_checkout_policy(page)
  page.get_by_text('Fixture checkout unavailable',exact=False).wait_for()
  assert len(rows)==1 and rows[0]['amount']==90 and len(checkout)==1
  saved_id=rows[0]['id'];fail_checkout=False
  card(page,'Self Defence').get_by_role('button',name='Book',exact=True).click()
+ accept_checkout_policy(page)
  page.get_by_role('heading',name="You're booked! 🎉",exact=True).wait_for()
  assert len(rows)==1 and checkout[-1]['booking_id']==saved_id
  page.goto('http://127.0.0.1:5174/');page.get_by_role('heading',name='Zumba',exact=True).wait_for()
@@ -269,6 +274,19 @@ with sync_playwright() as p:
  card(page,'Zumba').get_by_role('button',name='Book',exact=True).click()
  page.get_by_role('checkbox',name='Friday, 23 October 2026',exact=True).check()
  page.get_by_role('button',name='Continue to payment',exact=True).click()
+ popup=page.get_by_role('dialog',name='Cancellation Policy',exact=True)
+ popup.wait_for()
+ assert not rows and not checkout
+ with context.expect_page() as terms_info:
+  popup.get_by_role('link').click()
+ terms=terms_info.value
+ terms.get_by_role('heading',name='Class, Booking & Membership Terms and Conditions',exact=True).wait_for()
+ terms.close()
+ popup.get_by_role('button',name='Back',exact=True).click()
+ assert page.get_by_role('checkbox',name='Friday, 23 October 2026',exact=True).is_checked()
+ assert not rows and not checkout
+ page.get_by_role('button',name='Continue to payment',exact=True).click()
+ accept_checkout_policy(page)
  page.get_by_role('heading',name="You're booked! 🎉",exact=True).wait_for()
  assert len(rows)==2 and sorted(row['booking_date'] for row in rows)==['2026-10-09','2026-10-23']
  assert all(row['status']=='paid' and row.get('gocardless_payment_id') for row in rows)
@@ -282,6 +300,12 @@ with sync_playwright() as p:
  page.get_by_role('button',name=re.compile('^Monthly membership')).click()
  page.get_by_role('radio',name='Friday, 16 October 2026',exact=True).check()
  page.get_by_role('button',name='Continue to payment',exact=True).click()
+ popup.wait_for()
+ assert not rows and not checkout
+ page.keyboard.press('Escape')
+ assert page.get_by_role('radio',name='Friday, 16 October 2026',exact=True).is_checked()
+ page.get_by_role('button',name='Continue to payment',exact=True).click()
+ accept_checkout_policy(page)
  page.get_by_role('heading',name="You're booked! 🎉",exact=True).wait_for()
  assert sorted(row['booking_date'] for row in rows)==['2026-10-16','2026-10-23','2026-10-30']
  assert sum(row['amount'] for row in rows)==26.25
@@ -300,6 +324,7 @@ with sync_playwright() as p:
  assert checkboxes.count()==3
  page.get_by_role('checkbox',name='Thursday, 29 October 2026',exact=True).check()
  page.get_by_role('button',name='Continue to payment',exact=True).click()
+ accept_checkout_policy(page)
  page.get_by_role('heading',name="You're booked! 🎉",exact=True).wait_for()
  live_box=[row for row in rows if row['plan']=='Pay as you go']
  assert len(live_box)==2 and sorted(row['booking_date'] for row in live_box)==['2026-10-15','2026-10-29']
@@ -345,6 +370,7 @@ with sync_playwright() as p:
   assert first_lesson.get_by_role('radio').count()==3
   first_lesson.get_by_role('radio',name=start,exact=True).check()
   page.get_by_role('button',name='Continue to payment',exact=True).click()
+  accept_checkout_policy(page)
   page.get_by_role('heading',name="You're booked! 🎉",exact=True).wait_for()
   assert sorted(row['booking_date'] for row in rows)==expected_dates
   assert sum(row['amount'] for row in rows)==expected_amount

@@ -1,3 +1,4 @@
+from checkout_policy_fixtures import accept_checkout_policy
 """Self Defence checkout, browser Back, retries and cancellation with local fixtures."""
 import json
 import re
@@ -87,6 +88,22 @@ with sync_playwright() as p:
         rows = []; checkouts = []; emails = []; authorised = set()
         context, page = context_for(browser, width)
         card(page).get_by_role('button', name='Book', exact=True).click()
+        popup = page.get_by_role('dialog', name='Cancellation Policy', exact=True)
+        popup.wait_for()
+        assert not rows and not checkouts and not emails
+        assert '24 hours before your class' in popup.inner_text()
+        assert popup.evaluate('(el) => el.matches(":modal")')
+        assert popup.evaluate('(el) => el.contains(document.activeElement)')
+        popup.screenshot(path=f'/tmp/snb-checkout-policy-{width}.png')
+        popup.get_by_role('button', name='Back', exact=True).click()
+        page.wait_for_function("document.activeElement?.textContent.trim() === 'Book'")
+        assert not rows and not checkouts
+        card(page).get_by_role('button', name='Book', exact=True).click()
+        popup.wait_for()
+        page.keyboard.press('Escape')
+        assert not rows and not checkouts
+        card(page).get_by_role('button', name='Book', exact=True).click()
+        accept_checkout_policy(page)
         page.get_by_role('heading', name='GoCardless checkout', exact=True).wait_for()
         assert len(rows) == 1 and rows[0]['status'] == 'pending_payment'
         booking_id = rows[0]['id']
@@ -98,10 +115,12 @@ with sync_playwright() as p:
         page.get_by_role('button', name='Continue course payment', exact=True).wait_for()
         assert page.get_by_role('button', name='Cancel class', exact=True).count() == 0
         page.get_by_role('button', name='Continue course payment', exact=True).click()
+        accept_checkout_policy(page)
         page.get_by_role('heading', name='GoCardless checkout', exact=True).wait_for()
         page.go_back()
         page.get_by_role('button', name='Classes', exact=True).first.click()
         card(page).get_by_role('button', name='Book', exact=True).click()
+        accept_checkout_policy(page)
         page.get_by_role('heading', name='GoCardless checkout', exact=True).wait_for()
         assert len(rows) == 1 and all(item['booking_id'] == booking_id for item in checkouts)
         assert not emails

@@ -20,7 +20,7 @@ rows.append(dict(id='course-member', session_id='self_defence', session_name='Se
                  type='class', name='Course Member', email='course@example.test', user_id='course',
                  booking_date='2026-11-18', plan='Course (bank transfer)', amount=90, status='paid'))
 original = copy.deepcopy(rows)
-titles = ['Zumba', 'BoxFit', 'Reformer Pilates', 'Self Defence', 'Somatic', 'Strength & Conditioning']
+titles = ['Zumba', 'BoxFit', 'Tasters', 'Self Defence', 'Reformer Pilates', 'Somatic', 'Strength & Conditioning']
 
 def api(route):
     request = route.request
@@ -32,6 +32,7 @@ def api(route):
     route.fulfill(status=200, content_type='application/json', body=json.dumps(result))
 
 def card(page, title, admin=False):
+    if title == 'Tasters': return page.get_by_role('region', name='Tasters', exact=True)
     selector = 'div.bg-white.rounded-xl.border.border-stone-200.shadow-sm.overflow-hidden' if admin else 'div.bg-white.rounded-2xl'
     return page.locator(selector).filter(has=page.get_by_role('heading', name=title, exact=True))
 
@@ -63,14 +64,14 @@ with sync_playwright() as p:
             page.goto('http://127.0.0.1:5174/admin' if admin else 'http://127.0.0.1:5174/')
             if admin: page.get_by_role('button', name=re.compile('^Classes')).click()
             page.get_by_role('heading', name='BoxFit', exact=True).wait_for()
-            assert page.locator('h3').all_text_contents() == titles + ['Tasters']
+            assert page.locator('h3').all_text_contents() == titles
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             boxes = [card(page, title, admin).bounding_box() for title in titles]
             if width >= 640:
                 assert boxes[0]['y'] == boxes[1]['y'] and boxes[2]['y'] == boxes[3]['y'] and boxes[4]['y'] == boxes[5]['y']
                 assert boxes[0]['x'] == boxes[2]['x'] == boxes[4]['x']
             else:
-                assert all(boxes[i]['y'] < boxes[i+1]['y'] for i in range(5))
+                assert all(boxes[i]['y'] < boxes[i+1]['y'] for i in range(6))
             page.screenshot(path=f'/tmp/snb-class-sync-{width}-{"admin" if admin else "customer"}.png', full_page=True)
             contexts.append(context)
             pages.append(page)
