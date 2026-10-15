@@ -73,16 +73,52 @@ try {
     assert.equal((await post(sessionId)).status, 200);
     assert.ok(calls.some(call => call.path === "/billing_request_templates/BRT_TASTER"));
     delete env[`GOCARDLESS_${sessionId.toUpperCase()}_TASTER_TEMPLATE_ID`];
+    for (const [index, fields] of [
+      { payment_request_scheme: "faster_payments", mandate_request_scheme: "bacs", mandate_request_currency: "GBP" },
+      { payment_request_scheme: "faster_payments", payment_request_amount: null, payment_request_currency: null, mandate_request_scheme: "bacs" },
+      { payment_request_scheme: null, payment_request_amount: null, payment_request_currency: null, mandate_request_currency: "GBP" },
+      { payment_request_scheme: " bacs ", payment_request_amount: "", payment_request_currency: " gbp ", mandate_request_scheme: " BACS " },
+      { payment_request_scheme: "faster_payments", mandate_request_scheme: null, mandate_request_currency: "GBP" },
+    ].entries()) {
+      const id = `${sessionId}-variant-${index}`;
+      rows = [{ ...booking(sessionId), id, payment_group_id: id }];
+      templates = [{ ...template("BRT_TASTER", templateName), ...fields }]; calls = [];
+      assert.equal((await post(sessionId)).status, 200);
+      const request = calls.find(call => call.path === "/billing_requests" && call.method === "POST").body.billing_requests;
+      assert.equal(request.payment_request.amount, 500, "open templates cannot let the customer change the £5 app price");
+      assert.equal(request.payment_request.currency, "GBP");
+      assert.equal(request.metadata.booking_id, id);
+      assert.equal(request.payment_request.scheme, "bacs", "even hybrid templates must collect the £5 by Direct Debit");
+      assert.equal(request.mandate_request.scheme, "bacs");
+      if (index === 0) {
+        const originalKey = calls.find(call => call.path === "/billing_requests" && call.method === "POST").headers["Idempotency-Key"];
+        calls = []; replay = true;
+        assert.equal((await post(sessionId)).status, 200);
+        assert.equal(calls.find(call => call.path === "/billing_requests" && call.method === "POST").headers["Idempotency-Key"], originalKey);
+        assert.ok(!calls.some(call => call.path === "/rest/v1/bookings" && call.method === "POST"), "retrying the saved hybrid-template booking cannot create a second booking");
+        assert.ok(calls.some(call => call.path === "/billing_requests/BR_TASTER"), "retry resumes the canonical provider request");
+        replay = false;
+      }
+    }
+    console.log(`PASS ${templateName}: hybrid Pay by Bank + DD Set up creates only a £5 GBP Bacs payment/mandate; open fields and normalized settings supported`);
     console.log(`PASS ${templateName}: exact £5 template, metadata/return flow, optional template ID, pagination, idempotent retries and no subscription`);
   }
   rows = [booking("boxfit")];
-  for (const invalid of [[], [template("OTHER", "Zumba Taster")],
-    [template("A", "Boxfit Taster"), template("B", "Boxfit Taster")],
-    [{ ...template("A", "Boxfit Taster"), payment_request_amount: "1000" }],
-    [{ ...template("A", "Boxfit Taster"), payment_request_currency: "EUR" }],
-    [{ ...template("A", "Boxfit Taster"), payment_request_scheme: "faster_payments" }]]) {
+  for (const [invalid, expected] of [
+    [[], /exactly one/], [[template("OTHER", "Zumba Taster")], /exactly one/],
+    [[template("A", "Boxfit Taster"), template("B", "Boxfit Taster")], /exactly one/],
+    [[{ ...template("A", "Boxfit Taster"), payment_request_amount: "1000" }], /amount to £5/],
+    [[{ ...template("A", "Boxfit Taster"), payment_request_amount: "5" }], /£0.05/],
+    [[{ ...template("A", "Boxfit Taster"), payment_request_currency: "EUR" }], /uses EUR/],
+    [[{ ...template("A", "Boxfit Taster"), payment_request_scheme: "sepa" }], /unsupported payment scheme sepa/],
+    [[{ ...template("A", "Boxfit Taster"), payment_request_scheme: "faster_payments", mandate_request_scheme: null }], /without a UK Direct Debit setup/],
+    [[{ ...template("A", "Boxfit Taster"), mandate_request_scheme: "sepa" }], /mandate scheme sepa/],
+    [[{ ...template("A", "Boxfit Taster"), mandate_request_currency: "EUR" }], /mandate currency EUR/],
+  ]) {
     templates = invalid; calls = [];
-    assert.equal((await post("boxfit")).status, 500);
+    const result = await post("boxfit");
+    assert.equal(result.status, 500);
+    assert.match((await result.json()).error, expected, "errors identify the actual mismatched setting");
     assert.ok(!calls.some(call => call.method === "POST"), "bad template settings cannot create payments");
   }
   failTemplates = true; calls = [];
