@@ -3599,11 +3599,16 @@ function PaymentCompletePage() {
   );
 }
 
+function initialCustomerTab() {
+  const refreshing = window.performance.getEntriesByType("navigation")[0]?.type === "reload";
+  return !refreshing && new URLSearchParams(window.location.search).get("tab") === "bookings" ? "bookings" : "classes";
+}
+
 function BookingApp() {
   const { requestPolicy, policyDialog } = useCheckoutPolicy();
   const [currentUser, setCurrentUser]       = useState(null);
   const [authLoading, setAuthLoading]       = useState(true);
-  const [tab, setTab]                       = useState(() => new URLSearchParams(window.location.search).get("tab") === "bookings" ? "bookings" : "classes");
+  const [tab, setTab]                       = useState(initialCustomerTab);
   const { bookings, setBookings, loading, loadError, reloadBookings } = useBookings(!!currentUser);
   const eligibleTasters = useTasterEligibility(currentUser, bookings);
   const [tasterBooking, setTasterBooking] = useState(false);
@@ -3627,6 +3632,16 @@ function BookingApp() {
     { id:"account", label:"Account", shortLabel:"Account", icon:ShieldCheck },
   ];
 
+  // Checkout return links select My bookings once. Keep the URL clean so a
+  // refresh or a saved app address opens the normal Classes landing page.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("tab")) {
+      url.searchParams.delete("tab");
+      window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+  }, []);
+
   // Restore session on load — check expiry
   useEffect(() => {
     (async () => {
@@ -3637,7 +3652,6 @@ function BookingApp() {
             await storage.remove("snb_session"); // expired — force re-login
           } else {
             setCurrentUser(s);
-            setTab(new URLSearchParams(window.location.search).get("tab") === "bookings" ? "bookings" : "classes");
           }
         }
       } catch {}
@@ -3724,7 +3738,7 @@ function BookingApp() {
   }
   async function handleSignOut() {
     await storage.remove("snb_session");
-    setCurrentUser(null); setBookings([]);
+    setCurrentUser(null); setBookings([]); setTab("classes");
   }
   async function cancelMyBooking(id) {
     const booking = bookings.find(b => b.id === id);
@@ -3756,7 +3770,7 @@ function BookingApp() {
   );
 
   // Not logged in — show registration / login
-  if (!currentUser) return <AuthScreen onAuth={s => { setCurrentUser(s); setTab(new URLSearchParams(window.location.search).get("tab") === "bookings" ? "bookings" : "classes"); }}/>;
+  if (!currentUser) return <AuthScreen onAuth={s => setCurrentUser(s)}/>;
 
   return (
     <div className="snb-page min-h-screen w-full" style={{ backgroundColor:BG }}>
