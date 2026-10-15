@@ -67,7 +67,9 @@ export async function tasterPaymentRequest(sessionId: keyof typeof CLASS_TASTERS
     // Dashboard "Pay by Bank + DD Set up" templates combine Faster Payments
     // with a Bacs mandate. The booking app collects the £5 by Direct Debit,
     // so use that mandate's Bacs scheme rather than its instant-payment leg.
-    paymentRequest: { amount: TASTER_AMOUNT, currency: "GBP", scheme: "bacs",
+    // Match the existing PAYG request contract: the mandate selects Bacs.
+    // Do not pass a separate payment_request.scheme for the DD payment.
+    paymentRequest: { amount: TASTER_AMOUNT, currency: "GBP",
       description: template.payment_request_description || name },
     mandateRequest: { scheme: "bacs" },
   };
