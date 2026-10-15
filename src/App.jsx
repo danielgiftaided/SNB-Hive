@@ -977,24 +977,30 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = 
   );
 }
 
-async function openTasterCheckout(booking) {
+async function openTasterCheckout(booking, date = booking.bookingDate) {
   const result = await callEdgeFunction("gocardless-checkout", {
     booking_id: booking.id, session_id: booking.sessionId, plan: "taster",
+    booking_date: date,
     return_url: `${window.location.origin}/payment-complete?booking_id=${encodeURIComponent(booking.id)}`,
     exit_url: `${window.location.origin}/?tab=bookings`,
   });
   if (!result?.authorisation_url) throw new Error("Checkout URL was not returned");
+  if (date !== booking.bookingDate && result.booking_date !== date) {
+    throw new Error("Your new lesson date could not be confirmed. Please refresh and retry before continuing to payment.");
+  }
   window.location.assign(result.authorisation_url);
 }
 
-function TasterCard({ classes, bookings, onBook, admin = false }) {
+function TasterCard({ classes, bookings, onBook, admin = false, currentUser }) {
   const today = useBookingDay();
   const [classId, setClassId] = useState(classes[0]?.id);
   const [date, setDate] = useState("");
   const cls = classes.find(item => item.id === classId) || classes[0];
   if (!cls) return null;
   const dates = classBookingSchedule(cls, today);
-  const selectedDate = dates.includes(date) ? date : dates[0];
+  const previous = currentUser ? userTasterBooking(bookings, currentUser, cls.id) : null;
+  const preferredDate = previous && !tasterBookingUsed(previous) && dates.includes(previous.bookingDate) ? previous.bookingDate : dates[0];
+  const selectedDate = dates.includes(date) ? date : preferredDate;
   const prefix = admin ? "admin-taster" : "taster";
   const registrations = bookings.filter(booking => booking.sessionId === cls.id && isTasterBooking(booking) &&
     booking.status !== "cancelled" && bookingMatchesClassDate(booking, selectedDate));
@@ -1060,8 +1066,8 @@ function TasterCard({ classes, bookings, onBook, admin = false }) {
   );
 }
 
-function TasterBookingModal({ session, date, currentUser, onConfirm, onClose }) {
-  const bookingRef = useRef(null);
+function TasterBookingModal({ session, date, currentUser, previousBooking, onConfirm, onClose }) {
+  const bookingRef = useRef(previousBooking || null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const today = useBookingDay();
@@ -1079,7 +1085,7 @@ function TasterBookingModal({ session, date, currentUser, onConfirm, onClose }) 
         await onConfirm(booking);
         bookingRef.current = booking;
       }
-      await openTasterCheckout(bookingRef.current);
+      await openTasterCheckout(bookingRef.current, date);
     } catch (error) {
       setError(`${checkoutErrorDetail(error)}${bookingRef.current ? " Your booking is saved. Retry here or continue payment from My bookings." : ""}`);
     } finally { setSaving(false); }
@@ -3746,10 +3752,10 @@ function BookingApp() {
         bookingType={getUserBookingType(cls.id)} onWaitlist={joinWaitlist}
         onBook={() => { setModalSession(cls); setModalType("class"); }}/>
   )}
-  {!loadError && <TasterCard bookings={bookings} classes={TASTER_CLASSES.filter(cls =>
-    eligibleTasters.includes(cls.id) && !userTasterBooking(bookings, currentUser, cls.id) &&
+  {!loadError && <TasterCard bookings={bookings} currentUser={currentUser} classes={TASTER_CLASSES.filter(cls =>
+    eligibleTasters.includes(cls.id) && !tasterBookingUsed(userTasterBooking(bookings, currentUser, cls.id)) &&
     !(cls.id === "zumba" && userHasBookedRegularClass(bookings, currentUser, cls.id)))}
-    onBook={(session, date) => setTasterBooking({ session, date })}/>}
+    onBook={(session, date) => setTasterBooking({ session, date, previousBooking: userTasterBooking(bookings, currentUser, session.id) })}/>}
 </div>
               </>
             : tab==="workshops"
@@ -3809,7 +3815,8 @@ function BookingApp() {
           onPaymentFailure={id => updateStatus(id, "cancelled")}/>
       )}
       {tasterBooking && <TasterBookingModal session={tasterBooking.session} date={tasterBooking.date}
-        currentUser={currentUser} onConfirm={handleConfirmBooking} onClose={() => setTasterBooking(null)}/>}
+        currentUser={currentUser} previousBooking={tasterBooking.previousBooking}
+        onConfirm={handleConfirmBooking} onClose={() => setTasterBooking(null)}/>}
 
       {workshopModal && (
         <WorkshopBookingModal workshop={workshopModal} currentUser={currentUser}

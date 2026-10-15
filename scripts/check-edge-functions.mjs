@@ -53,6 +53,7 @@ if (!/\[functions\.send-email\]\s+verify_jwt\s*=\s*false/.test(supabaseConfig)) 
 const deploymentChecks = [
   ["deploys lifetime taster availability before payment functions", "taster_availability_ready"],
   ["includes the taster availability migration", "20261015000000_taster_card_eligibility.sql"],
+  ["includes resumable unfinished taster eligibility", "20261015010000_resume_unfinished_tasters.sql"],
   ["redeploys when send-email changes", '- "supabase/functions/send-email/**"'],
   ["deploys the send-email function", "supabase functions deploy send-email --no-verify-jwt"],
   ["redeploys when booking sync changes", '- "supabase/functions/gocardless-sync/**"'],

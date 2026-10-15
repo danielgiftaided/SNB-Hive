@@ -11,6 +11,7 @@ on:
       - "supabase/functions/_shared/**"
       - "supabase/migrations/20261012000000_move_boxfit_booking_dates.sql"
       - "supabase/migrations/20261015000000_taster_card_eligibility.sql"
+      - "supabase/migrations/20261015010000_resume_unfinished_tasters.sql"
       - "supabase/config.toml"
       - ".github/workflows/deploy-payment-functions.yml"
   workflow_dispatch:
@@ -75,6 +76,7 @@ jobs:
             'supabase/migrations/20261007000000_lifetime_class_tasters.sql',
             'supabase/migrations/20261008010000_regular_zumba_taster_eligibility.sql',
             'supabase/migrations/20261015000000_taster_card_eligibility.sql',
+            'supabase/migrations/20261015010000_resume_unfinished_tasters.sql',
           ];
           const query = 'begin;\n' + files.map(file => readFileSync(file, 'utf8')).join('\n') +
             '\ncommit;\nselect to_regprocedure(\'public.class_taster_eligibility(text,text)\') is not null as taster_availability_ready;';
