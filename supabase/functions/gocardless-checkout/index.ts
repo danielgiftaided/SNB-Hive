@@ -13,7 +13,7 @@ import {
 const GC_API = Deno.env.get("GOCARDLESS_API_URL") || "https://api.gocardless.com";
 const GC_VERSION = "2015-07-06";
 const PRICES = { payg: PAYG_AMOUNT, membership: MEMBERSHIP_MONTHLY_AMOUNT, taster: TASTER_AMOUNT } as const;
-const CHECKOUT_VERSION = "class-payments-v5-taster-templates";
+const CHECKOUT_VERSION = "class-payments-v6-taster-price";
 
 async function getBooking(id: string) {
   const url = Deno.env.get("SUPABASE_URL");

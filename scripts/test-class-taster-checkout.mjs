@@ -79,18 +79,23 @@ try {
       { payment_request_scheme: null, payment_request_amount: null, payment_request_currency: null, mandate_request_currency: "GBP" },
       { payment_request_scheme: " bacs ", payment_request_amount: "", payment_request_currency: " gbp ", mandate_request_scheme: " BACS " },
       { payment_request_scheme: "faster_payments", mandate_request_scheme: null, mandate_request_currency: "GBP" },
+      { payment_request_amount: "5", payment_request_scheme: "faster_payments", mandate_request_currency: "GBP" },
+      { payment_request_amount: "5.00", payment_request_scheme: "faster_payments", mandate_request_currency: "GBP" },
+      { payment_request_amount: 5 },
+      { payment_request_amount: 500 },
+      { payment_request_amount: "10.00" },
     ].entries()) {
       const id = `${sessionId}-variant-${index}`;
       rows = [{ ...booking(sessionId), id, payment_group_id: id }];
       templates = [{ ...template("BRT_TASTER", templateName), ...fields }]; calls = [];
       assert.equal((await post(sessionId)).status, 200);
       const request = calls.find(call => call.path === "/billing_requests" && call.method === "POST").body.billing_requests;
-      assert.equal(request.payment_request.amount, 500, "open templates cannot let the customer change the £5 app price");
+      assert.equal(request.payment_request.amount, 500, "template amount formatting/settings must not change or block the server's £5 price");
       assert.equal(request.payment_request.currency, "GBP");
       assert.equal(request.metadata.booking_id, id);
       assert.equal(request.payment_request.scheme, "bacs", "even hybrid templates must collect the £5 by Direct Debit");
       assert.equal(request.mandate_request.scheme, "bacs");
-      if (index === 0) {
+      if (index === 0 || fields.payment_request_amount === "5") {
         const originalKey = calls.find(call => call.path === "/billing_requests" && call.method === "POST").headers["Idempotency-Key"];
         calls = []; replay = true;
         assert.equal((await post(sessionId)).status, 200);
@@ -100,15 +105,13 @@ try {
         replay = false;
       }
     }
-    console.log(`PASS ${templateName}: hybrid Pay by Bank + DD Set up creates only a £5 GBP Bacs payment/mandate; open fields and normalized settings supported`);
+    console.log(`PASS ${templateName}: template amounts 5/5.00/500, open values and changed settings all create exactly 500p GBP by Bacs; saved booking retries retain original keys`);
     console.log(`PASS ${templateName}: exact £5 template, metadata/return flow, optional template ID, pagination, idempotent retries and no subscription`);
   }
   rows = [booking("boxfit")];
   for (const [invalid, expected] of [
     [[], /exactly one/], [[template("OTHER", "Zumba Taster")], /exactly one/],
     [[template("A", "Boxfit Taster"), template("B", "Boxfit Taster")], /exactly one/],
-    [[{ ...template("A", "Boxfit Taster"), payment_request_amount: "1000" }], /amount to £5/],
-    [[{ ...template("A", "Boxfit Taster"), payment_request_amount: "5" }], /£0.05/],
     [[{ ...template("A", "Boxfit Taster"), payment_request_currency: "EUR" }], /uses EUR/],
     [[{ ...template("A", "Boxfit Taster"), payment_request_scheme: "sepa" }], /unsupported payment scheme sepa/],
     [[{ ...template("A", "Boxfit Taster"), payment_request_scheme: "faster_payments", mandate_request_scheme: null }], /without a UK Direct Debit setup/],
@@ -126,7 +129,7 @@ try {
   assert.ok(!calls.some(call => call.method === "POST"));
   failTemplates = false;
   const root = booking("boxfit");
-  for (const patch of [{ amount: 10 }, { amount: 0 }, { status: "cancelled" }, { plan: "Taster (bank transfer)" },
+  for (const patch of [{ amount: 10 }, { amount: 0 }, { amount: 0.05 }, { amount: 500 }, { status: "cancelled" }, { plan: "Taster (bank transfer)" },
     { plan: "Pay as you go" }, { session_id: "unconfigured" }]) {
     const row = { ...root, ...patch };
     assert.ok(bookingRowsValidationIssue(row, [row], "taster", 1000));
@@ -134,8 +137,15 @@ try {
   assert.equal(bookingRowsValidationIssue(root, [root, { ...root, id: "second-taster" }], "taster", 1000), "wrong_plan");
   assert.equal(bookingRowsValidationIssue(root, [root], "payg", 1000), "wrong_plan");
   assert.equal(bookingRowsValidationIssue(root, [root], "membership", 1000), "wrong_plan");
+  for (const amount of [0.05, 500]) {
+    rows = [{ ...root, amount }]; calls = [];
+    const result = await post("boxfit");
+    assert.equal(result.status, 400);
+    assert.equal((await result.json()).reason, "wrong_amount");
+    assert.ok(calls.every(call => call.path === "/rest/v1/bookings"), "a saved 5p/£500 booking cannot reach GoCardless");
+  }
   rows = [{ ...root, gocardless_payment_id: "PM_ALREADY" }]; calls = [];
   assert.equal((await post("boxfit")).status, 400);
   assert.ok(!calls.some(call => call.path.startsWith("/billing_request") || call.method === "POST"));
-  console.log("PASS invalid/missing/duplicate/wrong-price/wrong-currency templates, provider outage, multi-date/plan discount bypass and already-paid bookings fail before new charges");
+  console.log("PASS invalid/missing/duplicate/wrong-currency templates, provider outage, wrong booking amounts, multi-date/plan discount bypass and already-paid bookings fail before new charges");
 } finally { globalThis.fetch = originalFetch; delete globalThis.Deno; }
