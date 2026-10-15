@@ -73,6 +73,10 @@ assert.deepEqual(boxfitHistory.filter(bookingIsClassRegistration).map(row => row
 assert.deepEqual(classBookingDates(boxfitHistory, "boxfit", ["2026-10-15", "2026-10-20", "2026-10-27"]), ["2026-10-15", "2026-10-20", "2026-10-27"]);
 assert.equal(bookingIsClassRegistration({ ...boxfitHistory[2], sessionId: "zumba", plan: "Taster (bank transfer)" }), true, "Zumba paid tasters still reserve class places");
 assert.deepEqual(boxfitHistory, boxfitSnapshot, "excluding old BoxFit tasters must preserve their records and members");
+const newBoxfitTaster = { ...boxfitHistory[2], plan: "Taster (GoCardless)", amount: 5, gocardlessPaymentId: "PM_TASTER" };
+assert.equal(bookingIsClassRegistration(newBoxfitTaster), true, "new £5 BoxFit tasters share the live class register/capacity");
+assert.equal(classPaymentIsPending({ ...newBoxfitTaster, status: "pending_payment" }), true);
+assert.deepEqual(bookingSyncIds([{ ...newBoxfitTaster, id: "gc-taster" }]), ["gc-taster"], "new GoCardless tasters use the verified recovery flow");
 console.log("PASS BoxFit register excludes all historical tasters without erasing history or excluding live Zumba tasters");
 
 const member = { id: "member", email: "member@example.test" };

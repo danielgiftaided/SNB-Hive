@@ -9,12 +9,13 @@ import {
 import storage, { supabase } from "./storage.js";
 import { useBookings } from "./use-bookings.js";
 import { useBookingDay } from "./use-booking-day.js";
-import { bookingIsActive, bookingIsUpcoming, bookingIsClassRegistration, bookingBelongsToUser, classPaymentIsPending, classUsesGoCardless, bookingSyncIds, bookingSyncIssue, bookingMatchesClassDate, classBookingDates, UNDATED_BOOKING, isTasterBooking, userHasBookedRegularClass, userTasterBooking, tasterBookingUsed } from "./booking-utils.js";
+import { useTasterEligibility } from "./use-taster-eligibility.js";
+import { bookingIsActive, bookingIsUpcoming, bookingIsClassRegistration, bookingBelongsToUser, classPaymentIsPending, classUsesGoCardless, bookingSyncIds, bookingSyncIssue, bookingMatchesClassDate, classBookingDates, UNDATED_BOOKING, isTasterBooking, isGoCardlessTaster, userHasBookedRegularClass, userTasterBooking, tasterBookingUsed } from "./booking-utils.js";
 import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../supabase/functions/_shared/membership.ts";
 import { membershipDatesFrom } from "../supabase/functions/_shared/membership-bookings.ts";
 import { checkoutErrorDetail, singleMembershipBooking } from "./checkout.js";
 import { downloadCSV, plainDashes } from "./csv.js";
-import { CLASS_PAYMENTS, PAYG_AMOUNT, TASTER_AMOUNT, SELF_DEFENCE_DATES, SELF_DEFENCE_PRICE, CLASS_BANK_ACCOUNT, classPaymentConfig, classBookingSchedule, upcomingBookingDates } from "../supabase/functions/_shared/class-config.ts";
+import { CLASS_PAYMENTS, CLASS_TASTERS, PAYG_AMOUNT, TASTER_AMOUNT, SELF_DEFENCE_DATES, SELF_DEFENCE_PRICE, CLASS_BANK_ACCOUNT, classPaymentConfig, classBookingSchedule, upcomingBookingDates } from "../supabase/functions/_shared/class-config.ts";
 
 /* =====================================================================
    CONFIG — edit these to customise the app.
@@ -96,6 +97,7 @@ const DEFAULT_RETREATS = [
 
 // BoxFit and Zumba share pricing, checkout and membership handling.
 const PAID_CLASS_IDS = new Set(Object.keys(CLASS_PAYMENTS));
+const TASTER_CLASSES = Object.keys(CLASS_TASTERS).map(id => DEFAULT_CLASSES.find(cls => cls.id === id));
 
 // Retreat payments continue to use bank transfer. Replace these
 // with your real account details before going live — knowing an account
@@ -117,9 +119,8 @@ const BANK_TRANSFER_DETAILS = {
 // false = full booking with PAYG / membership / GoCardless payment
 // Change this one line to switch between the two modes.
 const TASTER_MODE = false;
-// Set to true to stop new taster bookings across every class (existing
-// bookings/cancellations are unaffected — this only blocks NEW bookings).
-// Flip back to false whenever you want to reopen taster bookings.
+// Legacy free/bank-transfer taster flows stay closed. The live £5 GoCardless
+// card is configured separately through CLASS_TASTERS.
 const TASTERS_CLOSED = true;
 
 /* ===================================================================== */
@@ -970,6 +971,134 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = 
           {!disabled && (
             <ArrowRight size={14}/>
           )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+async function openTasterCheckout(booking) {
+  const result = await callEdgeFunction("gocardless-checkout", {
+    booking_id: booking.id, session_id: booking.sessionId, plan: "taster",
+    return_url: `${window.location.origin}/payment-complete?booking_id=${encodeURIComponent(booking.id)}`,
+    exit_url: `${window.location.origin}/?tab=bookings`,
+  });
+  if (!result?.authorisation_url) throw new Error("Checkout URL was not returned");
+  window.location.assign(result.authorisation_url);
+}
+
+function TasterCard({ classes, bookings, onBook, admin = false }) {
+  const today = useBookingDay();
+  const [classId, setClassId] = useState(classes[0]?.id);
+  const [date, setDate] = useState("");
+  const cls = classes.find(item => item.id === classId) || classes[0];
+  if (!cls) return null;
+  const dates = classBookingSchedule(cls, today);
+  const selectedDate = dates.includes(date) ? date : dates[0];
+  const prefix = admin ? "admin-taster" : "taster";
+  const registrations = bookings.filter(booking => booking.sessionId === cls.id && isTasterBooking(booking) &&
+    booking.status !== "cancelled" && bookingMatchesClassDate(booking, selectedDate));
+  const full = dates.length > 0 && bookings.filter(booking => booking.sessionId === cls.id &&
+    bookingIsClassRegistration(booking) && bookingMatchesClassDate(booking, selectedDate)).length >= cls.capacity;
+  return (
+    <section aria-label="Tasters" className="bg-white rounded-2xl border border-stone-200 p-5 flex flex-col gap-4 shadow-sm">
+      <div className="flex items-start gap-3">
+        <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: "#FBF3E3" }}>
+          <Sparkles size={20} style={{ color: GOLD }}/>
+        </div>
+        <div>
+          <h3 className="ff-display text-lg font-semibold" style={{ color: INK }}>Tasters</h3>
+          <p className="ff-body text-sm text-stone-500">Try a class for £5</p>
+        </div>
+      </div>
+      <p className="ff-body text-sm text-stone-600">Pay as you go. One taster per class, even after cancellation.</p>
+      <label className="ff-body text-sm font-medium text-stone-700" htmlFor={`${prefix}-class`}>Taster class
+        <select id={`${prefix}-class`} value={cls.id} onChange={event => { setClassId(event.target.value); setDate(""); }}
+          className="mt-1.5 block w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm font-normal">
+          {classes.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+        </select>
+      </label>
+      <ClassSchedule cls={cls}/>
+      {admin ? (
+        <label className="ff-body text-sm font-medium text-stone-700" htmlFor={`${prefix}-date`}>Taster date
+          <select id={`${prefix}-date`} value={selectedDate || ""} onChange={event => setDate(event.target.value)}
+            className="mt-1.5 block w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm font-normal">
+            {dates.map(value => <option key={value} value={value}>{formatBookingDate(value)}</option>)}
+          </select>
+        </label>
+      ) : (
+        <fieldset className="rounded-xl border border-stone-200 p-3.5">
+          <legend className="ff-body px-1 text-sm font-medium text-stone-700">Choose your taster date</legend>
+          <div className="flex flex-col gap-2">
+            {dates.map(value => <label key={value} className="ff-body flex items-center gap-2.5 rounded-lg bg-stone-50 px-3 py-2 text-sm cursor-pointer">
+              <input type="radio" name="taster-card-date" value={value} checked={selectedDate === value} onChange={() => setDate(value)}/>
+              <span>{formatBookingDate(value)}</span>
+            </label>)}
+          </div>
+        </fieldset>
+      )}
+      {admin ? (
+        <div className="ff-body border-t border-stone-100 pt-3 text-sm">
+          <p className="font-semibold text-stone-600 mb-2">Taster registrations ({registrations.length})</p>
+          {registrations.length === 0 ? <p className="text-stone-400">No taster bookings for this date.</p> :
+            registrations.map(booking => <div key={booking.id} className="flex flex-wrap items-center justify-between gap-2 py-2 border-t border-stone-100">
+              <div><p style={{ color: INK }}>{booking.name}</p><p className="text-xs text-stone-400 break-all">{booking.email}</p></div>
+              <StatusBadge status={booking.status}/>
+            </div>)}
+        </div>
+      ) : (
+        <div className="flex items-center justify-between pt-2 border-t border-stone-100 mt-auto">
+          <p className="ff-body text-sm font-semibold" style={{ color: INK }}>£5.00 per taster</p>
+          <button disabled={!selectedDate || full} onClick={() => onBook(cls, selectedDate)}
+            className="ff-body inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full disabled:opacity-50"
+            style={{ backgroundColor: TEAL, color: "#fff" }}>
+            {full ? "Class full" : "Book taster"}<ArrowRight size={14}/>
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function TasterBookingModal({ session, date, currentUser, onConfirm, onClose }) {
+  const bookingRef = useRef(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const today = useBookingDay();
+  const available = classBookingSchedule(session, today).includes(date);
+  async function confirm() {
+    if (saving || !available) return;
+    setSaving(true); setError("");
+    try {
+      if (!bookingRef.current) {
+        const id = uid();
+        const booking = { id, paymentGroupId: id, type: "class", sessionId: session.id,
+          sessionName: `${session.name} Taster`, bookingDate: date,
+          userId: currentUser.id, name: currentUser.name, email: currentUser.email, phone: currentUser.phone,
+          plan: "Taster (GoCardless)", amount: TASTER_AMOUNT / 100, status: "pending_payment", createdAt: new Date().toISOString() };
+        await onConfirm(booking);
+        bookingRef.current = booking;
+      }
+      await openTasterCheckout(bookingRef.current);
+    } catch (error) {
+      setError(`${checkoutErrorDetail(error)}${bookingRef.current ? " Your booking is saved. Retry here or continue payment from My bookings." : ""}`);
+    } finally { setSaving(false); }
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+      <div role="dialog" aria-modal="true" aria-labelledby="taster-booking-title" className="ff-body bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md max-h-[92vh] overflow-y-auto p-5 flex flex-col gap-4">
+        <div className="flex items-center justify-between gap-3">
+          <h4 id="taster-booking-title" className="ff-display text-xl font-semibold" style={{ color: INK }}>{session.name} Taster</h4>
+          <button aria-label="Close taster booking" onClick={onClose} disabled={saving} className="text-stone-400"><X size={20}/></button>
+        </div>
+        <p className="text-sm text-stone-600">{formatBookingDate(date)} · {session.time}</p>
+        <p className="text-sm text-stone-600">{session.venue}</p>
+        <p className="text-sm font-semibold" style={{ color: INK }}>Pay as you go: £5.00</p>
+        <p className="text-xs text-stone-500">One taster for this class. Pay securely through GoCardless.</p>
+        {!available && <p role="alert" className="text-sm text-red-600">This date is no longer available. Close this window and choose an upcoming date.</p>}
+        {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+        <button onClick={confirm} disabled={saving || !available} className="inline-flex items-center justify-center gap-2 font-semibold text-sm py-3 rounded-full disabled:opacity-50" style={{ backgroundColor: TEAL, color: "#fff" }}>
+          {saving ? <><Loader2 size={15} className="animate-spin"/>Opening secure payment…</> : <>Continue to payment<ArrowRight size={15}/></>}
         </button>
       </div>
     </div>
@@ -1855,6 +1984,7 @@ function MyBookings({ bookings, currentUser, onCancel }) {
   const [cancelling, setCancelling] = useState(null);
   const [cancelNotice, setCancelNotice] = useState("");
   const [recoveryNotice, setRecoveryNotice] = useState("");
+  const [resumingTaster, setResumingTaster] = useState(null);
   const attemptedRecovery = useRef(false);
   const today = useBookingDay();
   const isUpcoming = b => bookingIsUpcoming(b, today, getSessionInfo(b.sessionId)?.courseDates);
@@ -1955,8 +2085,18 @@ function MyBookings({ bookings, currentUser, onCancel }) {
           <p className="text-xs text-stone-500">{b.bookingDate ? formatBookingDate(b.bookingDate) : "Lesson date not recorded"} · {b.plan}</p>
           <p className="text-xs text-stone-600">{/^PM/.test(String(b.gocardlessPaymentId || ""))
             ? "We're waiting for your Direct Debit payment to be confirmed. Please don't book or pay again while it's pending."
+            : isGoCardlessTaster(b) ? "Your taster booking is saved. Continue payment to finish your checkout."
             : "Payment setup needs checking. We need to check your original payment before you try to pay again."}</p>
           <a href="mailto:Shams@snbhive.com" className="text-xs font-semibold underline" style={{ color: TEAL }}>Contact Shams</a>
+          {isGoCardlessTaster(b) && !b.gocardlessPaymentId && <button disabled={!!resumingTaster}
+            onClick={async () => {
+              setResumingTaster(b.id); setRecoveryNotice("");
+              try { await openTasterCheckout(b); }
+              catch (error) { setRecoveryNotice(checkoutErrorDetail(error)); }
+              finally { setResumingTaster(null); }
+            }} className="text-xs font-semibold underline self-start disabled:opacity-50" style={{ color: TEAL }}>
+            {resumingTaster === b.id ? "Opening payment…" : "Continue taster payment"}
+          </button>}
         </div>)}
         {recoveryNotice && <p role="status" className="text-xs text-stone-500">{recoveryNotice}</p>}
       </section>}
@@ -3088,7 +3228,7 @@ function AdminPage() {
         <div className="flex flex-wrap gap-1 bg-stone-100 rounded-2xl sm:rounded-full p-1 w-fit max-w-full">
           {[["members","Members"],["bookings","Bookings"],["classes","Classes"],["studio-hire","Studio Hire"]].map(([key, label]) => {
             const count = key==="members" ? members.length
-              : key==="classes" ? CLASS_CATALOGUE.length
+              : key==="classes" ? CLASS_CATALOGUE.length + 1
               : key==="studio-hire" ? enquiries.length
               : bookings.length;
             return (
@@ -3319,6 +3459,7 @@ function AdminPage() {
         {adminTab === "classes" && (
           <div className="grid sm:grid-cols-2 gap-4 w-full max-w-3xl mx-auto">
             {CLASS_CATALOGUE.map(cls => <AdminClassCard key={cls.id} cls={cls} bookings={bookings} onMoveBooking={moveBooking}/>) }
+            <TasterCard classes={TASTER_CLASSES} bookings={bookings} admin/>
           </div>
         )}
 
@@ -3426,6 +3567,8 @@ function BookingApp() {
   const [authLoading, setAuthLoading]       = useState(true);
   const [tab, setTab]                       = useState(() => new URLSearchParams(window.location.search).get("tab") === "bookings" ? "bookings" : "classes");
   const { bookings, setBookings, loading, loadError, reloadBookings } = useBookings(!!currentUser);
+  const eligibleTasters = useTasterEligibility(currentUser, bookings);
+  const [tasterBooking, setTasterBooking] = useState(null);
   const [modalSession, setModalSession]     = useState(null);
   const [modalType, setModalType]           = useState(null);
   const [showOpenDay, setShowOpenDay]       = useState(false);
@@ -3603,6 +3746,10 @@ function BookingApp() {
         bookingType={getUserBookingType(cls.id)} onWaitlist={joinWaitlist}
         onBook={() => { setModalSession(cls); setModalType("class"); }}/>
   )}
+  {!loadError && <TasterCard bookings={bookings} classes={TASTER_CLASSES.filter(cls =>
+    eligibleTasters.includes(cls.id) && !userTasterBooking(bookings, currentUser, cls.id) &&
+    !(cls.id === "zumba" && userHasBookedRegularClass(bookings, currentUser, cls.id)))}
+    onBook={(session, date) => setTasterBooking({ session, date })}/>}
 </div>
               </>
             : tab==="workshops"
@@ -3661,6 +3808,8 @@ function BookingApp() {
           onClose={() => setModalSession(null)} onConfirm={handleConfirmBooking}
           onPaymentFailure={id => updateStatus(id, "cancelled")}/>
       )}
+      {tasterBooking && <TasterBookingModal session={tasterBooking.session} date={tasterBooking.date}
+        currentUser={currentUser} onConfirm={handleConfirmBooking} onClose={() => setTasterBooking(null)}/>}
 
       {workshopModal && (
         <WorkshopBookingModal workshop={workshopModal} currentUser={currentUser}

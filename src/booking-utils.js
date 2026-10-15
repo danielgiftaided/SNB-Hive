@@ -72,11 +72,15 @@ export function bookingSyncIssue(result) {
 export function classUsesGoCardless(booking) {
   const plan = String(booking?.plan || "").toLowerCase();
   return booking?.type === "class" && ["pending_checkout", "pending_payment", "confirmed", "paid"].includes(booking.status) &&
-    !plan.includes("bank transfer") && (plan.includes("membership") || plan.includes("pay as you go"));
+    !plan.includes("bank transfer") && (plan.includes("membership") || plan.includes("pay as you go") || isGoCardlessTaster(booking));
 }
 
 export function isTasterBooking(booking) {
   return String(booking?.plan || "").toLowerCase().includes("taster");
+}
+
+export function isGoCardlessTaster(booking) {
+  return String(booking?.plan || "").toLowerCase() === "taster (gocardless)";
 }
 
 export function userHasBookedRegularClass(bookings, user, sessionId) {
@@ -89,11 +93,11 @@ export function userHasBookedRegularClass(bookings, user, sessionId) {
   });
 }
 
-// BoxFit's past tasters are history, not enrolments in the new paid classes.
-// Zumba's live paid tasters still reserve a place on their selected lesson date.
+// BoxFit's old tasters stay in history. New GoCardless tasters and Zumba's
+// existing paid tasters reserve a place on their selected live class date.
 export function bookingIsClassRegistration(booking) {
   return bookingIsActive(booking) && booking.status !== "waitlisted" &&
-    !(booking.sessionId === "boxfit" && isTasterBooking(booking));
+    !(booking.sessionId === "boxfit" && isTasterBooking(booking) && !isGoCardlessTaster(booking));
 }
 
 // Cancellation does not restore eligibility. An unfinished checkout can resume

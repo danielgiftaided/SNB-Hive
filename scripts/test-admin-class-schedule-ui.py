@@ -6,6 +6,7 @@ import time
 from datetime import datetime, timezone
 from urllib.request import urlopen
 from playwright.sync_api import sync_playwright
+from taster_fixtures import taster_availability
 
 with urlopen('http://127.0.0.1:5174/src/storage.js') as response:
     source = response.read().decode()
@@ -23,6 +24,9 @@ titles = ['Zumba', 'BoxFit', 'Reformer Pilates', 'Self Defence', 'Somatic', 'Str
 
 def api(route):
     request = route.request
+    if '/rest/v1/rpc/class_taster_eligibility' in request.url:
+        route.fulfill(status=200, content_type='application/json', body=json.dumps(taster_availability(rows, request.post_data_json)))
+        return
     assert request.method == 'GET', f'Schedule rendering must not write, charge or send email: {request.url}'
     result = rows if '/rest/v1/bookings' in request.url else [user] if '/rest/v1/users' in request.url else []
     route.fulfill(status=200, content_type='application/json', body=json.dumps(result))
@@ -59,7 +63,7 @@ with sync_playwright() as p:
             page.goto('http://127.0.0.1:5174/admin' if admin else 'http://127.0.0.1:5174/')
             if admin: page.get_by_role('button', name=re.compile('^Classes')).click()
             page.get_by_role('heading', name='BoxFit', exact=True).wait_for()
-            assert page.locator('h3').all_text_contents() == titles
+            assert page.locator('h3').all_text_contents() == titles + ['Tasters']
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             boxes = [card(page, title, admin).bounding_box() for title in titles]
             if width >= 640:

@@ -5,6 +5,7 @@ import re
 from datetime import datetime, timezone
 from urllib.request import urlopen
 from playwright.sync_api import sync_playwright
+from taster_fixtures import taster_availability
 
 with urlopen('http://127.0.0.1:5174/src/storage.js') as response:
     source = response.read().decode()
@@ -21,6 +22,8 @@ def api(route):
     request = route.request
     if '/functions/v1/gocardless-sync' in request.url:
         result = dict(allocated=True)
+    elif '/rest/v1/rpc/class_taster_eligibility' in request.url:
+        result = taster_availability(rows, request.post_data_json)
     elif '/rest/v1/bookings' in request.url:
         assert request.method == 'GET', 'Date expiry must not rewrite booking history'
         result = rows

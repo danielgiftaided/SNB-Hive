@@ -10,6 +10,7 @@ on:
       - "supabase/functions/send-email/**"
       - "supabase/functions/_shared/**"
       - "supabase/migrations/20261012000000_move_boxfit_booking_dates.sql"
+      - "supabase/migrations/20261015000000_taster_card_eligibility.sql"
       - "supabase/config.toml"
       - ".github/workflows/deploy-payment-functions.yml"
   workflow_dispatch:
@@ -64,6 +65,35 @@ jobs:
             throw new Error('Supabase did not confirm the BoxFit date correction; stop before deploying payment functions.');
           }
           console.log('BoxFit bookings moved:', result[0].moved_bookings);
+          NODE
+
+      - name: Make lifetime taster availability readable by the booking app
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from 'node:fs';
+          const files = [
+            'supabase/migrations/20261007000000_lifetime_class_tasters.sql',
+            'supabase/migrations/20261008010000_regular_zumba_taster_eligibility.sql',
+            'supabase/migrations/20261015000000_taster_card_eligibility.sql',
+          ];
+          const query = 'begin;\n' + files.map(file => readFileSync(file, 'utf8')).join('\n') +
+            '\ncommit;\nselect to_regprocedure(\'public.class_taster_eligibility(text,text)\') is not null as taster_availability_ready;';
+          writeFileSync(process.env.RUNNER_TEMP + '/taster-eligibility.json', JSON.stringify({ query }));
+          NODE
+          curl --fail --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            --header "Content-Type: application/json" \
+            --data-binary "@$RUNNER_TEMP/taster-eligibility.json" \
+            --output "$RUNNER_TEMP/taster-eligibility-result.json" \
+            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query"
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const result = JSON.parse(readFileSync(process.env.RUNNER_TEMP + '/taster-eligibility-result.json', 'utf8'));
+          if (!Array.isArray(result) || result.length !== 1 || result[0]?.taster_availability_ready !== true) {
+            throw new Error('Supabase did not confirm the taster availability migration.');
+          }
+          console.log('Lifetime taster availability function updated.');
           NODE
 
       - name: Deploy email sender

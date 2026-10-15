@@ -14,7 +14,11 @@ export const CLASS_PAYMENTS = {
 } as const;
 
 export const PAYG_AMOUNT = 1000;
-export const TASTER_AMOUNT = PAYG_AMOUNT / 2;
+export const TASTER_AMOUNT = 500;
+export const CLASS_TASTERS = {
+  boxfit: { templateName: "Boxfit Taster" },
+  zumba: { templateName: "Zumba Taster" },
+} as const;
 export const SELF_DEFENCE_DATES = ["2026-11-18", "2026-11-25", "2026-12-02"];
 export const SELF_DEFENCE_PRICE = 90;
 export const CLASS_BANK_ACCOUNT = {

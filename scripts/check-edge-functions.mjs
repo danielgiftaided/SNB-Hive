@@ -5,6 +5,7 @@ const functions = [
   "supabase/functions/gocardless-webhook/index.ts",
   "supabase/functions/gocardless-sync/index.ts",
   "supabase/functions/_shared/gocardless-bookings.ts",
+  "supabase/functions/_shared/taster-checkout.ts",
   "supabase/functions/send-email/index.ts",
   "supabase/functions/admin-auth/index.ts",
 ];
@@ -49,6 +50,8 @@ if (!/\[functions\.send-email\]\s+verify_jwt\s*=\s*false/.test(supabaseConfig)) 
 }
 
 const deploymentChecks = [
+  ["deploys lifetime taster availability before payment functions", "taster_availability_ready"],
+  ["includes the taster availability migration", "20261015000000_taster_card_eligibility.sql"],
   ["redeploys when send-email changes", '- "supabase/functions/send-email/**"'],
   ["deploys the send-email function", "supabase functions deploy send-email --no-verify-jwt"],
   ["redeploys when booking sync changes", '- "supabase/functions/gocardless-sync/**"'],
