@@ -2,6 +2,7 @@ import { corsHeaders, json } from "../_shared/http.ts";
 import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../_shared/membership.ts";
 import { classPaymentConfig, CLASS_TASTERS, PAYG_AMOUNT, TASTER_AMOUNT } from "../_shared/class-config.ts";
 import { tasterPaymentRequest } from "../_shared/taster-checkout.ts";
+import { GoCardlessCheckoutError } from "../_shared/gocardless-checkout-error.ts";
 import {
   bookingRowsValidationIssue,
   canStartCheckoutAfterLookupFailure,
@@ -13,7 +14,7 @@ import {
 const GC_API = Deno.env.get("GOCARDLESS_API_URL") || "https://api.gocardless.com";
 const GC_VERSION = "2015-07-06";
 const PRICES = { payg: PAYG_AMOUNT, membership: MEMBERSHIP_MONTHLY_AMOUNT, taster: TASTER_AMOUNT } as const;
-const CHECKOUT_VERSION = "class-payments-v6-taster-price";
+const CHECKOUT_VERSION = "class-payments-v7-provider-errors";
 
 async function getBooking(id: string) {
   const url = Deno.env.get("SUPABASE_URL");
@@ -121,26 +122,25 @@ async function gc(path: string, body: unknown, idempotencyKey: string) {
     },
     body: JSON.stringify(body),
   });
-  const result = await response.json();
+  const result = await response.json().catch(() => null);
   // GoCardless returns 409 (not a replayed 201) for an existing idempotency
   // key. Recover its canonical resource, as the official SDK does, so an
   // interrupted class checkout can resume without creating another charge.
   if (response.status === 409) {
-    const conflict = result.error?.errors?.find((error: { reason?: string; links?: { conflicting_resource_id?: string } }) =>
+    const issues = Array.isArray(result?.error?.errors) ? result.error.errors : [];
+    const conflict = issues.find((error: { reason?: string; links?: { conflicting_resource_id?: string } }) =>
       error.reason === "idempotent_creation_conflict");
     const resourceId = conflict?.links?.conflicting_resource_id;
     if (resourceId) {
       const existing = await fetch(`${GC_API}${path}/${encodeURIComponent(resourceId)}`, {
         headers: { Authorization: `Bearer ${token}`, "GoCardless-Version": GC_VERSION },
       });
-      if (!existing.ok) throw new Error("GoCardless could not resume checkout");
-      return await existing.json();
+      const existingResult = await existing.json().catch(() => null);
+      if (!existing.ok || !existingResult) throw new GoCardlessCheckoutError(path, existing.status, existingResult, true);
+      return existingResult;
     }
   }
-  if (!response.ok) {
-    console.error("GoCardless API error", response.status, result);
-    throw new Error("GoCardless could not start checkout");
-  }
+  if (!response.ok || !result) throw new GoCardlessCheckoutError(path, response.status, result);
   return result;
 }
 
@@ -271,8 +271,12 @@ Deno.serve(async request => {
 
     return json({ authorisation_url: flow.billing_request_flows.authorisation_url, checkout_version: CHECKOUT_VERSION });
   } catch (error) {
+    if (error instanceof GoCardlessCheckoutError) {
+      console.error("[gocardless-checkout]", JSON.stringify({ event: "provider_rejected", checkout_version: CHECKOUT_VERSION, ...error.details }));
+      return json({ code: "GOCARDLESS_API_ERROR", error: error.message, checkout_version: CHECKOUT_VERSION, ...error.details }, 500);
+    }
     console.error(error);
     const message = error instanceof Error ? error.message : "GoCardless could not start checkout";
-    return json({ code: "CHECKOUT_START_FAILED", error: message }, 500);
+    return json({ code: "CHECKOUT_START_FAILED", error: message, checkout_version: CHECKOUT_VERSION }, 500);
   }
 });

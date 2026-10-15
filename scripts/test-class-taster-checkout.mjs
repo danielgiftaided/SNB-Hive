@@ -12,6 +12,7 @@ const template = (id, name) => ({ id, name, payment_request_amount: "500", payme
   payment_request_scheme: "bacs", mandate_request_scheme: "bacs", payment_request_description: name });
 let templates = [], rows = [], calls = [], replay = false, failTemplates = false;
 let paginated = false;
+let apiFailure = null;
 const booking = sessionId => ({ id: "taster-1", payment_group_id: "taster-1", session_id: sessionId,
   booking_date: classPaymentConfig(sessionId).dates[0], plan: "Taster (GoCardless)", amount: 5, status: "pending_payment" });
 const post = sessionId => handler(new Request("https://fixture.supabase.test/functions/v1/gocardless-checkout", {
@@ -33,6 +34,12 @@ globalThis.fetch = async (input, init = {}) => {
     if (paginated && !url.searchParams.has("after")) return json({ billing_request_templates: [], meta: { cursors: { after: "next-page" } } });
     return json({ billing_request_templates: templates, meta: { cursors: { after: null } } });
   }
+  if (apiFailure?.path === url.pathname) {
+    return apiFailure.raw ? new Response(apiFailure.raw, { status: apiFailure.status }) : json(apiFailure.payload, apiFailure.status);
+  }
+  if (url.pathname === "/billing_requests" && body?.billing_requests?.payment_request?.scheme) {
+    return json({ error: { type: "validation_failed", errors: [{ field: "payment_request.scheme", reason: "invalid", message: "Unexpected explicit payment scheme for the Direct Debit request" }] } }, 422);
+  }
   const conflict = id => json({ error: { errors: [{ reason: "idempotent_creation_conflict", links: { conflicting_resource_id: id } }] } }, 409);
   if (url.pathname === "/billing_requests") return replay ? conflict("BR_TASTER") : json({ billing_requests: { id: "BR_TASTER" } });
   if (url.pathname === "/billing_request_flows") return replay ? conflict("BRF_TASTER") : json({ billing_request_flows: { authorisation_url: "https://pay.example.test/taster" } });
@@ -52,7 +59,8 @@ try {
     const created = calls.find(call => call.path === "/billing_requests" && call.method === "POST");
     assert.equal(created.body.billing_requests.payment_request.amount, 500);
     assert.equal(created.body.billing_requests.payment_request.currency, "GBP");
-    assert.equal(created.body.billing_requests.payment_request.scheme, "bacs");
+    assert.equal(Object.hasOwn(created.body.billing_requests.payment_request, "scheme"), false);
+    assert.equal(created.body.billing_requests.mandate_request.scheme, "bacs");
     assert.equal(created.body.billing_requests.payment_request.description, templateName);
     assert.equal(created.body.billing_requests.payment_request.metadata.booking_id, rows[0].id);
     assert.equal(created.body.billing_requests.payment_request.metadata.taster_template_id, "BRT_TASTER");
@@ -93,7 +101,7 @@ try {
       assert.equal(request.payment_request.amount, 500, "template amount formatting/settings must not change or block the server's £5 price");
       assert.equal(request.payment_request.currency, "GBP");
       assert.equal(request.metadata.booking_id, id);
-      assert.equal(request.payment_request.scheme, "bacs", "even hybrid templates must collect the £5 by Direct Debit");
+      assert.equal(Object.hasOwn(request.payment_request, "scheme"), false, "match the working PAYG contract without an extra payment scheme field");
       assert.equal(request.mandate_request.scheme, "bacs");
       if (index === 0 || fields.payment_request_amount === "5") {
         const originalKey = calls.find(call => call.path === "/billing_requests" && call.method === "POST").headers["Idempotency-Key"];
@@ -147,5 +155,38 @@ try {
   rows = [{ ...root, gocardless_payment_id: "PM_ALREADY" }]; calls = [];
   assert.equal((await post("boxfit")).status, 400);
   assert.ok(!calls.some(call => call.path.startsWith("/billing_request") || call.method === "POST"));
+  rows = [booking("boxfit")];
+  templates = [template("BRT_TASTER", "Boxfit Taster")];
+  for (const failure of [
+    { path: "/billing_requests", status: 422, payload: { error: { type: "validation_failed", request_id: "REQ_VALIDATION",
+      errors: [{ field: "payment_request.scheme", reason: "invalid", message: "is not supported" }], access_token: "do-not-leak" } } },
+    { path: "/billing_requests", status: 403, payload: { error: { type: "invalid_api_usage", errors: [{ reason: "forbidden", message: "Feature not enabled" }] } } },
+    { path: "/billing_request_flows", status: 422, payload: { error: { type: "validation_failed",
+      errors: [{ field: "redirect_uri", reason: "invalid", message: "does not match the configured URL" }] } } },
+    { path: "/billing_requests", status: 502, raw: "<html>upstream failure do-not-leak</html>" },
+  ]) {
+    apiFailure = failure; calls = [];
+    const result = await post("boxfit");
+    assert.equal(result.status, 500);
+    const response = await result.json();
+    assert.equal(response.code, "GOCARDLESS_API_ERROR");
+    assert.equal(response.provider_status, failure.status);
+    assert.equal(response.provider_stage, failure.path === "/billing_requests" ? "billing_request" : "authorisation_flow");
+    assert.match(response.error, new RegExp(`HTTP ${failure.status}`));
+    if (failure.payload?.error?.errors?.[0]?.field) assert.ok(response.error.includes(failure.payload.error.errors[0].field));
+    assert.equal(response.checkout_version, "class-payments-v7-provider-errors");
+    for (const secret of ["test-token", "test-service-key", "do-not-leak"]) assert.ok(!JSON.stringify(response).includes(secret));
+    if (failure.path === "/billing_requests") assert.ok(!calls.some(call => call.path === "/billing_request_flows"));
+    else assert.ok(calls.some(call => call.path === "/rest/v1/bookings" && call.method === "PATCH"), "save the original request ID before attempting a failed flow");
+    assert.ok(!calls.some(call => call.path === "/rest/v1/bookings" && call.method === "POST"), "provider errors cannot create another taster booking");
+  }
+  apiFailure = { path: "/billing_requests/BR_TASTER", status: 404, payload: { error: { type: "invalid_api_usage", errors: [{ reason: "not_found" }] } } };
+  replay = true;
+  const failedResume = await (await post("boxfit")).json();
+  assert.equal(failedResume.provider_stage, "resume_billing_request");
+  assert.equal(failedResume.provider_status, 404);
+  apiFailure = null; replay = false;
+  assert.equal((await post("boxfit")).status, 200, "retry can still use the original saved booking and unchanged idempotency key");
+  console.log("PASS provider diagnostics: payment/flow/resume stages, status and field/reason, non-JSON failures, original checkout reference and no raw response/credential leakage");
   console.log("PASS invalid/missing/duplicate/wrong-currency templates, provider outage, wrong booking amounts, multi-date/plan discount bypass and already-paid bookings fail before new charges");
 } finally { globalThis.fetch = originalFetch; delete globalThis.Deno; }
