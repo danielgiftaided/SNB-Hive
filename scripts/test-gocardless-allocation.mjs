@@ -301,4 +301,38 @@ try {
     assert.equal(rows[0].status, "cancelled");
   }
   console.log("PASS £5 BoxFit/Zumba tasters: signed webhook, canonical payment ID, one receipt, recovery, preserved cancellation and no subscription/monthly allocation");
+  const courseId = "self-defence-course";
+  rows = [{ ...row(courseId, "2026-11-18", "Course (GoCardless)"), session_id: "self_defence", session_name: "Self Defence", amount: 90,
+    gocardless_billing_request_id: "BR_COURSE" }];
+  requests.set("BR_COURSE", billing("BR_COURSE", courseId, "PM_COURSE", "course", "pending"));
+  payment("PM_COURSE", "pending_submission", "2026-10-15", 9000);
+  notices = [];
+  const subscriptionsBeforeCourse = subscriptions.size;
+  assert.equal((await sync(courseId)).allocated, false);
+  assert.equal(bookingIsActive(toCamel(rows[0])), false);
+  assert.equal(notices.length, 0, "abandoned checkout does not send confirmation");
+  requests.set("BR_COURSE", billing("BR_COURSE", courseId, "PM_COURSE", "course"));
+  payments.get("PM_COURSE").status = "pending_customer_approval";
+  assert.equal((await sync(courseId)).allocated, false);
+  assert.equal(notices.length, 0, "unfinished payment must not confirm the course");
+  payments.get("PM_COURSE").status = "pending_submission";
+  await webhook(fulfilled("BR_COURSE"));
+  assert.equal(rows.length, 1, "whole course remains one booking and one payment");
+  assert.equal(rows[0].status, "paid");
+  assert.equal(rows[0].gocardless_payment_id, "PM_COURSE");
+  assert.equal(notices.length, 1);
+  assert.equal(notices[0].amount, 90);
+  assert.match(notices[0].booking_dates, /18 November 2026.*25 November 2026.*2 December 2026/);
+  await sync(courseId); await webhook(fulfilled("BR_COURSE"));
+  payments.get("PM_COURSE").status = "paid_out";
+  await webhook(event("PM_COURSE", "paid_out"));
+  assert.equal(notices.length, 1, "return/webhook/payout retries do not repeat confirmation");
+  assert.equal(subscriptions.size, subscriptionsBeforeCourse);
+  rows[0].status = "cancelled";
+  await webhook(fulfilled("BR_COURSE"));
+  assert.equal((await sync(courseId)).allocated, false);
+  assert.equal(rows[0].status, "cancelled");
+  assert.equal(notices.length, 1);
+  console.log("PASS £90 Self Defence: abandoned/unapproved checkout has no place or emails; accepted setup confirms all course dates once; no subscription and cancellations survive retries");
+
 } finally { globalThis.fetch = originalFetch; delete globalThis.Deno; console.info = originalInfo; console.error = originalError; }

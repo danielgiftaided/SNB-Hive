@@ -10,7 +10,7 @@ import storage, { supabase } from "./storage.js";
 import { useBookings } from "./use-bookings.js";
 import { useBookingDay } from "./use-booking-day.js";
 import { useTasterEligibility } from "./use-taster-eligibility.js";
-import { bookingIsActive, bookingIsUpcoming, bookingIsClassRegistration, bookingBelongsToUser, classPaymentIsPending, classUsesGoCardless, bookingSyncIds, bookingSyncIssue, bookingMatchesClassDate, classBookingDates, UNDATED_BOOKING, isTasterBooking, isGoCardlessTaster, userHasBookedRegularClass, userTasterBooking, tasterBookingUsed } from "./booking-utils.js";
+import { bookingIsActive, bookingIsUpcoming, bookingIsClassRegistration, bookingBelongsToUser, classPaymentIsPending, classUsesGoCardless, bookingSyncIds, bookingSyncIssue, bookingMatchesClassDate, classBookingDates, UNDATED_BOOKING, isTasterBooking, isGoCardlessTaster, isGoCardlessCourse, userHasBookedRegularClass, userTasterBooking, tasterBookingUsed } from "./booking-utils.js";
 import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../supabase/functions/_shared/membership.ts";
 import { membershipDatesFrom } from "../supabase/functions/_shared/membership-bookings.ts";
 import { checkoutErrorDetail, singleMembershipBooking } from "./checkout.js";
@@ -59,9 +59,9 @@ const DEFAULT_CLASSES = [
     whatToBring:"Gym clothes and trainers and bring a water bottle.", icsStart:"20260924T110000", icsEnd:"20260924T114500", description:"Strength training is one of the most beneficial forms of exercise for women, particularly as we navigate the demands of motherhood, work and daily life.\n\nThis class focuses on building functional strength, improving mobility and helping women feel stronger and more capable in their everyday activities.\n\nUsing bodyweight exercises, resistance bands and light equipment, sessions are designed to be accessible while still providing an effective workout.\n\nBenefits include:\n• Increased muscle tone and strength\n• Support with sustainable fat loss and body composition goals\n• Improved posture and reduced aches and pains\n• Better balance and stability\n• Increased energy levels\n• Stronger bones and joints\n• Improved confidence in daily movement\n• Support for healthy ageing and long-term wellbeing\n\nRather than focusing on appearance alone, this class encourages women to appreciate what their bodies can do and develop strength that carries into everyday life.\n\nSuitable for all fitness levels and can be adapted to individual needs." },
   { id: "boxfit", name: "BoxFit", tagline: "Cardio, conditioning & pad work", day: "Thursdays", time: "13:00–14:00", capacity: 18, icon: "flame", color: "#D06B4F",
     venue: "6 Dispensary Lane, London E8 1FT", venueMap: "https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT", whatToBring: "Bring boxing gloves and pads if you have them. Wear comfortable workout clothes and trainers. Bring a water bottle", description: "A high-energy boxing-inspired fitness class combining cardio, conditioning and boxing drills. Suitable for beginners and all fitness levels."},
-  { id:"self_defence", name:"Self Defence", tagline:"Intensive 3-week course", day:"3-week course", time:"Wednesdays, 12:00–14:00", capacity:11, icon:"shield", color:"#6F596E", bookingKind:"bank_transfer", price:SELF_DEFENCE_PRICE, courseDates:SELF_DEFENCE_DATES,
+  { id:"self_defence", name:"Self Defence", tagline:"Intensive 3-week course", day:"3-week course", time:"Wednesdays, 12:00–14:00", capacity:11, icon:"shield", color:"#6F596E", bookingKind:"gocardless_course", price:SELF_DEFENCE_PRICE, courseDates:SELF_DEFENCE_DATES,
     venue:"6 Dispensary Lane, London E8 1FT", venueMap:"https://www.google.com/maps/search/?api=1&query=6+Dispensary+Lane+London+E8+1FT",
-    details:[...SELF_DEFENCE_DATES.map(formatCourseDate), "2-hour session each week for 3 weeks", "£90 per person"], description:"A three-week Self Defence course. Pay by bank transfer using your name as the reference." },
+    details:[...SELF_DEFENCE_DATES.map(formatCourseDate), "2-hour session each week for 3 weeks", "£90 per person"], description:"A three-week Self Defence course. Book all three sessions for £90 and pay securely through GoCardless." },
 ];
 
 // Paid weekly classes share one monthly membership tier.
@@ -832,7 +832,7 @@ function AuthScreen({ onAuth }) {
    - Remaining capacity is kept private from regular users
    ---- */
 
-function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = false, tasterIneligible = false }) {
+function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = false, tasterIneligible = false, openingPayment = false }) {
   const Icon = ICONS[cls.icon] || Sparkles;
   const full = booked >= cls.capacity;
   const isMember = bookingType === "membership";
@@ -843,14 +843,14 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = 
   const isTbc = cls.tasterStatus === "tbc";
   const isBooked = !!bookingType;
   const canBookAnotherPayg = bookingType === "payg";
-  const paymentsAvailable = isTaster || PAID_CLASS_IDS.has(cls.id) || isWaitlist || cls.bookingKind === "bank_transfer";
+  const paymentsAvailable = isTaster || PAID_CLASS_IDS.has(cls.id) || isWaitlist || ["bank_transfer", "gocardless_course"].includes(cls.bookingKind);
   const isClosed =
     isTaster &&
     TASTERS_CLOSED &&
     !isBooked;
 
   const disabled =
-    courseClosed || cls.bookingPaused || tasterUsed || tasterIneligible ||
+    openingPayment || courseClosed || cls.bookingPaused || tasterUsed || tasterIneligible ||
     isTbc ||
     !paymentsAvailable ||
     (isBooked && !canBookAnotherPayg) ||
@@ -948,7 +948,7 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = 
             opacity: disabled ? 0.85 : 1,
           }}
         >
-          {courseClosed ? "Course finished" : cls.bookingPaused ? "Book" : tasterUsed ? "Taster already booked" : !paymentsAvailable
+          {openingPayment ? "Opening payment…" : courseClosed ? "Course finished" : cls.bookingPaused ? "Book" : tasterUsed ? "Taster already booked" : !paymentsAvailable
             ? "Coming soon"
             : isTbc
             ? "TBC"
@@ -977,15 +977,15 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = 
   );
 }
 
-async function openTasterCheckout(booking, date = booking.bookingDate) {
+async function openSinglePaymentCheckout(booking, date = booking.bookingDate) {
   const result = await callEdgeFunction("gocardless-checkout", {
-    booking_id: booking.id, session_id: booking.sessionId, plan: "taster",
+    booking_id: booking.id, session_id: booking.sessionId, plan: isGoCardlessCourse(booking) ? "course" : "taster",
     booking_date: date,
     return_url: `${window.location.origin}/payment-complete?booking_id=${encodeURIComponent(booking.id)}`,
     exit_url: `${window.location.origin}/?tab=bookings`,
   });
   if (!result?.authorisation_url) throw new Error("Checkout URL was not returned");
-  if (date !== booking.bookingDate && result.booking_date !== date) {
+  if (isGoCardlessTaster(booking) && date !== booking.bookingDate && result.booking_date !== date) {
     throw new Error("Your new lesson date could not be confirmed. Please refresh and retry before continuing to payment.");
   }
   window.location.assign(result.authorisation_url);
@@ -1085,7 +1085,7 @@ function TasterBookingModal({ session, date, currentUser, previousBooking, onCon
         await onConfirm(booking);
         bookingRef.current = booking;
       }
-      await openTasterCheckout(bookingRef.current, date);
+      await openSinglePaymentCheckout(bookingRef.current, date);
     } catch (error) {
       setError(`${checkoutErrorDetail(error)}${bookingRef.current ? " Your booking is saved. Retry here or continue payment from My bookings." : ""}`);
     } finally { setSaving(false); }
@@ -2091,17 +2091,17 @@ function MyBookings({ bookings, currentUser, onCancel }) {
           <p className="text-xs text-stone-500">{b.bookingDate ? formatBookingDate(b.bookingDate) : "Lesson date not recorded"} · {b.plan}</p>
           <p className="text-xs text-stone-600">{/^PM/.test(String(b.gocardlessPaymentId || ""))
             ? "We're waiting for your Direct Debit payment to be confirmed. Please don't book or pay again while it's pending."
-            : isGoCardlessTaster(b) ? "Your taster booking is saved. Continue payment to finish your checkout."
+            : isGoCardlessTaster(b) || isGoCardlessCourse(b) ? "Your checkout is unfinished. Continue payment to confirm your place."
             : "Payment setup needs checking. We need to check your original payment before you try to pay again."}</p>
           <a href="mailto:Shams@snbhive.com" className="text-xs font-semibold underline" style={{ color: TEAL }}>Contact Shams</a>
-          {isGoCardlessTaster(b) && !b.gocardlessPaymentId && <button disabled={!!resumingTaster}
+          {(isGoCardlessTaster(b) || isGoCardlessCourse(b)) && !b.gocardlessPaymentId && <button disabled={!!resumingTaster}
             onClick={async () => {
               setResumingTaster(b.id); setRecoveryNotice("");
-              try { await openTasterCheckout(b); }
+              try { await openSinglePaymentCheckout(b); }
               catch (error) { setRecoveryNotice(checkoutErrorDetail(error)); }
               finally { setResumingTaster(null); }
             }} className="text-xs font-semibold underline self-start disabled:opacity-50" style={{ color: TEAL }}>
-            {resumingTaster === b.id ? "Opening payment…" : "Continue taster payment"}
+            {resumingTaster === b.id ? "Opening payment…" : isGoCardlessCourse(b) ? "Continue course payment" : "Continue taster payment"}
           </button>}
         </div>)}
         {recoveryNotice && <p role="status" className="text-xs text-stone-500">{recoveryNotice}</p>}
@@ -3575,6 +3575,9 @@ function BookingApp() {
   const { bookings, setBookings, loading, loadError, reloadBookings } = useBookings(!!currentUser);
   const eligibleTasters = useTasterEligibility(currentUser, bookings);
   const [tasterBooking, setTasterBooking] = useState(null);
+  const [openingCourse, setOpeningCourse] = useState(false);
+  const courseAttempt = useRef(null);
+  const [courseError, setCourseError] = useState("");
   const [modalSession, setModalSession]     = useState(null);
   const [modalType, setModalType]           = useState(null);
   const [showOpenDay, setShowOpenDay]       = useState(false);
@@ -3637,7 +3640,7 @@ function BookingApp() {
     if (plan.includes("waitlist")) return "waitlist";
     if (plan.includes("taster")) return "taster";
     if (plan.includes("membership")) return "membership";
-    if (plan.includes("bank transfer")) return "course";
+    if (plan.includes("course")) return "course";
     return "payg";
   }
 
@@ -3651,6 +3654,32 @@ function BookingApp() {
   async function handleConfirmBooking(r) {
     const rows = Array.isArray(r) ? r : [r];
     await persist([...bookings.filter(old => !rows.some(row => row.id === old.id)), ...rows]);
+  }
+  async function bookCourse(session) {
+    if (courseAttempt.current) return;
+    courseAttempt.current = true;
+    setOpeningCourse(true); setCourseError("");
+    try {
+      if (loadError) throw new Error("We couldn't load your bookings. Refresh before booking the course.");
+      const dates = classBookingSchedule(session);
+      if (!dates.length) throw new Error("There are no upcoming course dates available.");
+      if (bookings.some(b => b.sessionId === session.id && b.status !== "waitlisted" && bookingBelongsToUser(b, currentUser) && bookingIsActive(b))) {
+        throw new Error("You already have a place on this course. Check My bookings.");
+      }
+      let booking = bookings.find(b => isGoCardlessCourse(b) && bookingBelongsToUser(b, currentUser) &&
+        ["pending_checkout", "pending_payment"].includes(b.status) && !b.gocardlessPaymentId);
+      if (!booking) {
+        const id = uid();
+        booking = { id, paymentGroupId: id, type: "class", sessionId: session.id, sessionName: session.name,
+          bookingDate: dates[0], userId: currentUser.id, name: currentUser.name, email: currentUser.email,
+          phone: currentUser.phone, plan: "Course (GoCardless)", amount: SELF_DEFENCE_PRICE,
+          status: "pending_payment", createdAt: new Date().toISOString() };
+        await handleConfirmBooking(booking);
+      }
+      await openSinglePaymentCheckout(booking);
+    } catch (error) {
+      setCourseError(`${checkoutErrorDetail(error)} Your place is only confirmed after completing GoCardless. Press Book to retry.`);
+    } finally { courseAttempt.current = null; setOpeningCourse(false); }
   }
   async function updateStatus(id, status) {
     const { error } = await supabase.from("bookings").update({ status }).eq("payment_group_id", id);
@@ -3745,12 +3774,14 @@ function BookingApp() {
                     </button>
                   </div>
                 )}
+                {courseError && <p role="alert" className="ff-body text-sm text-red-600 mb-4">{courseError}</p>}
                 <div className="grid sm:grid-cols-2 gap-4">
   {CLASS_CATALOGUE.map(cls => cls.id === PILATES_SESSIONS[0].id
     ? <PilatesCard key={cls.id} onBook={() => setShowPilatesEnquiry(true)}/>
     : <ClassCard key={cls.id} cls={cls} booked={bookedCount(cls.id)}
         bookingType={getUserBookingType(cls.id)} onWaitlist={joinWaitlist}
-        onBook={() => { setModalSession(cls); setModalType("class"); }}/>
+        openingPayment={cls.bookingKind === "gocardless_course" && openingCourse}
+        onBook={() => { if (cls.bookingKind === "gocardless_course") { bookCourse(cls); return; } setModalSession(cls); setModalType("class"); }}/>
   )}
   {!loadError && <TasterCard bookings={bookings} currentUser={currentUser} classes={TASTER_CLASSES.filter(cls =>
     eligibleTasters.includes(cls.id) && !tasterBookingUsed(userTasterBooking(bookings, currentUser, cls.id)) &&

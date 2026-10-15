@@ -21,6 +21,12 @@ export const CLASS_TASTERS = {
 } as const;
 export const SELF_DEFENCE_DATES = ["2026-11-18", "2026-11-25", "2026-12-02"];
 export const SELF_DEFENCE_PRICE = 90;
+export const SELF_DEFENCE_TEMPLATE = "Self Defence - 3 Week Course";
+
+export function coursePaymentConfig(id: unknown, now = new Date()) {
+  if (id !== "self_defence") return null;
+  return { name: "Self Defence", dates: upcomingBookingDates(SELF_DEFENCE_DATES, bookingToday(now)), weekday: null };
+}
 export const CLASS_BANK_ACCOUNT = {
   accountName: "SNB Hive LTD",
   accountNumber: "33053251",

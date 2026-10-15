@@ -93,40 +93,43 @@ with sync_playwright() as p:
  self_card=card(page,'Self Defence')
  for date in ['Wednesday 18th November','Wednesday 25th November','Wednesday 2nd December']: assert date in self_card.inner_text()
  self_card.get_by_role('button',name='Book',exact=True).click()
- for text in ['SNB Hive LTD','33053251','040605',user['name']]: assert text in page.locator('body').inner_text()
- page.get_by_role('button',name='Reserve my place').click();page.get_by_text('Booking saved — awaiting payment').wait_for()
- assert len(rows)==1 and rows[0]['amount']==90 and rows[0]['status']=='pending_payment'
- assert emails[-1]['type']=='bank_transfer_booking' and '2 December 2026' in emails[-1]['booking_dates']
- page.get_by_role('button',name='Got it, thank you').click()
- assert card(page,'Self Defence').get_by_role('button',name='Booked',exact=True).is_disabled()
- page.get_by_role('button',name='My bookings',exact=True).click()
- assert 'Awaiting payment' in page.locator('main').inner_text()
+ page.get_by_role('heading',name="You're booked! 🎉",exact=True).wait_for()
+ assert len(rows)==1 and rows[0]['amount']==90 and rows[0]['status']=='paid'
+ assert rows[0]['plan']=='Course (GoCardless)' and checkout[-1]['plan']=='course'
+ assert not emails, 'Browser must not send a confirmation before server verification'
+ page.get_by_role('link',name='Return to my bookings',exact=True).click()
+ page.get_by_text('Paid',exact=True).wait_for()
  page.get_by_role('button',name='Cancel class',exact=True).click();page.get_by_role('button',name='Yes',exact=True).click()
  page.get_by_text('Booking cancelled. Confirmation emails have been sent.').wait_for()
  assert emails[-1]['type']=='booking_cancelled' and '2 December 2026' in emails[-1]['booking_date']
  page.get_by_role('button',name='Classes',exact=True).first.click()
  assert card(page,'Zumba taster').count()==0
  assert not errors,errors
- print('PASS desktop: Zumba taster offer removed, Thursday BoxFit, Self Defence confirmations/cancellations')
- # Separate member: failed bank-transfer save retries safely.
+ print('PASS desktop: Thursday BoxFit, direct £90 Self Defence checkout and whole-course cancellation')
  user['id']='retry-member';user['email']='retry@example.test';rows=[];checkout=[];fail_booking=True
  context.close();context=fixture_context(browser,viewport={'width':375,'height':812})
  context.add_init_script('localStorage.setItem("snb_session",'+json.dumps(json.dumps(user))+');')
  context.route('https://fixture.supabase.test/**',route_api);context.route('https://fonts.googleapis.com/**',lambda route:route.abort())
  page=context.new_page();page.goto('http://127.0.0.1:5174/');card(page,'Self Defence').get_by_role('button',name='Book',exact=True).click()
- page.get_by_role('button',name='Reserve my place',exact=True).click()
- page.get_by_text("Couldn't save your booking",exact=False).wait_for()
+ page.get_by_role('alert').wait_for()
  assert len(rows)==0 and not checkout
- fail_booking=False
- page.get_by_role('button',name='Reserve my place',exact=True).click();page.get_by_text('Booking saved — awaiting payment').wait_for()
- assert len(rows)==1 and rows[0]['amount']==90 and not checkout
- page.get_by_role('button',name='Got it, thank you',exact=True).click()
+ fail_booking=False;fail_checkout=True
+ card(page,'Self Defence').get_by_role('button',name='Book',exact=True).click()
+ page.get_by_text('Fixture checkout unavailable',exact=False).wait_for()
+ assert len(rows)==1 and rows[0]['amount']==90 and len(checkout)==1
+ saved_id=rows[0]['id'];fail_checkout=False
+ card(page,'Self Defence').get_by_role('button',name='Book',exact=True).click()
+ page.get_by_role('heading',name="You're booked! 🎉",exact=True).wait_for()
+ assert len(rows)==1 and checkout[-1]['booking_id']==saved_id
  page.goto('http://127.0.0.1:5174/');page.get_by_role('heading',name='Zumba',exact=True).wait_for()
  assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
  assert card(page,'BoxFit').get_by_role('button',name='Book',exact=True).is_enabled()
  assert card(page,'Self Defence').get_by_role('button',name='Booked',exact=True).is_disabled()
- print('PASS mobile browser: failed course save retries safely without calling GoCardless, active Self Defence and BoxFit, no horizontal overflow')
+ print('PASS mobile: failed course save/payment retry keeps one booking and marks completed setup Booked')
  page.screenshot(path='/tmp/snb-class-cards-mobile.png',full_page=True)
+ # Legacy bank-transfer receipts and cancellation tools remain supported.
+ rows[0].update(plan='Course (bank transfer)',status='pending_payment',gocardless_payment_id=None)
+ checkout=[]
  rows.append(dict(id='historic-taster',session_id='zumba',session_name='Zumba taster',type='class',user_id=user['id'],name=user['name'],email=user['email'],plan='Taster (bank transfer)',amount=5,status='pending_payment',booking_date='2026-10-16'))
  context.close();context=fixture_context(browser,viewport={'width':1280,'height':1000})
  context.add_init_script('sessionStorage.setItem("snb_admin_session",'+json.dumps(json.dumps({'email':'admin@example.test','loginAt':int(time.time()*1000)}))+');')

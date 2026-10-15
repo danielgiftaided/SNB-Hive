@@ -95,3 +95,11 @@ assert.equal(userHasBookedRegularClass([{ ...regular, plan: "Taster (bank transf
 assert.equal(userHasBookedRegularClass([{ ...regular, sessionId: "boxfit" }], member, "zumba"), false);
 assert.equal(userHasBookedRegularClass([{ ...regular, userId: "other", email: "other@example.test" }], member, "zumba"), false);
 console.log("PASS regular class history disables tasters for the same member/email, preserves incomplete-attempt eligibility and isolates classes/members");
+
+const course = { id: "gc-course", paymentGroupId: "gc-course", sessionId: "self_defence", type: "class",
+  plan: "Course (GoCardless)", amount: 90, status: "pending_payment" };
+assert.equal(bookingIsActive(course), false, "unfinished course checkout reserves no place");
+assert.deepEqual(bookingSyncIds([course]), ["gc-course"], "course recovery checks the original checkout");
+assert.equal(bookingIsActive({ ...course, status: "paid", gocardlessPaymentId: "PM_COURSE" }), true);
+assert.deepEqual(bookingSyncIds([{ ...course, status: "cancelled" }]), []);
+console.log("PASS Self Defence GoCardless: unfinished course inactive, accepted payment active, original checkout sync and cancelled course excluded");
