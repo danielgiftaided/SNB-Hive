@@ -5,14 +5,17 @@ export const CLASS_PAYMENTS = {
     name: "Zumba",
     dates: ["2026-10-09", "2026-10-16", "2026-10-23", "2026-10-30"],
     weekday: 5,
+    endTime: "13:00",
   },
   boxfit: {
     name: "BoxFit",
     dates: ["2026-10-15", "2026-10-22", "2026-10-29"],
     weekday: 4,
+    endTime: "14:00",
   },
 } as const;
 
+export const UPCOMING_CLASS_COUNT = 4;
 export const PAYG_AMOUNT = 1000;
 export const TASTER_AMOUNT = 500;
 export const CLASS_TASTERS = {
@@ -47,9 +50,10 @@ export function upcomingBookingDates(dates: readonly string[], today = bookingTo
 
 // Customer booking choices and the admin's current lesson list use this same
 // schedule. Unconfirmed classes have no invented dates.
-export function classBookingSchedule(session: { id?: unknown; courseDates?: readonly string[] }, today = bookingToday()): string[] {
-  return classPaymentConfig(session.id, new Date(`${today}T12:00:00Z`))?.dates
-    || upcomingBookingDates(session.courseDates || [], today);
+export function classBookingSchedule(session: { id?: unknown; courseDates?: readonly string[] }, reference: Date | string = new Date()): string[] {
+  const now = reference instanceof Date ? reference : new Date(`${reference}T00:00:00Z`);
+  return classPaymentConfig(session.id, now)?.dates
+    || upcomingBookingDates(session.courseDates || [], bookingToday(now));
 }
 
 // Historical payment recovery uses the original month, independent of today.
@@ -60,16 +64,32 @@ export function classDatesInMonth(id: unknown, month: string): string[] {
     date.slice(0, 7) !== config.dates[0].slice(0, 7) || date >= config.dates[0]);
 }
 
+// Compare wall-clock time in London, including British Summer Time. A class
+// remains available until its advertised finish; the exact finish is excluded.
+export function classHasFinished(id: unknown, date: string, now = new Date()): boolean {
+  if (typeof id !== "string" || !Object.hasOwn(CLASS_PAYMENTS, id)) return false;
+  const today = bookingToday(now);
+  if (date !== today) return date < today;
+  const time = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/London", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).format(now);
+  return time >= CLASS_PAYMENTS[id as keyof typeof CLASS_PAYMENTS].endTime;
+}
+
 export function classPaymentConfig(id: unknown, now = new Date()): { name: string; dates: string[]; weekday: number | null } | null {
   if (typeof id !== "string" || !Object.hasOwn(CLASS_PAYMENTS, id)) return null;
   const config = CLASS_PAYMENTS[id as keyof typeof CLASS_PAYMENTS];
   const today = bookingToday(now);
-  const firstMonth = today > config.dates[0] ? today : config.dates[0];
-  let dates = upcomingBookingDates(classDatesInMonth(id, firstMonth), today);
-  if (!dates.length) {
-    const nextMonth = new Date(`${firstMonth}T12:00:00Z`);
-    nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1, 1);
-    dates = classDatesInMonth(id, nextMonth.toISOString().slice(0, 10));
+  const first = today > config.dates[0] ? today : config.dates[0];
+  // UTC arithmetic on date-only values keeps weekly dates stable across DST;
+  // class finish eligibility is checked separately using London's local time.
+  const cursor = new Date(`${first}T12:00:00Z`);
+  cursor.setUTCDate(cursor.getUTCDate() + ((config.weekday - cursor.getUTCDay() + 7) % 7));
+  if (classHasFinished(id, cursor.toISOString().slice(0, 10), now)) cursor.setUTCDate(cursor.getUTCDate() + 7);
+  const dates: string[] = [];
+  for (let index = 0; index < UPCOMING_CLASS_COUNT; index++) {
+    dates.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 7);
   }
   return { ...config, dates };
 }

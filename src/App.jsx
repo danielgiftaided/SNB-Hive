@@ -10,14 +10,14 @@ import {
 } from "lucide-react";
 import storage, { supabase } from "./storage.js";
 import { useBookings } from "./use-bookings.js";
-import { useBookingDay } from "./use-booking-day.js";
+import { useBookingDay, useBookingTime } from "./use-booking-day.js";
 import { useTasterEligibility } from "./use-taster-eligibility.js";
 import { bookingIsActive, bookingIsUpcoming, bookingIsClassRegistration, bookingBelongsToUser, classPaymentIsPending, classUsesGoCardless, bookingSyncIds, bookingSyncIssue, bookingMatchesClassDate, classBookingDates, UNDATED_BOOKING, isTasterBooking, isGoCardlessTaster, isGoCardlessCourse, userHasBookedRegularClass, userTasterBooking, tasterBookingUsed } from "./booking-utils.js";
 import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../supabase/functions/_shared/membership.ts";
 import { membershipDatesFrom } from "../supabase/functions/_shared/membership-bookings.ts";
 import { checkoutErrorDetail, singleMembershipBooking } from "./checkout.js";
 import { downloadCSV, plainDashes } from "./csv.js";
-import { CLASS_PAYMENTS, CLASS_TASTERS, PAYG_AMOUNT, TASTER_AMOUNT, SELF_DEFENCE_DATES, SELF_DEFENCE_PRICE, CLASS_BANK_ACCOUNT, classPaymentConfig, classBookingSchedule, upcomingBookingDates } from "../supabase/functions/_shared/class-config.ts";
+import { CLASS_PAYMENTS, CLASS_TASTERS, PAYG_AMOUNT, TASTER_AMOUNT, SELF_DEFENCE_DATES, SELF_DEFENCE_PRICE, CLASS_BANK_ACCOUNT, classPaymentConfig, classDatesInMonth, classBookingSchedule, upcomingBookingDates, bookingToday } from "../supabase/functions/_shared/class-config.ts";
 
 /* =====================================================================
    CONFIG — edit these to customise the app.
@@ -995,12 +995,13 @@ async function openSinglePaymentCheckout(booking, date = booking.bookingDate) {
 }
 
 function TasterCard({ classes, bookings, onBook, admin = false, currentUser, bookingForm = false, busy = false }) {
-  const today = useBookingDay();
+  const now = useBookingTime();
+  const today = bookingToday(now);
   const [classId, setClassId] = useState(classes[0]?.id);
   const [date, setDate] = useState("");
   const cls = classes.find(item => item.id === classId) || classes[0];
   if (!cls) return null;
-  const dates = classBookingSchedule(cls, today);
+  const dates = classBookingSchedule(cls, now);
   const previous = currentUser ? userTasterBooking(bookings, currentUser, cls.id) : null;
   const preferredDate = previous && !tasterBookingUsed(previous) && dates.includes(previous.bookingDate) ? previous.bookingDate : dates[0];
   const selectedDate = dates.includes(date) ? date : preferredDate;
@@ -1246,8 +1247,9 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
   const [bankRef, setBankRef]     = useState("");
   const [error, setError]         = useState("");
   const [emailNotice, setEmailNotice] = useState("");
-  const today = useBookingDay();
-  const availableDates = classBookingSchedule(session, today);
+  const now = useBookingTime();
+  const today = bookingToday(now);
+  const availableDates = classBookingSchedule(session, now);
   const [selectedDates, setSelectedDates] = useState([previousTaster?.bookingDate && availableDates.includes(previousTaster.bookingDate) ? previousTaster.bookingDate : availableDates[0]]);
 
   useEffect(() => {
@@ -1255,7 +1257,7 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
       const remaining = current.filter(date => availableDates.includes(date));
       return remaining.length ? remaining : availableDates.slice(0, 1);
     });
-  }, [today, session.id]);
+  }, [now, session.id]);
 
   function toggleDate(date) {
     setSelectedDates(current => current.includes(date)
@@ -1422,7 +1424,7 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
         // A short, unique reference the person includes on their bank
         // transfer, so it can be matched back to this booking manually.
         const ref = type === "retreat" ? bookingId.slice(0, 8).toUpperCase() : null;
-        const membershipDates = membershipDatesFrom(selectedDates[0], availableDates);
+        const membershipDates = membershipDatesFrom(selectedDates[0], classDatesInMonth(session.id, selectedDates[0]));
         await onConfirm(type === "class" && plan === "membership"
           ? membershipDates.map((bookingDate, index) => singleMembershipBooking({
               base,
@@ -1519,7 +1521,7 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
                     <div className="flex flex-col gap-2">
                       {availableDates.map(date => (
                         <label key={date} className="flex items-center gap-2.5 rounded-lg bg-stone-50 px-3 py-2 text-sm cursor-pointer">
-                          <input type="checkbox" checked={selectedDates.includes(date)} onChange={() => toggleDate(date)}/>
+                          <input type="checkbox" value={date} checked={selectedDates.includes(date)} onChange={() => toggleDate(date)}/>
                           <span>{formatBookingDate(date)}</span>
                         </label>
                       ))}
@@ -1540,7 +1542,7 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
                     <div className="flex flex-col gap-2">
                       {availableDates.map(date => (
                         <label key={date} className="flex items-center gap-2.5 rounded-lg bg-stone-50 px-3 py-2 text-sm cursor-pointer">
-                          <input type="radio" name="membership-start-date" checked={selectedDates[0] === date}
+                          <input type="radio" name="membership-start-date" value={date} checked={selectedDates[0] === date}
                             onChange={() => setSelectedDates([date])}/>
                           <span>{formatBookingDate(date)}</span>
                         </label>
@@ -2801,8 +2803,9 @@ function StudioHireForm({ currentUser }) {
 
 function AdminClassCard({ cls, bookings, onMoveBooking }) {
   const Icon = ICONS[cls.icon] || Sparkles;
-  const today = useBookingDay();
-  const upcomingDates = classBookingSchedule(cls, today);
+  const now = useBookingTime();
+  const today = bookingToday(now);
+  const upcomingDates = classBookingSchedule(cls, now);
   const historyDates = classBookingDates(bookings, cls.id, []).filter(date => !upcomingDates.includes(date));
   const [showHistory, setShowHistory] = useState(false);
   const [scheduledDate, setScheduledDate] = useState(upcomingDates[0]);

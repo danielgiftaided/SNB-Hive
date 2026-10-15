@@ -14,6 +14,7 @@
     "test:gocardless-webhook": "node scripts/test-gocardless-webhook.mjs",
     "test:gocardless-allocation": "node scripts/test-gocardless-allocation.mjs",
     "test:booking-utils": "node scripts/test-booking-utils.mjs",
+    "test:class-end-checkout": "node scripts/test-class-end-checkout.mjs",
     "test:booking-dates": "node scripts/test-booking-dates.mjs",
     "test:boxfit-date-migration": "node scripts/test-boxfit-date-migration.mjs",
     "test:booking-reader": "node scripts/test-booking-reader.mjs",

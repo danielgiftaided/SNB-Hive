@@ -60,7 +60,8 @@ with sync_playwright() as p:
             page = context.new_page()
             page.on('pageerror', lambda error: errors.append(str(error)))
             page.set_default_timeout(10000)
-            page.clock.install(time=datetime(2026, 10, 15, 22, 59, 30, tzinfo=timezone.utc))
+            page.clock.install(time=datetime(2026, 10, 15, 12, 59, 0, tzinfo=timezone.utc))
+            page.clock.pause_at(datetime(2026, 10, 15, 12, 59, 0, tzinfo=timezone.utc))
             page.goto('http://127.0.0.1:5174/admin' if admin else 'http://127.0.0.1:5174/')
             if admin: page.get_by_role('button', name=re.compile('^Classes')).click()
             page.get_by_role('heading', name='BoxFit', exact=True).wait_for()
@@ -72,7 +73,9 @@ with sync_playwright() as p:
                 assert boxes[0]['x'] == boxes[2]['x'] == boxes[4]['x']
             else:
                 assert all(boxes[i]['y'] < boxes[i+1]['y'] for i in range(6))
+            page.clock.resume()
             page.screenshot(path=f'/tmp/snb-class-sync-{width}-{"admin" if admin else "customer"}.png', full_page=True)
+            page.clock.pause_at(datetime(2026, 10, 15, 12, 59, 30, tzinfo=timezone.utc))
             contexts.append(context)
             pages.append(page)
         customer, admin = pages
@@ -93,7 +96,7 @@ with sync_playwright() as p:
         assert 'BoxFit 2026-10-20' in box.inner_text()
         box.get_by_role('button', name='Upcoming lessons', exact=True).click()
         assert box.get_by_role('combobox', name='Lesson date', exact=True).input_value() == '2026-10-15'
-        for page in pages: page.clock.fast_forward(61000)
+        for page in pages: page.clock.fast_forward(30000)
         assert choices(customer, 'BoxFit') == choices(admin, 'BoxFit', True)
         assert box.get_by_role('combobox', name='Lesson date', exact=True).input_value() == '2026-10-22'
         for moment in [datetime(2026,10,30,12,tzinfo=timezone.utc), datetime(2026,11,19,12,tzinfo=timezone.utc), datetime(2026,12,3,12,tzinfo=timezone.utc)]:
