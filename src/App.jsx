@@ -1,3 +1,4 @@
+import CancellationPolicyNotice from "./CancellationPolicyNotice.jsx";
 import TermsContent from "./TermsContent.jsx";
 import { useState, useEffect, useRef } from "react";
 import {
@@ -919,7 +920,8 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = 
 
       <ClassDetails cls={cls} today={today}/>
 
-      <div className="flex items-center justify-end pt-2 border-t border-stone-100 mt-auto">
+      <div className={`flex justify-end pt-2 border-t border-stone-100 mt-auto ${cls.bookingKind === "gocardless_course" ? "flex-col items-end gap-3" : "items-center"}`}>
+        {cls.bookingKind === "gocardless_course" && !isBooked && !courseClosed && !full && <CancellationPolicyNotice/>}
         <button
           onClick={() => {
             if (isWaitlist) {
@@ -1104,6 +1106,7 @@ function TasterBookingModal({ session, date, currentUser, previousBooking, onCon
         <p className="text-xs text-stone-500">One taster for this class. Pay securely through GoCardless.</p>
         {!available && <p role="alert" className="text-sm text-red-600">This date is no longer available. Close this window and choose an upcoming date.</p>}
         {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+        <CancellationPolicyNotice/>
         <button onClick={confirm} disabled={saving || !available} className="inline-flex items-center justify-center gap-2 font-semibold text-sm py-3 rounded-full disabled:opacity-50" style={{ backgroundColor: TEAL, color: "#fff" }}>
           {saving ? <><Loader2 size={15} className="animate-spin"/>Opening secure payment…</> : <>Continue to payment<ArrowRight size={15}/></>}
         </button>
@@ -1464,6 +1467,7 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
                 </div>
               </div>
               {error && <p className="text-xs text-red-600">{error}</p>}
+              {type === "class" && <CancellationPolicyNotice/>}
               <button onClick={handleConfirm} disabled={saving}
                 className="inline-flex items-center justify-center gap-1.5 font-semibold text-sm py-3 rounded-full transition"
                 style={{ backgroundColor:TEAL, color:"#fff" }}>
@@ -1587,6 +1591,7 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
 
               {error && <p className="text-xs text-red-600">{error}</p>}
 
+              {type === "class" && <CancellationPolicyNotice/>}
               <button onClick={handleConfirm} disabled={saving}
                 className="inline-flex items-center justify-center gap-1.5 font-semibold text-sm py-3 rounded-full transition"
                 style={{ backgroundColor:TEAL, color:"#fff" }}>
@@ -1622,6 +1627,7 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
               <p className="text-xs text-stone-500">Use your name as the payment reference. Your booking will show as awaiting payment until we receive your transfer.</p>
               {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
               {emailNotice && <p role="status" className="text-xs text-amber-700">{emailNotice}</p>}
+              {step !== 2 && type === "class" && <CancellationPolicyNotice/>}
               <button onClick={step === 2 ? onClose : handleConfirm} disabled={saving}
                 className="inline-flex items-center justify-center gap-1.5 font-semibold text-sm py-3 rounded-full disabled:opacity-50" style={{ backgroundColor:TEAL, color:"#fff" }}>
                 {saving ? <Loader2 size={15} className="animate-spin"/> : step === 2 ? "Got it, thank you" : "Reserve my place"}
@@ -2095,7 +2101,9 @@ function MyBookings({ bookings, currentUser, onCancel }) {
             : isGoCardlessTaster(b) || isGoCardlessCourse(b) ? "Your checkout is unfinished. Continue payment to confirm your place."
             : "Payment setup needs checking. We need to check your original payment before you try to pay again."}</p>
           <a href="mailto:Shams@snbhive.com" className="text-xs font-semibold underline" style={{ color: TEAL }}>Contact Shams</a>
-          {(isGoCardlessTaster(b) || isGoCardlessCourse(b)) && !b.gocardlessPaymentId && <button disabled={!!resumingTaster}
+          {(isGoCardlessTaster(b) || isGoCardlessCourse(b)) && !b.gocardlessPaymentId && <>
+          <CancellationPolicyNotice/>
+          <button disabled={!!resumingTaster}
             onClick={async () => {
               setResumingTaster(b.id); setRecoveryNotice("");
               try { await openSinglePaymentCheckout(b); }
@@ -2103,7 +2111,7 @@ function MyBookings({ bookings, currentUser, onCancel }) {
               finally { setResumingTaster(null); }
             }} className="text-xs font-semibold underline self-start disabled:opacity-50" style={{ color: TEAL }}>
             {resumingTaster === b.id ? "Opening payment…" : isGoCardlessCourse(b) ? "Continue course payment" : "Continue taster payment"}
-          </button>}
+          </button></>}
         </div>)}
         {recoveryNotice && <p role="status" className="text-xs text-stone-500">{recoveryNotice}</p>}
       </section>}
