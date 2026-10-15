@@ -19,6 +19,7 @@
     "test:booking-reader": "node scripts/test-booking-reader.mjs",
     "test:membership-proration": "node scripts/test-membership-proration.mjs",
     "test:class-bookings": "node scripts/test-class-bookings.mjs",
+    "test:self-defence-checkout": "node scripts/test-self-defence-checkout.mjs",
     "test:class-taster-checkout": "node scripts/test-class-taster-checkout.mjs",
     "test:taster-database": "node scripts/test-taster-database.mjs"
   },

@@ -1,6 +1,6 @@
-import { classPaymentConfig, TASTER_AMOUNT } from "./class-config.ts";
+import { classPaymentConfig, coursePaymentConfig, SELF_DEFENCE_PRICE, TASTER_AMOUNT } from "./class-config.ts";
 
-export type CheckoutPlan = "payg" | "membership" | "taster";
+export type CheckoutPlan = "payg" | "membership" | "taster" | "course";
 
 export function checkoutMetadata(
   bookingId: string,
@@ -36,26 +36,27 @@ export function bookingRowsValidationIssue(
   if (booking.payment_group_id !== booking.id || rows.some(row => row?.payment_group_id !== booking.payment_group_id)) {
     return "wrong_payment_group";
   }
-  const expectedPlan = plan === "taster" ? "taster (gocardless)" : plan === "membership" ? "membership" : "pay as you go";
+  const expectedPlan = plan === "course" ? "course (gocardless)" : plan === "taster" ? "taster (gocardless)" : plan === "membership" ? "membership" : "pay as you go";
   if (typeof booking.plan !== "string" || !booking.plan.toLowerCase().includes(expectedPlan) ||
       rows.some(row => typeof row?.plan !== "string" || !row.plan.toLowerCase().includes(expectedPlan))) {
     return "wrong_plan";
   }
-  if (plan === "taster" ? rows.length !== 1 || rows[0]?.id !== booking.id || booking.plan.toLowerCase() !== expectedPlan :
-      rows.some(row => String(row.plan).toLowerCase().includes("taster"))) return "wrong_plan";
+  const singlePayment = plan === "taster" || plan === "course";
+  if (singlePayment ? rows.length !== 1 || rows[0]?.id !== booking.id || booking.plan.toLowerCase() !== expectedPlan ||
+      String(rows[0].plan).toLowerCase() !== expectedPlan : rows.some(row => String(row.plan).toLowerCase().includes("taster"))) return "wrong_plan";
   // Checkout is initiated from a configured paid class. A two-activity
   // membership deliberately puts the member's second class in the same
   // payment group, so requiring every row to have the Zumba session id makes
   // that valid group impossible to verify. PAYG rows, on the other hand, are
   // all individual Zumba dates and must remain restricted to that session.
-  if (!classPaymentConfig(booking.session_id)) return "wrong_session";
+  if (!(plan === "course" ? coursePaymentConfig(booking.session_id) : classPaymentConfig(booking.session_id))) return "wrong_session";
   if (plan !== "membership" && rows.some(row => !row || row.session_id !== booking.session_id)) {
     return "wrong_session";
   }
   if (rows.some(row => !(row.status === "pending_checkout" || row.status === "pending_payment"))) {
     return "wrong_status";
   }
-  if (plan !== "membership" && rows.some(row => Math.round(Number(row.amount) * 100) !== (plan === "taster" ? TASTER_AMOUNT : paygAmount))) {
+  if (plan !== "membership" && rows.some(row => Math.round(Number(row.amount) * 100) !== (plan === "course" ? SELF_DEFENCE_PRICE * 100 : plan === "taster" ? TASTER_AMOUNT : paygAmount))) {
     return "wrong_amount";
   }
   return null;

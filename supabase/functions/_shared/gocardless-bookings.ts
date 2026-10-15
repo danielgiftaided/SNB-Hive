@@ -1,4 +1,4 @@
-import { classPaymentConfig, classDatesInMonth } from "./class-config.ts";
+import { classPaymentConfig, classDatesInMonth, SELF_DEFENCE_DATES } from "./class-config.ts";
 import { weeklyDatesInMonth } from "./membership-bookings.ts";
 import { MEMBERSHIP_MONTHLY_AMOUNT } from "./membership.ts";
 
@@ -90,7 +90,8 @@ export async function sendBookingNotice(paymentId: string, type: "booking_confir
   const marker = type === "booking_confirmation" ? "booking_confirmation_sent_at" : "payment_confirmation_sent_at";
   const rows = await bookings({ gocardless_payment_id: `eq.${paymentId}`, status: type === "payment_confirmation" ? "eq.paid" : "neq.cancelled", select: "*" });
   if (!rows.length || rows.every(row => row[marker])) return;
-  const dates = [...new Set(rows.map(row => row.booking_date).filter(Boolean))].sort();
+  const dates = [...new Set(rows.flatMap(row => row.session_id === "self_defence" && String(row.plan).toLowerCase().includes("course")
+    ? SELF_DEFENCE_DATES : [row.booking_date]).filter(Boolean))].sort();
   const names = [...new Set(rows.map(row => row.session_name))].join(" & ");
   const base = Deno.env.get("SUPABASE_URL");
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -232,7 +233,7 @@ export async function syncBooking(bookingId: string, tolerateEmailFailure = true
   const [anchor] = await bookings({ id: `eq.${bookingId}`, select: "*", limit: "1" });
   if (!anchor) throw new Error("Booking could not be found");
   const plan = String(anchor.plan).toLowerCase();
-  if (plan.includes("bank transfer") || (!plan.includes("membership") && !plan.includes("pay as you go") && plan !== "taster (gocardless)")) throw new Error("This booking does not use Direct Debit");
+  if (plan.includes("bank transfer") || (!plan.includes("membership") && !plan.includes("pay as you go") && plan !== "taster (gocardless)" && plan !== "course (gocardless)")) throw new Error("This booking does not use Direct Debit");
   if (anchor.status === "cancelled") return { allocated: false, reason: "cancelled" };
   const originalId = anchor.payment_group_id || anchor.id;
   if (anchor.gocardless_billing_request_id) return fulfillBillingRequest(anchor.gocardless_billing_request_id, originalId, tolerateEmailFailure);

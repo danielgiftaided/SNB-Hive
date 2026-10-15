@@ -1,6 +1,7 @@
 import { corsHeaders, json } from "../_shared/http.ts";
 import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../_shared/membership.ts";
-import { classPaymentConfig, CLASS_TASTERS, PAYG_AMOUNT, TASTER_AMOUNT } from "../_shared/class-config.ts";
+import { classPaymentConfig, coursePaymentConfig, SELF_DEFENCE_DATES, SELF_DEFENCE_PRICE, SELF_DEFENCE_TEMPLATE, CLASS_TASTERS, PAYG_AMOUNT, TASTER_AMOUNT } from "../_shared/class-config.ts";
+import { templatePaymentRequest } from "../_shared/template-checkout.ts";
 import { tasterPaymentRequest } from "../_shared/taster-checkout.ts";
 import { GoCardlessCheckoutError } from "../_shared/gocardless-checkout-error.ts";
 import {
@@ -13,8 +14,8 @@ import {
 
 const GC_API = Deno.env.get("GOCARDLESS_API_URL") || "https://api.gocardless.com";
 const GC_VERSION = "2015-07-06";
-const PRICES = { payg: PAYG_AMOUNT, membership: MEMBERSHIP_MONTHLY_AMOUNT, taster: TASTER_AMOUNT } as const;
-const CHECKOUT_VERSION = "class-payments-v8-resume-tasters";
+const PRICES = { payg: PAYG_AMOUNT, membership: MEMBERSHIP_MONTHLY_AMOUNT, taster: TASTER_AMOUNT, course: SELF_DEFENCE_PRICE * 100 } as const;
+const CHECKOUT_VERSION = "class-payments-v9-self-defence";
 
 async function getBooking(id: string) {
   const url = Deno.env.get("SUPABASE_URL");
@@ -214,7 +215,7 @@ Deno.serve(async request => {
 
   try {
     const { booking_id, plan, session_id, booking_date, return_url, exit_url } = await request.json();
-    const session = classPaymentConfig(session_id);
+    const session = plan === "course" ? coursePaymentConfig(session_id) : classPaymentConfig(session_id);
     if (!booking_id || !session || !session.dates.length || !Object.hasOwn(PRICES, plan)) {
       return json({ error: "This payment option is not available" }, 400);
     }
@@ -232,7 +233,7 @@ Deno.serve(async request => {
     const tasterDate = plan === "taster" && booking_date !== undefined ? booking_date : booking.booking_date;
     if ((booking.session_id && booking.session_id !== session_id) ||
         group.some((row: Record<string, unknown>) => row.session_id === session_id &&
-          !session.dates.includes(String(plan === "taster" ? tasterDate : row.booking_date)))) {
+          !(plan === "course" ? SELF_DEFENCE_DATES : session.dates).includes(String(plan === "taster" ? tasterDate : row.booking_date)))) {
       return json({ error: "This lesson date is not available" }, 400);
     }
     if (group.some((row: Record<string, unknown>) => row.gocardless_payment_id)) {
@@ -263,16 +264,18 @@ Deno.serve(async request => {
       : expectedAmount;
     const metadata = checkoutMetadata(booking_id, booking.payment_group_id, plan as CheckoutPlan);
     const taster = plan === "taster" ? await tasterPaymentRequest(session_id as keyof typeof CLASS_TASTERS) : null;
+    const template = taster || (plan === "course"
+      ? await templatePaymentRequest(SELF_DEFENCE_TEMPLATE, PRICES.course, "GOCARDLESS_SELF_DEFENCE_TEMPLATE_ID") : null);
     const requestBody = plan !== "membership"
       ? {
           payment_request: {
-            ...(taster?.paymentRequest || {}),
+            ...(template?.paymentRequest || {}),
             amount: expectedAmount,
             currency: "GBP",
-            description: taster?.paymentRequest.description || `SNB Hive ${session.name} class`,
-            metadata: { booking_id, ...(taster ? { taster_template_id: taster.templateId } : {}) },
+            description: template?.paymentRequest.description || `SNB Hive ${session.name} class`,
+            metadata: { booking_id, ...(template ? { [plan === "taster" ? "taster_template_id" : "course_template_id"]: template.templateId } : {}) },
           },
-          mandate_request: taster?.mandateRequest || { scheme: "bacs" },
+          mandate_request: template?.mandateRequest || { scheme: "bacs" },
           metadata,
         }
       : {

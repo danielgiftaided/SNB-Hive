@@ -72,7 +72,11 @@ export function bookingSyncIssue(result) {
 export function classUsesGoCardless(booking) {
   const plan = String(booking?.plan || "").toLowerCase();
   return booking?.type === "class" && ["pending_checkout", "pending_payment", "confirmed", "paid"].includes(booking.status) &&
-    !plan.includes("bank transfer") && (plan.includes("membership") || plan.includes("pay as you go") || isGoCardlessTaster(booking));
+    !plan.includes("bank transfer") && (plan.includes("membership") || plan.includes("pay as you go") || isGoCardlessTaster(booking) || isGoCardlessCourse(booking));
+}
+
+export function isGoCardlessCourse(booking) {
+  return booking?.sessionId === "self_defence" && String(booking.plan || "").toLowerCase() === "course (gocardless)";
 }
 
 export function isTasterBooking(booking) {
