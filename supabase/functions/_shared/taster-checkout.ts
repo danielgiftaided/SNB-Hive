@@ -44,14 +44,10 @@ export async function tasterPaymentRequest(sessionId: keyof typeof CLASS_TASTERS
   if (!template?.id || template.name?.trim().toLowerCase() !== name.toLowerCase()) {
     throw new Error(`The configured template does not match ${name}.`);
   }
-  // A template may leave fields open for the checkout to supply. The amount
-  // and currency always come from the app's validated £5 booking, not input
-  // entered by the customer on a reusable payment link.
-  const amount = String(template.payment_request_amount ?? "").trim();
-  if (amount && Number(amount) !== TASTER_AMOUNT) {
-    const display = Number.isFinite(Number(amount)) ? `£${(Number(amount) / 100).toFixed(2)}` : "an invalid amount";
-    throw new Error(`The ${name} template specifies ${display}. Set its payment amount to £5 or leave it open for the app to set £5.`);
-  }
+  // The app owns the taster tariff. Reusable template amounts must neither
+  // override it nor be compared to payment API minor units: a template can
+  // return "5"/"5.00", while this billing request must always send 500p.
+  // The saved booking's £5 amount is independently validated before this call.
   const currency = template.payment_request_currency?.trim().toUpperCase();
   if (currency && currency !== "GBP") throw new Error(`The ${name} template uses ${currency}. Set its payment currency to GBP.`);
   const paymentScheme = template.payment_request_scheme?.trim().toLowerCase();
