@@ -14,7 +14,7 @@ import {
 const GC_API = Deno.env.get("GOCARDLESS_API_URL") || "https://api.gocardless.com";
 const GC_VERSION = "2015-07-06";
 const PRICES = { payg: PAYG_AMOUNT, membership: MEMBERSHIP_MONTHLY_AMOUNT, taster: TASTER_AMOUNT } as const;
-const CHECKOUT_VERSION = "class-payments-v7-provider-errors";
+const CHECKOUT_VERSION = "class-payments-v8-resume-tasters";
 
 async function getBooking(id: string) {
   const url = Deno.env.get("SUPABASE_URL");
@@ -22,7 +22,7 @@ async function getBooking(id: string) {
   if (!url || !serviceKey) throw new Error("Supabase function environment is not configured");
   const query = new URLSearchParams({
     id: `eq.${id}`,
-    select: "id,session_id,plan,amount,status,payment_group_id,booking_date,gocardless_payment_id",
+    select: "id,session_id,plan,amount,status,payment_group_id,booking_date,gocardless_payment_id,gocardless_billing_request_id",
     limit: "1",
   });
   const response = await fetch(`${url}/rest/v1/bookings?${query}`, {
@@ -144,6 +144,34 @@ async function gc(path: string, body: unknown, idempotencyKey: string) {
   return result;
 }
 
+async function changeUnfinishedTasterDate(booking: Record<string, unknown>, date: string) {
+  if (booking.gocardless_billing_request_id) {
+    const token = Deno.env.get("GOCARDLESS_ACCESS_TOKEN");
+    if (!token) throw new Error("GoCardless is not configured");
+    const response = await fetch(`${GC_API}/billing_requests/${encodeURIComponent(String(booking.gocardless_billing_request_id))}`, {
+      headers: { Authorization: `Bearer ${token}`, "GoCardless-Version": GC_VERSION },
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok || !result) throw new GoCardlessCheckoutError("/billing_requests", response.status, result, true);
+    const request = result.billing_requests;
+    if (request?.metadata?.booking_id !== booking.id) throw new Error("The saved checkout does not match this taster booking.");
+    if (request.status !== "pending" || request.links?.payment_request_payment || request.payment_request?.links?.payment) {
+      throw new Error("This checkout has already progressed. Check its payment in My bookings before changing the date.");
+    }
+  }
+  // Change only an unconfirmed reservation. A webhook winning this race must
+  // prevent a date overwrite; completed tasters keep their original lesson.
+  const query = new URLSearchParams({ id: `eq.${booking.id}`, status: "in.(pending_checkout,pending_payment)", gocardless_payment_id: "is.null" });
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const response = await fetch(`${Deno.env.get("SUPABASE_URL")}/rest/v1/bookings?${query}`, {
+    method: "PATCH", headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "return=representation" },
+    body: JSON.stringify({ booking_date: date }),
+  });
+  if (!response.ok) throw new Error("The taster date could not be saved. Please retry.");
+  const changed = await response.json();
+  if (!Array.isArray(changed) || changed.length !== 1) throw new Error("This booking has changed. Refresh My bookings before continuing.");
+}
+
 function configuredAppOrigin() {
   const configuredUrl = Deno.env.get("APP_URL")?.trim();
   if (!configuredUrl) {
@@ -185,7 +213,7 @@ Deno.serve(async request => {
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   try {
-    const { booking_id, plan, session_id, return_url, exit_url } = await request.json();
+    const { booking_id, plan, session_id, booking_date, return_url, exit_url } = await request.json();
     const session = classPaymentConfig(session_id);
     if (!booking_id || !session || !session.dates.length || !Object.hasOwn(PRICES, plan)) {
       return json({ error: "This payment option is not available" }, 400);
@@ -201,9 +229,10 @@ Deno.serve(async request => {
       }, 400);
     }
     const { booking, group } = verified;
+    const tasterDate = plan === "taster" && booking_date !== undefined ? booking_date : booking.booking_date;
     if ((booking.session_id && booking.session_id !== session_id) ||
         group.some((row: Record<string, unknown>) => row.session_id === session_id &&
-          !session.dates.includes(String(row.booking_date)))) {
+          !session.dates.includes(String(plan === "taster" ? tasterDate : row.booking_date)))) {
       return json({ error: "This lesson date is not available" }, 400);
     }
     if (group.some((row: Record<string, unknown>) => row.gocardless_payment_id)) {
@@ -220,6 +249,11 @@ Deno.serve(async request => {
     const requestOrigin = request.headers.get("origin");
     const redirectUri = allowedRedirect(return_url, expectedOrigin, requestOrigin);
     const exitUri = allowedRedirect(exit_url, expectedOrigin, requestOrigin);
+    if (plan === "taster" && tasterDate !== booking.booking_date) {
+      await changeUnfinishedTasterDate(booking, String(tasterDate));
+      booking.booking_date = tasterDate;
+      group[0].booking_date = tasterDate;
+    }
 
     const membershipStartDate = booking.booking_date
       ? new Date(`${booking.booking_date}T12:00:00Z`)
@@ -269,7 +303,8 @@ Deno.serve(async request => {
       },
     }, `class-flow-${booking_id}`);
 
-    return json({ authorisation_url: flow.billing_request_flows.authorisation_url, checkout_version: CHECKOUT_VERSION });
+    return json({ authorisation_url: flow.billing_request_flows.authorisation_url, checkout_version: CHECKOUT_VERSION,
+      ...(plan === "taster" ? { booking_date: booking.booking_date } : {}) });
   } catch (error) {
     if (error instanceof GoCardlessCheckoutError) {
       console.error("[gocardless-checkout]", JSON.stringify({ event: "provider_rejected", checkout_version: CHECKOUT_VERSION, ...error.details }));

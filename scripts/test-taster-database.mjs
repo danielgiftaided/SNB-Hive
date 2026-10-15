@@ -24,7 +24,8 @@ try {
       ('unfinished','zumba','checkout@example.test','checkout-member','Pay as you go','pending_checkout',10),
       ('cancelled-class','zumba','cancelled@example.test','cancelled-member','Pay as you go','cancelled',10),
       ('legacy-boxing','boxing','boxing@example.test','boxing-member','Free taster','confirmed',0),
-      ('bank-course','self_defence','course@example.test','course-member','Course (bank transfer)','pending_payment',90);
+      ('bank-course','self_defence','course@example.test','course-member','Course (bank transfer)','pending_payment',90),
+      ('existing-gc-attempt','boxfit','abandoned@example.test','abandoned','Taster (GoCardless)','pending_payment',5);
   `);
   const snapshot = () => db.query('select id,session_id,session_name,name,email,user_id,plan,status,amount,created_at from bookings order by id');
   const historyBefore = (await snapshot()).rows;
@@ -100,9 +101,14 @@ try {
   const beforeTasterCard = (await snapshot()).rows;
   await db.exec(tasterCardSql);
   await db.exec(tasterCardSql);
+  assert.equal((await db.query("select eligible from public.class_taster_eligibility('abandoned','abandoned@example.test') where session_id='boxfit'")).rows[0].eligible, false);
+  const resumeSql = await readFile(new URL('../supabase/migrations/20261015010000_resume_unfinished_tasters.sql', import.meta.url), 'utf8');
+  await db.exec(resumeSql);
+  await db.exec(resumeSql);
   assert.deepEqual((await snapshot()).rows, beforeTasterCard, "availability migration does not change bookings");
   const availability = async (id, email) => (await db.query(
     'select * from public.class_taster_eligibility($1, $2) order by session_id', [id, email])).rows;
+  assert.equal((await availability('abandoned', 'abandoned@example.test'))[0].eligible, true, "migration restores availability for existing abandoned attempts without removing their claim/booking");
   assert.deepEqual(await availability('fresh', 'fresh@example.test'), [
     { session_id: 'boxfit', eligible: true }, { session_id: 'zumba', eligible: true },
   ]);
@@ -113,9 +119,12 @@ try {
     { session_id: 'boxfit', eligible: true }, { session_id: 'zumba', eligible: false },
   ], "deleted regular-Zumba claims keep the existing first-class restriction");
   await db.query("insert into bookings (id,session_id,email,user_id,plan,status,amount,booking_date,payment_group_id) values ('gc-taster','boxfit','fresh@example.test','fresh','Taster (GoCardless)','pending_payment',5,'2026-10-15','gc-taster')");
-  assert.equal((await availability('fresh', 'fresh@example.test'))[0].eligible, false, "saving checkout hides the offer immediately");
+  assert.equal((await availability('fresh', 'fresh@example.test'))[0].eligible, true, "saving an unfinished checkout keeps the offer available to resume");
+  assert.equal((await availability('fresh', ' CHANGED@EXAMPLE.TEST '))[0].eligible, true);
+  assert.equal((await availability('new-email-id', ' FRESH@EXAMPLE.TEST '))[0].eligible, true);
   await assert.rejects(insert('gc-repeat','fresh','FRESH@example.test','boxfit'), /Only one lifetime taster/);
   await db.query("update bookings set status='paid',gocardless_payment_id='PM_TASTER' where id='gc-taster'");
+  assert.equal((await availability('fresh', 'fresh@example.test'))[0].eligible, false, "verified completion hides the taster");
   await db.query("update bookings set status='cancelled' where id='gc-taster'");
   await db.query("delete from bookings where id='gc-taster'");
   await db.exec("set role anon");

@@ -20,6 +20,7 @@ authorised = set()
 fail_save = False
 fail_checkout = False
 fail_eligibility = False
+abandon_checkout = False
 
 def api(route):
     request = route.request
@@ -49,8 +50,15 @@ def api(route):
         if fail_checkout:
             route.fulfill(status=500, content_type='application/json', body='{"error":"fixture checkout unavailable"}')
             return
-        authorised.add(checkouts[-1]['booking_id'])
-        result = dict(authorisation_url='http://127.0.0.1:5174/payment-complete?booking_id=' + checkouts[-1]['booking_id'])
+        for row in rows:
+            if row['id'] == checkouts[-1]['booking_id']:
+                if checkouts[-1].get('booking_date') != row['booking_date']:
+                    assert row['status'] == 'pending_payment' and not row.get('gocardless_payment_id')
+                    row['booking_date'] = checkouts[-1]['booking_date']
+        if not abandon_checkout:
+            authorised.add(checkouts[-1]['booking_id'])
+        target = '/fixture-gocardless?booking_id=' if abandon_checkout else '/payment-complete?booking_id='
+        result = dict(authorisation_url='http://127.0.0.1:5174' + target + checkouts[-1]['booking_id'], booking_date=checkouts[-1]['booking_date'])
     elif '/functions/v1/gocardless-sync' in request.url:
         booking_id = request.post_data_json['booking_id']
         for row in rows:
@@ -67,6 +75,8 @@ def api(route):
 def context_for(browser, width=1280, admin=False):
     context = browser.new_context(viewport=dict(width=width, height=1000), timezone_id='Europe/London')
     context.route('https://fixture.supabase.test/**', api)
+    context.route('http://127.0.0.1:5174/fixture-gocardless**', lambda route: route.fulfill(
+        status=200, content_type='text/html', body='<h1>GoCardless checkout</h1><p>No bank details entered.</p>'))
     value = dict(email='admin@example.test', loginAt=int(time.time()*1000)) if admin else user
     storage = 'sessionStorage' if admin else 'localStorage'
     key = 'snb_admin_session' if admin else 'snb_session'
@@ -116,8 +126,23 @@ with sync_playwright() as p:
             tasters(page).get_by_role('button', name='Book taster', exact=True).click()
             dialog = page.get_by_role('dialog')
             assert '£5.00' in dialog.inner_text() and 'Monthly membership' not in dialog.inner_text()
+            abandon_checkout = True
             dialog.get_by_role('button', name='Continue to payment', exact=True).click()
+            page.get_by_role('heading', name='GoCardless checkout', exact=True).wait_for()
+            abandoned_id = checkouts[-1]['booking_id']
+            page.go_back()
+            page.get_by_role('heading', name='Zumba', exact=True).wait_for()
+            assert ('BoxFit' if session == 'boxfit' else 'Zumba') in options(page), 'Back without entering details must retain the taster offer'
+            tasters(page).get_by_role('combobox', name='Taster class', exact=True).select_option(session)
+            assert tasters(page).get_by_role('radio', checked=True).input_value() == date
+            tasters(page).get_by_role('radio').last.check()
+            date = tasters(page).get_by_role('radio', checked=True).input_value()
+            tasters(page).get_by_role('button', name='Book taster', exact=True).click()
+            abandon_checkout = False
+            page.get_by_role('dialog').get_by_role('button', name='Continue to payment', exact=True).click()
             page.get_by_role('heading', name="You're booked! 🎉", exact=True).wait_for()
+            assert checkouts[-1]['booking_id'] == abandoned_id
+            assert len([row for row in rows if row['session_id'] == session]) == 1
             assert rows[-1]['amount'] == 5 and rows[-1]['booking_date'] == date
             assert rows[-1]['session_id'] == session and rows[-1]['plan'] == 'Taster (GoCardless)'
             assert checkouts[-1]['session_id'] == session
@@ -144,7 +169,7 @@ with sync_playwright() as p:
             regular.get_by_role('combobox', name='Lesson date', exact=True).select_option(row['booking_date'])
             assert user['name'] in regular.inner_text(), 'Tasters belong in the live class register too'
         admin_context.close()
-        print(f'PASS {width}px: shared schedules, £5 single-date checkout, class-by-class hiding, full card removal, admin tasters and live registers')
+        print(f'PASS {width}px: browser Back keeps both tasters available; changed date resumes the same £5 booking; completion hides only that class; shared/admin registers preserved')
 
     for past, expected, claimed in [
         ([old_taster('zumba')], ['BoxFit'], set()),
@@ -181,7 +206,7 @@ with sync_playwright() as p:
     page.get_by_role('button', name='Close taster booking').click()
     assert len(rows) == 1 and len(checkouts) == 2
     assert checkouts[0]['booking_id'] == checkouts[1]['booking_id'] == rows[0]['id']
-    assert options(page) == ['Zumba']
+    assert options(page) == ['BoxFit', 'Zumba']
     page.goto('http://127.0.0.1:5174/?tab=bookings')
     page.get_by_role('button', name='Continue taster payment', exact=True).wait_for()
     fail_checkout = False

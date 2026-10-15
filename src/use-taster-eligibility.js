@@ -3,6 +3,7 @@ import { supabase } from "./storage.js";
 
 // The private lifetime claims survive cancelled/deleted bookings. Do not show
 // an offer until the server has checked those claims as well as loaded history.
+// An uncompleted GoCardless reservation remains available to resume.
 export function useTasterEligibility(user, bookings) {
   const [state, setState] = useState({ key: "", available: [] });
   const key = user ? JSON.stringify([user.id, user.email]) : "";

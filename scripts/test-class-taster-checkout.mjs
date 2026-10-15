@@ -13,11 +13,13 @@ const template = (id, name) => ({ id, name, payment_request_amount: "500", payme
 let templates = [], rows = [], calls = [], replay = false, failTemplates = false;
 let paginated = false;
 let apiFailure = null;
+let billingOverride = {};
+let loseDateRace = false;
 const booking = sessionId => ({ id: "taster-1", payment_group_id: "taster-1", session_id: sessionId,
   booking_date: classPaymentConfig(sessionId).dates[0], plan: "Taster (GoCardless)", amount: 5, status: "pending_payment" });
-const post = sessionId => handler(new Request("https://fixture.supabase.test/functions/v1/gocardless-checkout", {
+const post = (sessionId, extra = {}) => handler(new Request("https://fixture.supabase.test/functions/v1/gocardless-checkout", {
   method: "POST", body: JSON.stringify({ booking_id: rows[0].id, session_id: sessionId, plan: "taster",
-    return_url: "https://app.example.test/payment-complete", exit_url: "https://app.example.test/?tab=bookings" }),
+    return_url: "https://app.example.test/payment-complete", exit_url: "https://app.example.test/?tab=bookings", ...extra }),
 }));
 globalThis.fetch = async (input, init = {}) => {
   const url = new URL(input);
@@ -25,6 +27,13 @@ globalThis.fetch = async (input, init = {}) => {
   const body = init.body ? JSON.parse(init.body) : null;
   calls.push({ path: url.pathname, method, body, after: url.searchParams.get("after"), headers: init.headers });
   if (url.hostname === "fixture.supabase.test") {
+    if (method === "PATCH" && body?.booking_date) {
+      assert.equal(url.searchParams.get("gocardless_payment_id"), "is.null");
+      assert.equal(url.searchParams.get("status"), "in.(pending_checkout,pending_payment)");
+      if (loseDateRace) return json([]);
+      rows[0].booking_date = body.booking_date;
+      return json([rows[0]]);
+    }
     if (method === "PATCH") return json([]);
     return json(url.searchParams.has("id") ? [rows[0]] : rows);
   }
@@ -43,7 +52,7 @@ globalThis.fetch = async (input, init = {}) => {
   const conflict = id => json({ error: { errors: [{ reason: "idempotent_creation_conflict", links: { conflicting_resource_id: id } }] } }, 409);
   if (url.pathname === "/billing_requests") return replay ? conflict("BR_TASTER") : json({ billing_requests: { id: "BR_TASTER" } });
   if (url.pathname === "/billing_request_flows") return replay ? conflict("BRF_TASTER") : json({ billing_request_flows: { authorisation_url: "https://pay.example.test/taster" } });
-  if (url.pathname === "/billing_requests/BR_TASTER") return json({ billing_requests: { id: "BR_TASTER" } });
+  if (url.pathname === "/billing_requests/BR_TASTER") return json({ billing_requests: { id: "BR_TASTER", status: "pending", metadata: { booking_id: rows[0].id }, ...billingOverride } });
   if (url.pathname === "/billing_request_flows/BRF_TASTER") return json({ billing_request_flows: { authorisation_url: "https://pay.example.test/taster" } });
   throw new Error(`Unexpected request ${url.pathname}`);
 };
@@ -174,7 +183,7 @@ try {
     assert.equal(response.provider_stage, failure.path === "/billing_requests" ? "billing_request" : "authorisation_flow");
     assert.match(response.error, new RegExp(`HTTP ${failure.status}`));
     if (failure.payload?.error?.errors?.[0]?.field) assert.ok(response.error.includes(failure.payload.error.errors[0].field));
-    assert.equal(response.checkout_version, "class-payments-v7-provider-errors");
+    assert.equal(response.checkout_version, "class-payments-v8-resume-tasters");
     for (const secret of ["test-token", "test-service-key", "do-not-leak"]) assert.ok(!JSON.stringify(response).includes(secret));
     if (failure.path === "/billing_requests") assert.ok(!calls.some(call => call.path === "/billing_request_flows"));
     else assert.ok(calls.some(call => call.path === "/rest/v1/bookings" && call.method === "PATCH"), "save the original request ID before attempting a failed flow");
@@ -187,6 +196,30 @@ try {
   assert.equal(failedResume.provider_status, 404);
   apiFailure = null; replay = false;
   assert.equal((await post("boxfit")).status, 200, "retry can still use the original saved booking and unchanged idempotency key");
+  const selectedDate = classPaymentConfig("boxfit").dates.at(-1);
+  rows = [{ ...booking("boxfit"), booking_date: "2026-01-01", gocardless_billing_request_id: "BR_TASTER" }];
+  calls = []; replay = true;
+  const dateChange = await post("boxfit", { booking_date: selectedDate });
+  assert.equal(dateChange.status, 200);
+  assert.equal((await dateChange.json()).booking_date, selectedDate, "confirm the saved date before the browser redirects to payment");
+  assert.equal(rows[0].booking_date, selectedDate, "an abandoned checkout can choose an available date, including after its old date expires");
+  assert.equal(calls.find(call => call.path === "/billing_requests" && call.method === "POST").headers["Idempotency-Key"], "class-checkout-taster-1");
+  assert.ok(!calls.some(call => call.path === "/rest/v1/bookings" && call.method === "POST"));
+  for (const state of [{ status: "fulfilled" }, { links: { payment_request_payment: "PM_ALREADY" } }, { metadata: { booking_id: "another-booking" } }]) {
+    rows = [{ ...booking("boxfit"), booking_date: "2026-01-01", gocardless_billing_request_id: "BR_TASTER" }];
+    billingOverride = state; calls = [];
+    assert.equal((await post("boxfit", { booking_date: selectedDate })).status, 500);
+    assert.equal(rows[0].booking_date, "2026-01-01");
+    assert.ok(!calls.some(call => call.method === "POST" || call.method === "PATCH"));
+  }
+  billingOverride = {}; loseDateRace = true; calls = [];
+  assert.equal((await post("boxfit", { booking_date: selectedDate })).status, 500);
+  assert.ok(!calls.some(call => call.method === "POST"), "a webhook winning the date update cannot start another payment");
+  loseDateRace = false; calls = [];
+  assert.equal((await post("boxfit", { booking_date: "1900-01-01" })).status, 400);
+  assert.ok(!calls.some(call => call.method === "PATCH" || call.method === "POST"));
+  replay = false;
+  console.log("PASS abandoned taster date changes: same booking/payment keys, available dates only, provider completion/reference validation and conditional update races");
   console.log("PASS provider diagnostics: payment/flow/resume stages, status and field/reason, non-JSON failures, original checkout reference and no raw response/credential leakage");
   console.log("PASS invalid/missing/duplicate/wrong-currency templates, provider outage, wrong booking amounts, multi-date/plan discount bypass and already-paid bookings fail before new charges");
 } finally { globalThis.fetch = originalFetch; delete globalThis.Deno; }
