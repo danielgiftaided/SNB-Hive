@@ -321,7 +321,7 @@ with sync_playwright() as p:
  past_boxfit=json.loads(json.dumps(rows));checkout=[]
  page.goto('http://127.0.0.1:5174/');card(page,'BoxFit').get_by_role('button',name='Book',exact=True).click()
  checkboxes=page.get_by_role('checkbox')
- assert checkboxes.count()==3
+ assert checkboxes.count()==4
  page.get_by_role('checkbox',name='Thursday, 29 October 2026',exact=True).check()
  page.get_by_role('button',name='Continue to payment',exact=True).click()
  accept_checkout_policy(page)
@@ -346,7 +346,7 @@ with sync_playwright() as p:
  page=context.new_page();page.goto('http://127.0.0.1:5174/admin');page.get_by_role('button',name=re.compile('^Classes')).click()
  box_admin=page.locator('div.bg-white.rounded-xl.border.border-stone-200.shadow-sm.overflow-hidden').filter(has=page.get_by_text('BoxFit',exact=True))
  lesson_dates=box_admin.get_by_role('combobox')
- assert lesson_dates.locator('option').evaluate_all('(options) => options.map(option => option.value)')==['2026-10-15','2026-10-22','2026-10-29']
+ assert lesson_dates.locator('option').evaluate_all('(options) => options.map(option => option.value)')==['2026-10-15','2026-10-22','2026-10-29','2026-11-05']
  assert box_admin.locator('p.ff-display').inner_text()=='0'
  lesson_dates.select_option('2026-10-29')
  assert box_admin.locator('p.ff-display').inner_text()=='1'
@@ -367,7 +367,7 @@ with sync_playwright() as p:
   card(page,'BoxFit').get_by_role('button',name='Book',exact=True).click()
   page.get_by_role('button',name=re.compile('^Monthly membership')).click()
   first_lesson=page.get_by_role('group',name='Choose your first lesson date')
-  assert first_lesson.get_by_role('radio').count()==3
+  assert first_lesson.get_by_role('radio').count()==4
   first_lesson.get_by_role('radio',name=start,exact=True).check()
   page.get_by_role('button',name='Continue to payment',exact=True).click()
   accept_checkout_policy(page)

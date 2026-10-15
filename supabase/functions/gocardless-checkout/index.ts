@@ -1,6 +1,6 @@
 import { corsHeaders, json } from "../_shared/http.ts";
 import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../_shared/membership.ts";
-import { classPaymentConfig, coursePaymentConfig, SELF_DEFENCE_DATES, SELF_DEFENCE_PRICE, SELF_DEFENCE_TEMPLATE, CLASS_TASTERS, PAYG_AMOUNT, TASTER_AMOUNT } from "../_shared/class-config.ts";
+import { classPaymentConfig, classDatesInMonth, coursePaymentConfig, SELF_DEFENCE_DATES, SELF_DEFENCE_PRICE, SELF_DEFENCE_TEMPLATE, CLASS_TASTERS, PAYG_AMOUNT, TASTER_AMOUNT } from "../_shared/class-config.ts";
 import { templatePaymentRequest } from "../_shared/template-checkout.ts";
 import { tasterPaymentRequest } from "../_shared/taster-checkout.ts";
 import { GoCardlessCheckoutError } from "../_shared/gocardless-checkout-error.ts";
@@ -15,7 +15,7 @@ import {
 const GC_API = Deno.env.get("GOCARDLESS_API_URL") || "https://api.gocardless.com";
 const GC_VERSION = "2015-07-06";
 const PRICES = { payg: PAYG_AMOUNT, membership: MEMBERSHIP_MONTHLY_AMOUNT, taster: TASTER_AMOUNT, course: SELF_DEFENCE_PRICE * 100 } as const;
-const CHECKOUT_VERSION = "class-payments-v9-self-defence";
+const CHECKOUT_VERSION = "class-payments-v10-class-finish";
 
 async function getBooking(id: string) {
   const url = Deno.env.get("SUPABASE_URL");
@@ -231,9 +231,14 @@ Deno.serve(async request => {
     }
     const { booking, group } = verified;
     const tasterDate = plan === "taster" && booking_date !== undefined ? booking_date : booking.booking_date;
+    // A membership reserves every remaining lesson in its first calendar
+    // month, even if that month has five classes and the picker shows four.
+    const allowedDates = plan === "course" ? SELF_DEFENCE_DATES : plan === "membership" && booking.booking_date
+      ? classDatesInMonth(session_id, String(booking.booking_date)).filter(date => date >= String(booking.booking_date)) : session.dates;
     if ((booking.session_id && booking.session_id !== session_id) ||
+        (plan === "membership" && booking.booking_date && !session.dates.includes(String(booking.booking_date))) ||
         group.some((row: Record<string, unknown>) => row.session_id === session_id &&
-          !(plan === "course" ? SELF_DEFENCE_DATES : session.dates).includes(String(plan === "taster" ? tasterDate : row.booking_date)))) {
+          !allowedDates.includes(String(plan === "taster" ? tasterDate : row.booking_date)))) {
       return json({ error: "This lesson date is not available" }, 400);
     }
     if (group.some((row: Record<string, unknown>) => row.gocardless_payment_id)) {

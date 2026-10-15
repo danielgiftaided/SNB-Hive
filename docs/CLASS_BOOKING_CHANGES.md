@@ -69,9 +69,11 @@ Confirm after deployment that the BoxFit Classes selector offers 15, 22 and 29 O
 
 ## Automatic date rollover
 
-The browser and checkout function share weekly schedule generation. Booking choices contain the remaining lessons in the current month; after its last lesson, the next month opens automatically. Today is still available; earlier dates disappear at the end of their London calendar day. Open screens refresh at least once per minute and on focus/visibility changes.
+The browser and checkout function share a rolling list of **four upcoming weekly dates** for each live class. BoxFit dates expire at **14:00 Europe/London** and Zumba dates at **13:00 Europe/London** on their class day. At the exact finish, that date is removed and the next weekly date is appended, including dates across month/year boundaries. Tasters use exactly the same list and cutoff as their live class. London BST/GMT is resolved from the timezone, not a fixed UTC offset. Open pickers refresh at aligned minute boundaries (including the finish minute) and immediately on focus/visibility changes. The server applies the same current-time validation, and dates are rechecked after the cancellation popup before saving a new checkout.
 
-My bookings shows upcoming dates only. A course shows its remaining dates and closes when all dates have passed. Stored bookings, amounts, statuses, membership/payment references, undated records and admin history are retained. Initial membership recovery uses the original booking month even when its dates are now historical.
+My bookings retains its calendar-day history behaviour; finishing a class removes its date from new booking choices without deleting an existing reservation. A course shows its remaining dates and closes when all dates have passed. Stored bookings, amounts, statuses, membership/payment references, undated records and admin history are retained. Initial membership recovery uses the original booking month even when its dates are now historical.
+
+PAYG choices and membership starting-date choices both use the four-date window. A membership still enrols every remaining lesson in its selected first calendar month (including a fifth lesson where applicable); existing proration, renewal dates and historical recovery are independent of the picker window.
 
 Admin **Lesson date** selectors contain exactly the current customer schedule and refresh when the London day changes. **Previous / other dates** opens saved dates outside that schedule, including undated records. Whole-course Self Defence enrolments appear on each remaining course lesson, rather than being restricted to their initial booking date.
 
@@ -79,7 +81,7 @@ The approved correction in [`20261012000000_move_boxfit_booking_dates.sql`](../s
 
 The existing Edge Function workflow applies this idempotent SQL through the Supabase Management API, using the already-configured project reference/access token, before deploying checkout/webhook/sync. A failed SQL request stops those deployments. This specific data correction runs on each workflow invocation; it is not a general schema migration runner. If manual deployment is needed, run the same SQL in the existing project's SQL Editor **before** deploying the updated shared payment functions. Review the workflow's moved-booking count after merge.
 
-Run `python scripts/test-admin-class-schedule-ui.py` against the fixture-only server to compare both screens, date rollover and course registers. Run `npm run test:boxfit-date-migration -- /path/to/@electric-sql/pglite/dist/index.js` for the isolated PostgreSQL migration regression.
+Run `npm run test:booking-dates`, `npm run test:class-end-checkout`, and `python scripts/test-class-end-ui.py` for exact finish/BST/GMT, rolling dates, stale-popup rejection and preserved membership pricing/history. Run `python scripts/test-admin-class-schedule-ui.py` against the fixture-only server to compare both screens, date rollover and course registers. Run `npm run test:boxfit-date-migration -- /path/to/@electric-sql/pglite/dist/index.js` for the isolated PostgreSQL migration regression.
 
 ## Supabase SQL file to copy
 

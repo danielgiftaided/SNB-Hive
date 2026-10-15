@@ -130,7 +130,7 @@ with sync_playwright() as p:
             regular.get_by_role('button', name='Book', exact=True).click()
             live = page.get_by_role('group', name='Choose one or more lesson dates').locator('label').all_text_contents()
             assert [label.strip() for label in live] == [label.strip() for label in labels]
-            assert len(choices) == 3
+            assert len(choices) == 4
             page.get_by_role('button', name='Close booking', exact=True).click()
             open_tasters(page)
         for session in ['boxfit', 'zumba']:
