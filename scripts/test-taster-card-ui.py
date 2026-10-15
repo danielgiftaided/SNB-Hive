@@ -1,3 +1,4 @@
+from checkout_policy_fixtures import accept_checkout_policy
 """Exercise taster cards and checkout against isolated local API fixtures."""
 import copy
 import json
@@ -91,10 +92,17 @@ def context_for(browser, width=1280, admin=False):
     return context, page
 
 def tasters(page):
-    return page.get_by_role('region', name='Tasters', exact=True)
+    dialog = page.get_by_role('dialog', name='Book a taster', exact=True)
+    return dialog.get_by_role('region', name='Tasters', exact=True) if dialog.count() else page.get_by_role('region', name='Tasters', exact=True)
+
+def open_tasters(page):
+    if tasters(page).get_by_role('combobox', name='Taster class', exact=True).count() == 0:
+        tasters(page).get_by_role('button', name='Book', exact=True).click()
+    return tasters(page)
+
 
 def options(page):
-    return tasters(page).get_by_role('combobox', name='Taster class', exact=True).locator('option').all_text_contents()
+    return open_tasters(page).get_by_role('combobox', name='Taster class', exact=True).locator('option').all_text_contents()
 
 def old_taster(session, status='confirmed'):
     return dict(id='old-' + session, type='class', session_id=session, session_name=session,
@@ -107,6 +115,9 @@ with sync_playwright() as p:
         rows = []; claims = set(); checkouts = []
         context, page = context_for(browser, width)
         tasters(page).wait_for()
+        assert tasters(page).get_by_role('combobox').count() == 0
+        assert tasters(page).get_by_role('radio').count() == 0
+        assert '£5' not in tasters(page).inner_text()
         assert options(page) == ['BoxFit', 'Zumba']
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         tasters(page).screenshot(path=f'/tmp/snb-taster-card-{width}.png')
@@ -114,20 +125,33 @@ with sync_playwright() as p:
             tasters(page).get_by_role('combobox', name='Taster class', exact=True).select_option(session)
             choices = tasters(page).get_by_role('radio').evaluate_all('(nodes) => nodes.map(node => node.value)')
             regular = page.locator('div.bg-white.rounded-2xl').filter(has=page.get_by_role('heading', name=name, exact=True))
+            labels = tasters(page).get_by_role('group').locator('label').all_text_contents()
+            page.get_by_role('button', name='Close taster booking').click()
             regular.get_by_role('button', name='Book', exact=True).click()
             live = page.get_by_role('group', name='Choose one or more lesson dates').locator('label').all_text_contents()
-            assert [label.strip() for label in live] == [label.strip() for label in tasters(page).get_by_role('group').locator('label').all_text_contents()]
+            assert [label.strip() for label in live] == [label.strip() for label in labels]
             assert len(choices) == 3
             page.get_by_role('button', name='Close booking', exact=True).click()
+            open_tasters(page)
         for session in ['boxfit', 'zumba']:
             tasters(page).get_by_role('combobox', name='Taster class', exact=True).select_option(session)
             tasters(page).get_by_role('radio').nth(1).check()
             date = tasters(page).get_by_role('radio', checked=True).input_value()
-            tasters(page).get_by_role('button', name='Book taster', exact=True).click()
+            open_tasters(page)
             dialog = page.get_by_role('dialog')
             assert '£5.00' in dialog.inner_text() and 'Monthly membership' not in dialog.inner_text()
             abandon_checkout = True
+            before_rows, before_checkouts = len(rows), len(checkouts)
             dialog.get_by_role('button', name='Continue to payment', exact=True).click()
+            popup = page.get_by_role('dialog', name='Cancellation Policy', exact=True)
+            popup.wait_for()
+            assert popup.evaluate('(el) => el.matches(":modal")')
+            assert len(rows) == before_rows and len(checkouts) == before_checkouts
+            popup.get_by_role('button', name='Back', exact=True).click()
+            assert tasters(page).get_by_role('radio', checked=True).input_value() == date
+            assert tasters(page).get_by_role('combobox', name='Taster class', exact=True).input_value() == session
+            dialog.get_by_role('button', name='Continue to payment', exact=True).click()
+            accept_checkout_policy(page)
             page.get_by_role('heading', name='GoCardless checkout', exact=True).wait_for()
             abandoned_id = checkouts[-1]['booking_id']
             page.go_back()
@@ -137,9 +161,10 @@ with sync_playwright() as p:
             assert tasters(page).get_by_role('radio', checked=True).input_value() == date
             tasters(page).get_by_role('radio').last.check()
             date = tasters(page).get_by_role('radio', checked=True).input_value()
-            tasters(page).get_by_role('button', name='Book taster', exact=True).click()
+            open_tasters(page)
             abandon_checkout = False
             page.get_by_role('dialog').get_by_role('button', name='Continue to payment', exact=True).click()
+            accept_checkout_policy(page)
             page.get_by_role('heading', name="You're booked! 🎉", exact=True).wait_for()
             assert checkouts[-1]['booking_id'] == abandoned_id
             assert len([row for row in rows if row['session_id'] == session]) == 1
@@ -181,7 +206,7 @@ with sync_playwright() as p:
     ]:
         rows = copy.deepcopy(past); claims = claimed
         context, page = context_for(browser)
-        page.wait_for_function("document.querySelector('#taster-class') !== null" if expected else "true")
+        if expected: open_tasters(page)
         if expected:
             assert options(page) == expected
         else:
@@ -193,15 +218,18 @@ with sync_playwright() as p:
 
     rows = []; claims = set(); checkouts = []; fail_save = True
     context, page = context_for(browser)
-    tasters(page).get_by_role('button', name='Book taster', exact=True).click()
+    open_tasters(page)
     page.get_by_role('dialog').get_by_role('button', name='Continue to payment', exact=True).click()
+    accept_checkout_policy(page)
     page.get_by_role('alert').wait_for()
     assert not rows and not checkouts
     fail_save = False; fail_checkout = True
     page.get_by_role('dialog').get_by_role('button', name='Continue to payment', exact=True).click()
+    accept_checkout_policy(page)
     page.get_by_role('alert').filter(has_text='Your booking is saved').wait_for()
     assert len(rows) == 1 and len(checkouts) == 1
     page.get_by_role('dialog').get_by_role('button', name='Continue to payment', exact=True).click()
+    accept_checkout_policy(page)
     page.wait_for_function('true')
     page.get_by_role('button', name='Close taster booking').click()
     assert len(rows) == 1 and len(checkouts) == 2
@@ -211,23 +239,35 @@ with sync_playwright() as p:
     page.get_by_role('button', name='Continue taster payment', exact=True).wait_for()
     fail_checkout = False
     page.get_by_role('button', name='Continue taster payment', exact=True).click()
+    accept_checkout_policy(page)
     page.get_by_role('heading', name="You're booked! 🎉", exact=True).wait_for()
     assert len(rows) == 1 and rows[0]['status'] == 'paid'
     context.close()
     print('PASS failed insert preserves eligibility; provider failure/retries/resume retain one booking and its original payment group')
 
-    rows = []; claims = set(); fail_eligibility = True
+    rows = []; claims = set(); checkouts = []; fail_eligibility = True
     context, page = context_for(browser)
     page.wait_for_load_state('networkidle')
     assert tasters(page).count() == 0
     context.close(); fail_eligibility = False
     context, page = context_for(browser)
-    tasters(page).get_by_role('button', name='Book taster', exact=True).click()
+    open_tasters(page)
     page.clock.set_system_time(datetime(2026, 10, 15, 23, 1, tzinfo=timezone.utc))
     page.evaluate('window.dispatchEvent(new Event("focus"))')
-    page.get_by_role('alert').filter(has_text='no longer available').wait_for()
-    assert page.get_by_role('dialog').get_by_role('button', name='Continue to payment', exact=True).is_disabled()
+    assert '2026-10-15' not in tasters(page).get_by_role('radio').evaluate_all('(nodes) => nodes.map(node => node.value)')
+    assert tasters(page).get_by_role('radio', checked=True).input_value() == '2026-10-22'
     assert not rows
     context.close()
     print('PASS eligibility outages hide offers; London midnight expires stale taster dates without writes')
+    context, page = context_for(browser)
+    open_tasters(page)
+    page.get_by_role('dialog').get_by_role('button', name='Continue to payment', exact=True).click()
+    page.get_by_role('dialog', name='Cancellation Policy', exact=True).wait_for()
+    page.clock.set_system_time(datetime(2026, 10, 15, 23, 1, tzinfo=timezone.utc))
+    page.evaluate('window.dispatchEvent(new Event("focus"))')
+    accept_checkout_policy(page)
+    page.get_by_role('alert').filter(has_text='no longer available').wait_for()
+    assert not rows and not checkouts
+    context.close()
+    print('PASS a taster date expiring while the policy popup is open cannot save a booking or start payment')
     browser.close()
