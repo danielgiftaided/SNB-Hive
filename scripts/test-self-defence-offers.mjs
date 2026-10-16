@@ -71,13 +71,17 @@ try {
     for (const places of Array.from({ length: 11 }, (_, i) => i + 1)) {
       const quote = selfDefenceQuote(places);
       assert.equal(quote.templateName, moment.startsWith("2026-11") ? SELF_DEFENCE_TEMPLATE :
-        places === 1 ? "Self Defence Early Bird x1 - £80" : "Self Defence Early Bird x2 - £150");
+        places === 1 ? "Self Defence Early Bird x1" : "Self Defence Early Bird x2");
       assert.equal(quote.amount, moment.startsWith("2026-11") ? places * 9000 : Math.floor(places / 2) * 15000 + (places % 2) * 8000);
       rows = [{ ...booking("self_defence"), num_people: places, amount: quote.amount / 100 }];
-      templates = [template("BRT_OFFER", quote.templateName)]; calls = []; replay = false;
+      templates = [template("BRT_X1", "Self Defence Early Bird x1"),
+        template("BRT_X2", "Self Defence Early Bird x2"), template("BRT_STANDARD", SELF_DEFENCE_TEMPLATE)];
+      calls = []; replay = false;
       const response = await post("self_defence");
       assert.equal(response.status, 200, await response.clone().text());
       const request = calls.find(call => call.path === "/billing_requests" && call.method === "POST").body.billing_requests;
+      assert.equal(request.payment_request.metadata.course_template_id,
+        moment.startsWith("2026-11") ? "BRT_STANDARD" : places === 1 ? "BRT_X1" : "BRT_X2");
       assert.equal(request.payment_request.amount, quote.amount);
       assert.equal(request.payment_request.description, places > 2 ? `SNB Hive Self Defence - ${places} places` : quote.templateName);
       assert.equal(request.payment_request.currency, "GBP");
