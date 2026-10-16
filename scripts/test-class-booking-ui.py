@@ -96,7 +96,8 @@ with sync_playwright() as p:
  for key in ['width','height']:
   assert card(page,'Zumba').bounding_box()[key]==card(page,'BoxFit').bounding_box()[key]
  self_card=card(page,'Self Defence')
- assert self_card.locator('ul').count()==0
+ for date in ['Wednesday 18th November','Wednesday 25th November','Wednesday 2nd December']:
+  assert date in self_card.inner_text()
  self_card.get_by_role('button',name='Book',exact=True).click()
  for date in ['Wednesday 18th November','Wednesday 25th November','Wednesday 2nd December']:
   assert date in page.get_by_role('dialog',name='Book Self Defence',exact=True).inner_text()
