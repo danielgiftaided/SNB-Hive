@@ -1,4 +1,4 @@
-import { selfDefenceQuote } from "../supabase/functions/_shared/self-defence.ts";
+import { SELF_DEFENCE_CAPACITY, selfDefenceQuote } from "../supabase/functions/_shared/self-defence.ts";
 import { useCheckoutPolicy } from "./use-checkout-policy.jsx";
 import TermsContent from "./TermsContent.jsx";
 import { useState, useEffect, useRef } from "react";
@@ -62,7 +62,7 @@ const DEFAULT_CLASSES = [
     whatToBring:"Gym clothes and trainers and bring a water bottle.", icsStart:"20260924T110000", icsEnd:"20260924T114500", description:"Strength training is one of the most beneficial forms of exercise for women, particularly as we navigate the demands of motherhood, work and daily life.\n\nThis class focuses on building functional strength, improving mobility and helping women feel stronger and more capable in their everyday activities.\n\nUsing bodyweight exercises, resistance bands and light equipment, sessions are designed to be accessible while still providing an effective workout.\n\nBenefits include:\n• Increased muscle tone and strength\n• Support with sustainable fat loss and body composition goals\n• Improved posture and reduced aches and pains\n• Better balance and stability\n• Increased energy levels\n• Stronger bones and joints\n• Improved confidence in daily movement\n• Support for healthy ageing and long-term wellbeing\n\nRather than focusing on appearance alone, this class encourages women to appreciate what their bodies can do and develop strength that carries into everyday life.\n\nSuitable for all fitness levels and can be adapted to individual needs." },
   { id: "boxfit", name: "BoxFit", tagline: "Cardio, conditioning & pad work", day: "Thursdays", time: "13:00–14:00", capacity: 18, icon: "flame", color: "#D06B4F",
     venue: "Hackney Central", venueMap: "https://www.google.com/maps/search/?api=1&query=Hackney+Central+London", whatToBring: "Bring boxing gloves and pads if you have them. Wear comfortable workout clothes and trainers. Bring a water bottle", description: "A high-energy boxing-inspired fitness class combining cardio, conditioning and boxing drills. Suitable for beginners and all fitness levels."},
-  { id:"self_defence", name:"Self Defence", tagline:"Intensive 3-week course", day:"3-week course", time:"Wednesdays, 12:00–14:00", capacity:11, icon:"shield", color:"#6F596E", bookingKind:"gocardless_course", price:SELF_DEFENCE_PRICE, courseDates:SELF_DEFENCE_DATES,
+  { id:"self_defence", name:"Self Defence", tagline:"Intensive 3-week course", day:"3-week course", time:"Wednesdays, 12:00–14:00", capacity:SELF_DEFENCE_CAPACITY, icon:"shield", color:"#6F596E", bookingKind:"gocardless_course", price:SELF_DEFENCE_PRICE, courseDates:SELF_DEFENCE_DATES,
     venue:"Hackney Central", venueMap:"https://www.google.com/maps/search/?api=1&query=Hackney+Central+London",
     details:[...SELF_DEFENCE_DATES.map(formatCourseDate), "2-hour session each week for 3 weeks"], description:"A three-week Self Defence course. Book all three sessions and pay securely through GoCardless." },
 ];
@@ -838,9 +838,7 @@ function AuthScreen({ onAuth }) {
 
 function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = false, tasterIneligible = false, openingPayment = false }) {
   const Icon = ICONS[cls.icon] || Sparkles;
-  const [places, setPlaces] = useState(1);
-  const now = useBookingTime();
-  const courseQuote = cls.id === "self_defence" ? selfDefenceQuote(places, now) : null;
+  const isCourse = cls.bookingKind === "gocardless_course";
   const full = booked >= cls.capacity;
   const isMember = bookingType === "membership";
   const today = useBookingDay();
@@ -857,7 +855,7 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = 
     !isBooked;
 
   const disabled =
-    (courseQuote && places > cls.capacity - booked) || openingPayment || courseClosed || cls.bookingPaused || tasterUsed || tasterIneligible ||
+    openingPayment || courseClosed || cls.bookingPaused || tasterUsed || tasterIneligible ||
     isTbc ||
     !paymentsAvailable ||
     (isBooked && !canBookAnotherPayg) ||
@@ -901,7 +899,7 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = 
         </div>
       </div>
 
-      <ClassSchedule cls={cls}>
+      {!isCourse && <ClassSchedule cls={cls}>
         {isMember && !isTaster && (
           <Pill icon={Check}>
             <span style={{ color: TEAL }}>
@@ -909,9 +907,9 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = 
             </span>
           </Pill>
         )}
-      </ClassSchedule>
+      </ClassSchedule>}
 
-      {cls.venue && (
+      {!isCourse && cls.venue && (
         <a
           href={cls.venueMap}
           target="_blank"
@@ -923,17 +921,7 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = 
         </a>
       )}
 
-      <ClassDetails cls={cls} today={today}/>
-      {courseQuote && !isBooked && !courseClosed && <div className="ff-body flex flex-col gap-2">
-        <label className="text-sm font-medium text-stone-700">Places
-          <select aria-label="Self Defence places" value={places} onChange={event => setPlaces(Number(event.target.value))} disabled={openingPayment}
-            className="mt-1 block w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm">
-            {[1, 2].map(count => <option key={count} value={count} disabled={count > cls.capacity - booked}>{count} {count === 1 ? "place" : "places"}</option>)}
-          </select>
-        </label>
-        <p className="text-sm font-semibold" style={{ color: INK }}>£{(courseQuote.amount / 100).toFixed(2)} total</p>
-        {courseQuote.earlyBird && <p className="text-xs text-stone-500">Early bird: £80 for 1 place or £150 for 2. Ends 31 October at 23:59:59, London time.</p>}
-      </div>}
+      {!isCourse && <ClassDetails cls={cls} today={today}/>}
 
       <div className="flex items-center justify-end pt-2 border-t border-stone-100 mt-auto">
         <button
@@ -941,7 +929,7 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = 
             if (isWaitlist) {
               onWaitlist(cls);
             } else {
-              onBook(cls, places, courseQuote?.amount);
+              onBook(cls);
             }
           }}
           disabled={disabled}
@@ -1102,6 +1090,62 @@ function TasterCard({ classes, bookings, onBook, admin = false, currentUser, boo
         </div>
       )}
     </section>
+  );
+}
+
+function SelfDefenceBookingModal({ session, booked, busy, error, onBook, onClose }) {
+  const dialog = useRef(null);
+  const [places, setPlaces] = useState(1);
+  const now = useBookingTime();
+  const quote = selfDefenceQuote(places, now);
+  const remaining = Math.max(0, session.capacity - booked);
+  const available = places <= remaining && classBookingSchedule(session, now).length > 0;
+  useEffect(() => {
+    const element = dialog.current;
+    const trigger = document.activeElement;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    element.showModal();
+    return () => {
+      element.close();
+      document.body.style.overflow = overflow;
+      requestAnimationFrame(() => { if (trigger?.isConnected) trigger.focus(); });
+    };
+  }, []);
+  return (
+    <dialog ref={dialog} aria-labelledby="self-defence-booking-title"
+      onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}
+      className="ff-body m-auto w-[calc(100%-2rem)] max-w-md max-h-[90dvh] overflow-y-auto rounded-3xl border border-stone-200 bg-white p-5 shadow-xl backdrop:bg-black/40">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <h2 id="self-defence-booking-title" className="ff-display text-xl font-semibold" style={{ color: INK }}>Book Self Defence</h2>
+        <button type="button" aria-label="Close Self Defence booking" onClick={onClose} disabled={busy} className="text-stone-400 disabled:opacity-50"><X size={20}/></button>
+      </div>
+      <div className="flex flex-col gap-4">
+        <p className="text-sm text-stone-600">{session.description}</p>
+        <ClassSchedule cls={session}/>
+        <a href={session.venueMap} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs text-stone-500">
+          <MapPin size={12}/>{session.venue}
+        </a>
+        <ClassDetails cls={session} today={bookingToday(now)}/>
+        <label className="text-sm font-medium text-stone-700">Places
+          <select aria-label="Self Defence places" value={places} onChange={event => setPlaces(Number(event.target.value))} disabled={busy || !remaining}
+            className="mt-1 block w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm">
+            {Array.from({ length: remaining }, (_, index) => index + 1).map(count => <option key={count} value={count}>{count} {count === 1 ? "place" : "places"}</option>)}
+          </select>
+        </label>
+        <p aria-live="polite" className="text-sm font-semibold" style={{ color: INK }}>£{(quote.amount / 100).toFixed(2)} total</p>
+        {quote.earlyBird ? <div className="text-xs text-stone-500 space-y-1">
+          <p>Early bird: £80 for 1 place or £150 for 2. Ends 01 November 2026.</p>
+          <p>For larger bookings: £150 per pair, plus £80 for an extra place.</p>
+        </div> : <p className="text-xs text-stone-500">£90 per place for the full three-week course.</p>}
+        {!available && <p role="alert" className="text-sm text-red-600">{remaining ? "Please choose fewer places or check the course dates." : "This course is full."}</p>}
+        {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+        <button type="button" onClick={() => onBook(session, places, quote.amount)} disabled={busy || !available}
+          className="inline-flex items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-semibold text-white disabled:opacity-50" style={{ backgroundColor: TEAL }}>
+          {busy ? "Opening payment…" : "Continue to payment"}<ArrowRight size={14}/>
+        </button>
+      </div>
+    </dialog>
   );
 }
 
@@ -3592,6 +3636,7 @@ function BookingApp() {
   const availableTasters = TASTER_CLASSES.filter(cls => eligibleTasters.includes(cls.id) &&
     !tasterBookingUsed(userTasterBooking(bookings, currentUser, cls.id)) &&
     !(cls.id === "zumba" && userHasBookedRegularClass(bookings, currentUser, cls.id)));
+  const [courseBooking, setCourseBooking] = useState(null);
   const [openingCourse, setOpeningCourse] = useState(false);
   const courseAttempt = useRef(null);
   const [courseError, setCourseError] = useState("");
@@ -3689,8 +3734,9 @@ function BookingApp() {
       if (!await requestPolicy()) return;
       if (loadError) throw new Error("We couldn't load your bookings. Refresh before booking the course.");
       const quote = selfDefenceQuote(places);
-      if (!quote) throw new Error("Please choose one or two places.");
-      if (displayedAmount !== undefined && displayedAmount !== quote.amount) throw new Error("The early-bird offer has ended. Review the updated total and press Book again.");
+      if (!quote) throw new Error(`Please choose between 1 and ${SELF_DEFENCE_CAPACITY} places.`);
+      if (places > session.capacity - bookedCount(session.id)) throw new Error("There are not enough places left. Please choose fewer places.");
+      if (displayedAmount !== undefined && displayedAmount !== quote.amount) throw new Error("The early-bird offer has ended. Review the updated total and press Continue to payment again.");
       const dates = classBookingSchedule(session);
       if (!dates.length) throw new Error("There are no upcoming course dates available.");
       if (bookings.some(b => b.sessionId === session.id && b.status !== "waitlisted" && bookingBelongsToUser(b, currentUser) && bookingIsActive(b))) {
@@ -3709,7 +3755,7 @@ function BookingApp() {
       }
       await openSinglePaymentCheckout(booking);
     } catch (error) {
-      setCourseError(`${checkoutErrorDetail(error)} Your place is only confirmed after completing GoCardless. Press Book to retry.`);
+      setCourseError(`${checkoutErrorDetail(error)} Your places are only confirmed after completing GoCardless. Press Continue to payment to retry.`);
     } finally { courseAttempt.current = null; setOpeningCourse(false); }
   }
   async function updateStatus(id, status) {
@@ -3805,7 +3851,6 @@ function BookingApp() {
                     </button>
                   </div>
                 )}
-                {courseError && <p role="alert" className="ff-body text-sm text-red-600 mb-4">{courseError}</p>}
                 <div className="grid sm:grid-cols-2 gap-4">
   {CLASS_CATALOGUE.map(cls => cls.id === "tasters"
     ? !loadError && <TasterCard key={cls.id} bookings={bookings} currentUser={currentUser} classes={availableTasters} onBook={() => setTasterBooking(true)}/>
@@ -3814,7 +3859,7 @@ function BookingApp() {
     : <ClassCard key={cls.id} cls={cls} booked={bookedCount(cls.id)}
         bookingType={getUserBookingType(cls.id)} onWaitlist={joinWaitlist}
         openingPayment={cls.bookingKind === "gocardless_course" && openingCourse}
-        onBook={(_, places, displayedAmount) => { if (cls.bookingKind === "gocardless_course") { bookCourse(cls, places, displayedAmount); return; } setModalSession(cls); setModalType("class"); }}/>
+        onBook={() => { if (cls.bookingKind === "gocardless_course") { setCourseError(""); setCourseBooking(cls); return; } setModalSession(cls); setModalType("class"); }}/>
   )}
 </div>
               </>
@@ -3869,6 +3914,8 @@ function BookingApp() {
 
 
 
+      {courseBooking && <SelfDefenceBookingModal session={courseBooking} booked={bookedCount(courseBooking.id)}
+        busy={openingCourse} error={courseError} onBook={bookCourse} onClose={() => setCourseBooking(null)}/>}
       {policyDialog}
       {modalSession && (
         <BookingModal session={modalSession} type={modalType} currentUser={currentUser} bookings={bookings}

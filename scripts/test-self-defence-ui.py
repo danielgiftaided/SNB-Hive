@@ -82,12 +82,18 @@ def context_for(browser, width, admin=False):
 def card(page):
     return page.locator('div.bg-white.rounded-2xl').filter(has=page.get_by_role('heading', name='Self Defence', exact=True))
 
+def start_checkout(page):
+    modal = page.get_by_role('dialog',name='Book Self Defence',exact=True)
+    if not modal.is_visible():
+        card(page).get_by_role('button',name='Book',exact=True).click()
+    modal.get_by_role('button',name='Continue to payment',exact=True).click()
+
 with sync_playwright() as p:
     browser = p.chromium.launch(executable_path='/usr/bin/chromium', headless=True, args=['--no-sandbox'])
     for width in [1280, 390]:
         rows = []; checkouts = []; emails = []; authorised = set()
         context, page = context_for(browser, width)
-        card(page).get_by_role('button', name='Book', exact=True).click()
+        start_checkout(page)
         popup = page.get_by_role('dialog', name='Cancellation Policy', exact=True)
         popup.wait_for()
         assert not rows and not checkouts and not emails
@@ -96,13 +102,13 @@ with sync_playwright() as p:
         assert popup.evaluate('(el) => el.contains(document.activeElement)')
         popup.screenshot(path=f'/tmp/snb-checkout-policy-{width}.png')
         popup.get_by_role('button', name='Back', exact=True).click()
-        page.wait_for_function("document.activeElement?.textContent.trim() === 'Book'")
+        page.wait_for_function("document.activeElement?.textContent.trim() === 'Continue to payment'")
         assert not rows and not checkouts
-        card(page).get_by_role('button', name='Book', exact=True).click()
+        start_checkout(page)
         popup.wait_for()
         page.keyboard.press('Escape')
         assert not rows and not checkouts
-        card(page).get_by_role('button', name='Book', exact=True).click()
+        start_checkout(page)
         accept_checkout_policy(page)
         page.get_by_role('heading', name='GoCardless checkout', exact=True).wait_for()
         assert len(rows) == 1 and rows[0]['status'] == 'pending_payment'
@@ -116,12 +122,12 @@ with sync_playwright() as p:
         assert page.get_by_role('region', name='Payments awaiting confirmation').count() == 0
         assert page.get_by_role('button', name='Cancel class', exact=True).count() == 0
         page.get_by_role('button', name='Classes', exact=True).first.click()
-        card(page).get_by_role('button', name='Book', exact=True).click()
+        start_checkout(page)
         accept_checkout_policy(page)
         page.get_by_role('heading', name='GoCardless checkout', exact=True).wait_for()
         page.go_back()
         page.get_by_role('button', name='Classes', exact=True).first.click()
-        card(page).get_by_role('button', name='Book', exact=True).click()
+        start_checkout(page)
         accept_checkout_policy(page)
         page.get_by_role('heading', name='GoCardless checkout', exact=True).wait_for()
         assert len(rows) == 1 and all(item['booking_id'] == booking_id for item in checkouts)
