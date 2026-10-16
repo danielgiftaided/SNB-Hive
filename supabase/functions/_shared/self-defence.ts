@@ -11,7 +11,7 @@ export function selfDefenceQuote(places: unknown = 1, now = new Date()) {
   return {
     places, earlyBird,
     amount: (earlyBird ? Math.floor(places / 2) * 150 + (places % 2) * 80 : places * SELF_DEFENCE_PRICE) * 100,
-    templateName: earlyBird ? `Self Defence Early Bird x${templatePlaces} - £${templatePlaces === 2 ? 150 : 80}` : SELF_DEFENCE_TEMPLATE,
+    templateName: earlyBird ? `Self Defence Early Bird x${templatePlaces}` : SELF_DEFENCE_TEMPLATE,
     templateVariable: earlyBird ? `GOCARDLESS_SELF_DEFENCE_EARLY_BIRD_X${templatePlaces}_TEMPLATE_ID` : "GOCARDLESS_SELF_DEFENCE_TEMPLATE_ID",
   };
 }
