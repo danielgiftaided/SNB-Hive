@@ -68,6 +68,10 @@ def fixture_context(browser, **kwargs):
  context=browser.new_context(**kwargs)
  context.add_init_script("const RealDate=Date;window.Date=class extends RealDate {constructor(...args){super(...(args.length?args:['2026-10-08T12:00:00Z']));}static now(){return new RealDate('2026-10-08T12:00:00Z').getTime();}};")
  return context
+def start_course_checkout(page):
+ modal=page.get_by_role('dialog',name='Book Self Defence',exact=True)
+ if not modal.is_visible(): card(page,'Self Defence').get_by_role('button',name='Book',exact=True).click()
+ modal.get_by_role('button',name='Continue to payment',exact=True).click()
 with sync_playwright() as p:
  browser=p.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox'],env={'HOME':'/tmp/snb-hive-browser'})
  context=fixture_context(browser,viewport={'width':1280,'height':1000})
@@ -92,8 +96,11 @@ with sync_playwright() as p:
  for key in ['width','height']:
   assert card(page,'Zumba').bounding_box()[key]==card(page,'BoxFit').bounding_box()[key]
  self_card=card(page,'Self Defence')
- for date in ['Wednesday 18th November','Wednesday 25th November','Wednesday 2nd December']: assert date in self_card.inner_text()
+ assert self_card.locator('ul').count()==0
  self_card.get_by_role('button',name='Book',exact=True).click()
+ for date in ['Wednesday 18th November','Wednesday 25th November','Wednesday 2nd December']:
+  assert date in page.get_by_role('dialog',name='Book Self Defence',exact=True).inner_text()
+ start_course_checkout(page)
  accept_checkout_policy(page)
  page.get_by_role('heading',name="You're booked! 🎉",exact=True).wait_for()
  assert len(rows)==1 and rows[0]['amount']==80 and rows[0]['status']=='paid'
@@ -112,17 +119,17 @@ with sync_playwright() as p:
  context.close();context=fixture_context(browser,viewport={'width':375,'height':812})
  context.add_init_script('localStorage.setItem("snb_session",'+json.dumps(json.dumps(user))+');')
  context.route('https://fixture.supabase.test/**',route_api);context.route('https://fonts.googleapis.com/**',lambda route:route.abort())
- page=context.new_page();page.goto('http://127.0.0.1:5174/');card(page,'Self Defence').get_by_role('button',name='Book',exact=True).click()
+ page=context.new_page();page.goto('http://127.0.0.1:5174/');start_course_checkout(page)
  accept_checkout_policy(page)
  page.get_by_role('alert').wait_for()
  assert len(rows)==0 and not checkout
  fail_booking=False;fail_checkout=True
- card(page,'Self Defence').get_by_role('button',name='Book',exact=True).click()
+ start_course_checkout(page)
  accept_checkout_policy(page)
  page.get_by_text('Fixture checkout unavailable',exact=False).wait_for()
  assert len(rows)==1 and rows[0]['amount']==80 and len(checkout)==1
  saved_id=rows[0]['id'];fail_checkout=False
- card(page,'Self Defence').get_by_role('button',name='Book',exact=True).click()
+ start_course_checkout(page)
  accept_checkout_policy(page)
  page.get_by_role('heading',name="You're booked! 🎉",exact=True).wait_for()
  assert len(rows)==1 and checkout[-1]['booking_id']==saved_id

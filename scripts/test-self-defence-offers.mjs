@@ -68,16 +68,18 @@ try {
   await import("../supabase/functions/gocardless-checkout/index.ts");
   for (const moment of ["2026-10-16T12:00:00Z", "2026-10-31T23:59:59.999Z", "2026-11-01T00:00:00Z"]) {
     now = moment;
-    for (const places of [1, 2]) {
+    for (const places of Array.from({ length: 11 }, (_, i) => i + 1)) {
       const quote = selfDefenceQuote(places);
-      assert.equal(quote.amount, moment.startsWith("2026-11") ? places * 9000 : places === 1 ? 8000 : 15000);
+      assert.equal(quote.templateName, moment.startsWith("2026-11") ? SELF_DEFENCE_TEMPLATE :
+        places === 1 ? "Self Defence Early Bird x1 - £80" : "Self Defence Early Bird x2 - £150");
+      assert.equal(quote.amount, moment.startsWith("2026-11") ? places * 9000 : Math.floor(places / 2) * 15000 + (places % 2) * 8000);
       rows = [{ ...booking("self_defence"), num_people: places, amount: quote.amount / 100 }];
       templates = [template("BRT_OFFER", quote.templateName)]; calls = []; replay = false;
       const response = await post("self_defence");
       assert.equal(response.status, 200, await response.clone().text());
       const request = calls.find(call => call.path === "/billing_requests" && call.method === "POST").body.billing_requests;
       assert.equal(request.payment_request.amount, quote.amount);
-      assert.equal(request.payment_request.description, quote.templateName);
+      assert.equal(request.payment_request.description, places > 2 ? `SNB Hive Self Defence - ${places} places` : quote.templateName);
       assert.equal(request.payment_request.currency, "GBP");
       assert.deepEqual(request.mandate_request, { scheme:"bacs" });
       assert.equal(Object.keys(request.metadata).length, 3);
@@ -87,7 +89,7 @@ try {
     }
   }
   replay = false; now = "2026-10-16T12:00:00Z";
-  for (const [places, amount] of [[1,90],[2,160],[0,80],[3,150],[1.5,80],["2",150]]) {
+  for (const [places, amount] of [[1,90],[2,160],[0,80],[3,150],[11,800],[12,900],[1.5,80],["2",150]]) {
     rows = [{ ...booking("self_defence"), num_people: places, amount }]; calls = [];
     assert.equal((await post("self_defence")).status, 400);
     assert.ok(!calls.some(call => call.path.startsWith("/billing_request")));
@@ -110,5 +112,12 @@ try {
   assert.ok(!calls.some(call => call.method === "POST"));
   capacityRows.pop();
   assert.equal((await post("self_defence")).status, 200, "a two-place purchase fits exactly two remaining seats");
-  console.log("PASS early-bird £80/£150 and full £90/£180 totals/templates, exact London expiry, altered quantities/prices rejected, safe original retries, expiry during lookup and two-place capacity");
+  rows = [{ ...booking("self_defence"), num_people:11, amount:830 }];
+  templates = [template("BRT_OFFER", selfDefenceQuote(11).templateName)];
+  capacityRows = [{ id:"unfinished", status:"pending_payment", num_people:11 }]; calls = [];
+  assert.equal((await post("self_defence")).status, 200, "all eleven places can be booked; abandoned attempts do not reserve seats");
+  capacityRows.push({ id:"legacy-confirmed", status:"confirmed", num_people:null }); calls = [];
+  assert.equal((await post("self_defence")).status, 400, "even one existing reservation prevents an eleven-place purchase");
+  assert.ok(!calls.some(call => call.method === "POST"));
+  console.log("PASS early-bird pair discounts for all 1–11 quantities and full £90 per place totals/templates, exact London expiry, altered quantities/prices rejected, safe original retries, expiry during lookup and two-place capacity");
 } finally { globalThis.fetch = originalFetch; delete globalThis.Deno; globalThis.Date = RealDate; }

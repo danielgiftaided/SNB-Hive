@@ -79,7 +79,7 @@ with sync_playwright() as p:
             contexts.append(context)
             pages.append(page)
         customer, admin = pages
-        for title in ['Zumba', 'BoxFit', 'Self Defence', 'Somatic', 'Strength & Conditioning']:
+        for title in ['Zumba', 'BoxFit', 'Somatic', 'Strength & Conditioning']:
             schedule = '.flex.flex-wrap.gap-2'
             assert card(customer, title).locator(schedule).first.inner_text() == card(admin, title, True).locator(schedule).first.inner_text()
         for title in ['Zumba', 'BoxFit']:
@@ -87,7 +87,11 @@ with sync_playwright() as p:
         for title in ['Reformer Pilates', 'Somatic', 'Strength & Conditioning']:
             assert card(admin, title, True).get_by_role('combobox').count() == 0
         assert 'Exact taster and weekly session dates will be sent by email.' in card(admin, 'Reformer Pilates', True).inner_text()
-        assert card(customer, 'Self Defence').locator('ul').inner_text() == card(admin, 'Self Defence', True).locator('ul').inner_text()
+        card(customer,'Self Defence').get_by_role('button',name='Book',exact=True).click()
+        course_popup=customer.get_by_role('dialog',name='Book Self Defence',exact=True)
+        assert course_popup.locator('ul').inner_text() == card(admin,'Self Defence',True).locator('ul').inner_text()
+        assert course_popup.locator('.flex.flex-wrap.gap-2').inner_text() == card(admin,'Self Defence',True).locator('.flex.flex-wrap.gap-2').first.inner_text()
+        course_popup.get_by_role('button',name='Close Self Defence booking',exact=True).click()
         box = card(admin, 'BoxFit', True)
         box.get_by_role('button', name='Previous / other dates', exact=True).click()
         saved = box.get_by_role('combobox', name='Saved booking date', exact=True)
@@ -104,7 +108,10 @@ with sync_playwright() as p:
                 page.clock.set_system_time(moment)
                 page.evaluate('window.dispatchEvent(new Event("focus"))')
             assert choices(customer, 'BoxFit') == choices(admin, 'BoxFit', True)
-            assert card(customer, 'Self Defence').locator('ul').inner_text() == card(admin, 'Self Defence', True).locator('ul').inner_text()
+            if moment.month != 12:
+                card(customer,'Self Defence').get_by_role('button',name='Book',exact=True).click()
+                assert course_popup.locator('ul').inner_text() == card(admin,'Self Defence',True).locator('ul').inner_text()
+                course_popup.get_by_role('button',name='Close Self Defence booking',exact=True).click()
             course = card(admin, 'Self Defence', True)
             if moment.month == 11:
                 assert course.get_by_role('combobox', name='Lesson date', exact=True).locator('option').evaluate_all('(options) => options.map(option => option.value)') == ['2026-11-25','2026-12-02']

@@ -294,7 +294,7 @@ Deno.serve(async request => {
             ...(template?.paymentRequest || {}),
             amount: expectedAmount,
             currency: "GBP",
-            description: template?.paymentRequest.description || `SNB Hive ${session.name} class`,
+            description: course && course.places > 2 ? `SNB Hive Self Defence - ${course.places} places` : template?.paymentRequest.description || `SNB Hive ${session.name} class`,
             metadata: { booking_id, ...(template ? { [plan === "taster" ? "taster_template_id" : "course_template_id"]: template.templateId } : {}) },
           },
           mandate_request: template?.mandateRequest || { scheme: "bacs" },
