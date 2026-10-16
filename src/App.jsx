@@ -62,7 +62,7 @@ const DEFAULT_CLASSES = [
     whatToBring:"Gym clothes and trainers and bring a water bottle.", icsStart:"20260924T110000", icsEnd:"20260924T114500", description:"Strength training is one of the most beneficial forms of exercise for women, particularly as we navigate the demands of motherhood, work and daily life.\n\nThis class focuses on building functional strength, improving mobility and helping women feel stronger and more capable in their everyday activities.\n\nUsing bodyweight exercises, resistance bands and light equipment, sessions are designed to be accessible while still providing an effective workout.\n\nBenefits include:\n• Increased muscle tone and strength\n• Support with sustainable fat loss and body composition goals\n• Improved posture and reduced aches and pains\n• Better balance and stability\n• Increased energy levels\n• Stronger bones and joints\n• Improved confidence in daily movement\n• Support for healthy ageing and long-term wellbeing\n\nRather than focusing on appearance alone, this class encourages women to appreciate what their bodies can do and develop strength that carries into everyday life.\n\nSuitable for all fitness levels and can be adapted to individual needs." },
   { id: "boxfit", name: "BoxFit", tagline: "Cardio, conditioning & pad work", day: "Thursdays", time: "13:00–14:00", capacity: 18, icon: "flame", color: "#D06B4F",
     venue: "Hackney Central", venueMap: "https://www.google.com/maps/search/?api=1&query=Hackney+Central+London", whatToBring: "Bring boxing gloves and pads if you have them. Wear comfortable workout clothes and trainers. Bring a water bottle", description: "A high-energy boxing-inspired fitness class combining cardio, conditioning and boxing drills. Suitable for beginners and all fitness levels."},
-  { id:"self_defence", name:"Self Defence", tagline:"Intensive 3-week course", day:"3-week course", time:"Wednesdays, 12:00–14:00", capacity:SELF_DEFENCE_CAPACITY, icon:"shield", color:"#6F596E", bookingKind:"gocardless_course", price:SELF_DEFENCE_PRICE, courseDates:SELF_DEFENCE_DATES,
+  { id:"self_defence", name:"Self Defence", tagline:"Build confidence and self-defence skills", day:"3-week course", time:"Wednesdays, 12:00–14:00", capacity:SELF_DEFENCE_CAPACITY, icon:"shield", color:"#6F596E", bookingKind:"gocardless_course", price:SELF_DEFENCE_PRICE, courseDates:SELF_DEFENCE_DATES,
     venue:"Hackney Central", venueMap:"https://www.google.com/maps/search/?api=1&query=Hackney+Central+London",
     details:[...SELF_DEFENCE_DATES.map(formatCourseDate), "2-hour session each week for 3 weeks"], description:"A three-week Self Defence course. Book all three sessions and pay securely through GoCardless." },
 ];
@@ -920,7 +920,7 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = 
         </a>
       )}
 
-      <ClassDetails cls={cls} today={today}/>
+      {cls.bookingKind !== "gocardless_course" && <ClassDetails cls={cls} today={today}/>}
 
       <div className="flex items-center justify-end pt-2 border-t border-stone-100 mt-auto">
         <button
