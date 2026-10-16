@@ -87,12 +87,12 @@ with sync_playwright() as p:
         assert '6 Dispensary Lane' in card(page,'Reformer Pilates').inner_text()
         compact=card(page,'Self Defence')
         assert compact.get_by_role('combobox').count()==0
-        for detail in ['Hackney Central','12:00–14:00','18th November','25th November','2nd December','2-hour session each week for 3 weeks']:
+        for detail in ['Hackney Central','12:00–14:00','Build confidence and self-defence skills']:
             assert detail in compact.inner_text()
-        for hidden in ['Early bird','£80']:
+        for hidden in ['Early bird','£80','18th November','25th November','2nd December','2-hour session each week for 3 weeks','Intensive 3-week course']:
             assert hidden not in compact.inner_text()
         course=open_course(page)
-        for detail in ['Hackney Central','12:00–14:00','18th November','25th November','2nd December',
+        for detail in ['Hackney Central','12:00–14:00','18th November','25th November','2nd December','2-hour session each week for 3 weeks',
                        'Early bird: £80 for 1 place or £150 for 2. Offer ends 31 October 2026.']:
             assert detail in course.inner_text()
         assert '£80.00 total' in course.inner_text()
@@ -226,6 +226,6 @@ with sync_playwright() as p:
     context,page=setup(browser,390)
     assert card(page,'Self Defence').get_by_role('button',name='Full',exact=True).is_disabled()
     context.close(); browser.close()
-    print('PASS course timetable/location/duration on card, booking popup, typed 1–11 discounted quantities with invalid values blocked, remaining-capacity limit and policy dismissal preserves quantity')
+    print('PASS course summary/location/time on card, detailed dates/duration in booking popup, typed 1–11 discounted quantities with invalid values blocked, remaining-capacity limit and policy dismissal preserves quantity')
     print('PASS changing quantity or expired tariff starts a correctly priced new checkout, preserves old provider attempts and displays only the completed purchase')
     print('PASS exact London offer expiry while policy is open requires review, then £90 per place with no silent higher charge')
