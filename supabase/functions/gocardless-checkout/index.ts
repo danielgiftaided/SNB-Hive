@@ -287,7 +287,7 @@ Deno.serve(async request => {
         .reduce((sum: number, row: Record<string, unknown>) => sum + (Number(row.num_people) || 1), 0);
       if (reserved + course.places > SELF_DEFENCE_CAPACITY) return json({ error: "There are not enough places left for this purchase. Return to Classes and choose fewer places." }, 400);
     }
-    const template = taster || (course ? await templatePaymentRequest(course.templateName, course.amount, course.templateVariable) : null);
+    const template = taster || (course ? await templatePaymentRequest(course.templateName, course.amount, course.templateVariable, course.templateId) : null);
     const requestBody = plan !== "membership"
       ? {
           payment_request: {

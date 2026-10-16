@@ -6,18 +6,21 @@ type Template = {
 };
 
 // Reusable template links cannot carry each booking's allocation metadata.
-// Read the named template and create a dedicated, idempotent billing request
+// Read the selected template and create a dedicated, idempotent billing request
 // with its payment settings and the app's own verified return/booking metadata.
-export async function templatePaymentRequest(name: string, amount: number, templateIdVariable: string) {
+export async function templatePaymentRequest(name: string, amount: number, templateIdVariable: string, defaultTemplateId?: string) {
   const token = Deno.env.get("GOCARDLESS_ACCESS_TOKEN");
   if (!token) throw new Error("GoCardless is not configured");
   const base = Deno.env.get("GOCARDLESS_API_URL") || "https://api.gocardless.com";
-  const configuredId = Deno.env.get(templateIdVariable)?.trim();
+  const configuredId = Deno.env.get(templateIdVariable)?.trim() || defaultTemplateId;
   async function read(path: string) {
     const response = await fetch(`${base}${path}`, { headers: {
       Authorization: `Bearer ${token}`, "GoCardless-Version": "2015-07-06",
     } });
-    if (!response.ok) throw new Error(`GoCardless could not read the ${name} template.`);
+    if (!response.ok) {
+      if (configuredId && response.status === 404) throw new Error(`The ${name} template (${configuredId}) could not be found using the app's GoCardless connection. Check the template ID and that the template and app use the same live or sandbox account.`);
+      throw new Error(`GoCardless could not read the ${name} template (HTTP ${response.status}).`);
+    }
     return await response.json();
   }
   let template: Template | undefined;
@@ -38,7 +41,9 @@ export async function templatePaymentRequest(name: string, amount: number, templ
     if (matches.length !== 1) throw new Error(`Expected exactly one GoCardless template named ${name}. Check its name or configure its template ID.`);
     template = matches[0];
   }
-  if (!template?.id || template.name?.trim().toLowerCase() !== name.toLowerCase()) {
+  // An explicitly selected ID identifies the template even if its label changes.
+  // Only name-based discovery depends on a unique matching label.
+  if (!template?.id || (configuredId ? template.id !== configuredId : template.name?.trim().toLowerCase() !== name.toLowerCase())) {
     throw new Error(`The configured template does not match ${name}.`);
   }
   // Prices come from the validated app tariff, independent of template amount
