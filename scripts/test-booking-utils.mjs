@@ -103,3 +103,18 @@ assert.deepEqual(bookingSyncIds([course]), ["gc-course"], "course recovery check
 assert.equal(bookingIsActive({ ...course, status: "paid", gocardlessPaymentId: "PM_COURSE" }), true);
 assert.deepEqual(bookingSyncIds([{ ...course, status: "cancelled" }]), []);
 console.log("PASS Self Defence GoCardless: unfinished course inactive, accepted payment active, original checkout sync and cancelled course excluded");
+
+const { customerBookingIsVisible, bookingPlaceCount } = await import("../src/booking-utils.js");
+for (const plan of ["Pay as you go", "Membership — 1 class", "Taster (GoCardless)", "Course (GoCardless)", "Course (bank transfer)"]) {
+  for (const status of ["pending_checkout", "pending_payment"]) assert.equal(customerBookingIsVisible({ type:"class", plan, status, amount:80 }), false);
+  assert.equal(customerBookingIsVisible({ type:"class", plan, status:"paid", amount:80 }), true);
+}
+assert.equal(bookingPlaceCount({ sessionId:"self_defence", numPeople:2 }), 2);
+assert.equal(bookingPlaceCount({ sessionId:"self_defence" }), 1);
+console.log("PASS unpaid customer attempts hidden; accepted Paid bookings visible and course quantities counted");
+
+for (const type of ["class", "retreat", "workshop"]) {
+  assert.equal(customerBookingIsVisible({type,status:"pending_payment",amount:80}),false);
+  assert.equal(customerBookingIsVisible({type,status:"paid",amount:80}),true);
+  assert.equal(customerBookingIsVisible({type,status:"confirmed",amount:0}),true);
+}

@@ -12,6 +12,7 @@ on:
       - "supabase/migrations/20261012000000_move_boxfit_booking_dates.sql"
       - "supabase/migrations/20261015000000_taster_card_eligibility.sql"
       - "supabase/migrations/20261015010000_resume_unfinished_tasters.sql"
+      - "supabase/migrations/20261016000000_course_places.sql"
       - "supabase/config.toml"
       - ".github/workflows/deploy-payment-functions.yml"
   workflow_dispatch:
@@ -96,6 +97,30 @@ jobs:
             throw new Error('Supabase did not confirm the taster availability migration.');
           }
           console.log('Lifetime taster availability function updated.');
+          NODE
+
+      - name: Ensure course purchase quantities are available
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from 'node:fs';
+          const query = readFileSync('supabase/migrations/20261016000000_course_places.sql', 'utf8') +
+            "\nselect exists(select 1 from information_schema.columns where table_schema = 'public' and table_name = 'bookings' and column_name = 'num_people') as course_places_ready;";
+          writeFileSync(process.env.RUNNER_TEMP + '/course-places.json', JSON.stringify({ query }));
+          NODE
+          curl --fail --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            --header "Content-Type: application/json" \
+            --data-binary "@$RUNNER_TEMP/course-places.json" \
+            --output "$RUNNER_TEMP/course-places-result.json" \
+            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query"
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const result = JSON.parse(readFileSync(process.env.RUNNER_TEMP + '/course-places-result.json', 'utf8'));
+          if (!Array.isArray(result) || result.length !== 1 || result[0]?.course_places_ready !== true) {
+            throw new Error('Course quantity migration was not confirmed; stop before payment deployment.');
+          }
+          console.log('Course purchase quantities ready.');
           NODE
 
       - name: Deploy email sender

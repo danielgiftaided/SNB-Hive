@@ -7,6 +7,7 @@ const functions = [
   "supabase/functions/_shared/gocardless-bookings.ts",
   "supabase/functions/_shared/taster-checkout.ts",
   "supabase/functions/_shared/template-checkout.ts",
+  "supabase/functions/_shared/self-defence.ts",
   "supabase/functions/_shared/gocardless-checkout-error.ts",
   "supabase/functions/send-email/index.ts",
   "supabase/functions/admin-auth/index.ts",

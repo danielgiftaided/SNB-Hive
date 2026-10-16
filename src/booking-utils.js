@@ -139,3 +139,14 @@ export function classBookingDates(bookings, sessionId, upcomingDates) {
     !normalizedBookingDate(booking.bookingDate));
   return hasUndated ? [...dates, UNDATED_BOOKING] : dates;
 }
+
+// Unfinished/awaiting-payment attempts remain internal until payment setup is
+// verified. Historical free confirmed sessions still belong to the member.
+export function customerBookingIsVisible(booking) {
+  return bookingIsActive(booking) && (booking.status === "paid" ||
+    (booking.status === "confirmed" && (Number(booking.amount) === 0 || /^PM/.test(String(booking.gocardlessPaymentId || "")))));
+}
+
+export function bookingPlaceCount(booking) {
+  return booking?.sessionId === "self_defence" ? Math.max(1, Number(booking.numPeople) || 1) : 1;
+}

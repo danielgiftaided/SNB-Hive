@@ -335,4 +335,17 @@ try {
   assert.equal(notices.length, 1);
   console.log("PASS £90 Self Defence: abandoned/unapproved checkout has no place or emails; accepted setup confirms all course dates once; no subscription and cancellations survive retries");
 
+  rows = [{ ...row("double-course", "2026-11-18", "Course (GoCardless)"), session_id:"self_defence", session_name:"Self Defence", amount:150, num_people:2,
+    gocardless_billing_request_id:"BR_DOUBLE" }];
+  requests.set("BR_DOUBLE", billing("BR_DOUBLE", "double-course", "PM_DOUBLE", "course"));
+  payment("PM_DOUBLE", "pending_submission", "2026-10-16", 15000); notices = [];
+  await webhook(fulfilled("BR_DOUBLE"));
+  assert.equal(rows[0].status,"paid"); assert.equal(rows[0].num_people,2);
+  assert.equal(notices.length,1); assert.equal(notices[0].amount,150); assert.equal(notices[0].num_people,2);
+  assert.equal((await sync("double-course")).count,2);
+  assert.equal(notices.length,1);
+  rows[0].status="cancelled";
+  assert.equal((await sync("double-course")).allocated,false);
+  assert.equal(rows[0].num_people,2);
+  console.log("PASS two-place course: canonical payment confirms both seats, correct total/quantity in one receipt and cancellation preserves the purchase history");
 } finally { globalThis.fetch = originalFetch; delete globalThis.Deno; console.info = originalInfo; console.error = originalError; }

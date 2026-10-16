@@ -226,7 +226,7 @@ with sync_playwright() as p:
     fail_save = False; fail_checkout = True
     page.get_by_role('dialog').get_by_role('button', name='Continue to payment', exact=True).click()
     accept_checkout_policy(page)
-    page.get_by_role('alert').filter(has_text='Your booking is saved').wait_for()
+    page.get_by_role('alert').filter(has_text='Please retry here').wait_for()
     assert len(rows) == 1 and len(checkouts) == 1
     page.get_by_role('dialog').get_by_role('button', name='Continue to payment', exact=True).click()
     accept_checkout_policy(page)
@@ -236,9 +236,12 @@ with sync_playwright() as p:
     assert checkouts[0]['booking_id'] == checkouts[1]['booking_id'] == rows[0]['id']
     assert options(page) == ['BoxFit', 'Zumba']
     page.goto('http://127.0.0.1:5174/?tab=bookings')
-    page.get_by_role('button', name='Continue taster payment', exact=True).wait_for()
+    page.get_by_text('No upcoming bookings.', exact=True).wait_for()
+    assert page.get_by_role('region', name='Payments awaiting confirmation').count() == 0
+    page.get_by_role('button', name='Classes', exact=True).first.click()
+    open_tasters(page)
     fail_checkout = False
-    page.get_by_role('button', name='Continue taster payment', exact=True).click()
+    page.get_by_role('dialog').get_by_role('button', name='Continue to payment', exact=True).click()
     accept_checkout_policy(page)
     page.get_by_role('heading', name="You're booked! 🎉", exact=True).wait_for()
     assert len(rows) == 1 and rows[0]['status'] == 'paid'

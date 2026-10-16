@@ -3,7 +3,7 @@ import { SELF_DEFENCE_DATES, SELF_DEFENCE_TEMPLATE } from "../supabase/functions
 import { bookingRowsValidationIssue } from "../supabase/functions/_shared/checkout.ts";
 
 const RealDate = Date;
-let now = "2026-10-15T12:00:00Z";
+let now = "2026-11-01T12:00:00Z";
 globalThis.Date = class extends RealDate {
   constructor(...args) { super(...(args.length ? args : [now])); }
   static now() { return new RealDate(now).getTime(); }
@@ -107,7 +107,7 @@ try {
   assert.equal((await post("self_defence")).status, 200, "an unfinished full-course checkout can resume while later course dates remain");
   now = "2026-12-03T12:00:00Z";
   assert.equal((await post("self_defence")).status, 400, "a completed course cannot accept new checkouts");
-  now = "2026-10-15T12:00:00Z";
+  now = "2026-11-01T12:00:00Z";
   rows = [valid]; calls = [];
   assert.equal((await post("self_defence", { return_url: "https://other.example.test/" })).status, 500);
   assert.ok(!calls.some(call => call.path.startsWith("/billing_request")));

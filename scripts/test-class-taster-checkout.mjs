@@ -183,7 +183,7 @@ try {
     assert.equal(response.provider_stage, failure.path === "/billing_requests" ? "billing_request" : "authorisation_flow");
     assert.match(response.error, new RegExp(`HTTP ${failure.status}`));
     if (failure.payload?.error?.errors?.[0]?.field) assert.ok(response.error.includes(failure.payload.error.errors[0].field));
-    assert.equal(response.checkout_version, "class-payments-v10-class-finish");
+    assert.equal(response.checkout_version, "class-payments-v11-course-offers");
     for (const secret of ["test-token", "test-service-key", "do-not-leak"]) assert.ok(!JSON.stringify(response).includes(secret));
     if (failure.path === "/billing_requests") assert.ok(!calls.some(call => call.path === "/billing_request_flows"));
     else assert.ok(calls.some(call => call.path === "/rest/v1/bookings" && call.method === "PATCH"), "save the original request ID before attempting a failed flow");

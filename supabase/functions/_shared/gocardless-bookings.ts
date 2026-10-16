@@ -5,7 +5,7 @@ import { MEMBERSHIP_MONTHLY_AMOUNT } from "./membership.ts";
 export type Booking = {
   id: string; session_id: string; session_name: string; user_id: string;
   name: string; email: string; phone?: string; plan: string; amount: number;
-  status: string; booking_date?: string; payment_group_id?: string;
+  status: string; num_people?: number; booking_date?: string; payment_group_id?: string;
   gocardless_payment_id?: string; gocardless_billing_request_id?: string;
   booking_confirmation_sent_at?: string; payment_confirmation_sent_at?: string;
 };
@@ -177,7 +177,7 @@ export async function fulfillBillingRequest(billingRequestId: string, expectedBo
   }
   group = await groupFor({ ...anchor, payment_group_id: groupId });
   const allocated = group.some(row => row.status !== "cancelled" && !!row.gocardless_payment_id);
-  return { allocated, reason: allocated ? undefined : "booking_not_updated", count: group.filter(row => row.status !== "cancelled").length, email_pending: emailPending, ...paymentDetails };
+  return { allocated, reason: allocated ? undefined : "booking_not_updated", count: group.filter(row => row.status !== "cancelled").reduce((sum, row) => sum + (row.session_id === "self_defence" ? Number(row.num_people) || 1 : 1), 0), email_pending: emailPending, ...paymentDetails };
 }
 
 export async function enrollRecurringMembership(paymentId: string, subscriptionId: string) {
