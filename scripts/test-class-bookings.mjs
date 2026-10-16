@@ -85,12 +85,13 @@ try {
   for (const type of ["payment_confirmation", "booking_cancelled"]) {
     emails=[];
     assert.equal((await emailHandler(post({type,email:member.email,name:member.name,to_email:member.email,to_name:member.name,
-      user_email:member.email,user_name:member.name,session_name:"Self Defence",plan:"Course (GoCardless)",status:"paid",amount:90,
+      user_email:member.email,user_name:member.name,session_name:"Self Defence",plan:"Course (GoCardless)",status:"paid",amount:150,num_people:2,
       gocardless_payment_id:"PM_COURSE",booking_dates:SELF_DEFENCE_DATES.join(", "),booking_date:SELF_DEFENCE_DATES.join(", ")}))).status,200);
     assert.deepEqual(emails.map(email=>email.to[0]).sort(),[member.email,"shams@snbhive.com"].sort());
     assert.ok(emails.every(email=>email.html.includes("Self Defence") && SELF_DEFENCE_DATES.every(date=>email.html.includes(date))));
+    assert.ok(emails.every(email=>email.html.includes("Places") && email.html.includes(">2</p>")));
     if (type === "payment_confirmation") {
-      assert.ok(emails.every(email=>email.html.includes("£90") && email.html.includes("marked Paid")));
+      assert.ok(emails.every(email=>email.html.includes("£150") && email.html.includes("marked Paid")));
       assert.ok(emails[0].html.includes("Direct Debit automatically"));
       assert.ok(!emails.some(email=>email.html.includes("Payment received")));
     } else assert.ok(emails.every(email=>email.subject.includes("cancelled")));

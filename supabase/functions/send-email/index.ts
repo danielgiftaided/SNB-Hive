@@ -63,6 +63,7 @@ function bookingRows(p: Payload): [string, unknown][] {
     ["Phone", p.user_phone ?? p.phone], ["Class", p.session_name],
     ["Booking type", p.plan], ["Amount", `£${value(p.amount, "0")}`],
   ];
+  if (p.num_people) rows.push(["Places", p.num_people]);
   if (p.booking_dates || p.booking_date) rows.splice(4, 0, ["Lesson date(s)", p.booking_dates ?? p.booking_date]);
   return rows;
 }
@@ -112,6 +113,7 @@ function messagesFor(p: Payload): Message[] {
         ["Member", p.user_name], ["Email", p.user_email], ["Phone", p.user_phone],
         ["Class", p.session_name], ["Lesson date", p.booking_date], ["Cancelled", p.cancelled_at],
       ];
+      if (p.num_people) cancellationDetails.push(["Places", p.num_people]);
       const customer = { to, subject: `Your ${value(p.session_name)} booking has been cancelled`, html: shell("Your booking has been cancelled", "Booking cancellation confirmed", paragraph(`Hi ${value(p.to_name, "there")}, this email confirms that your booking has been cancelled. Your place in ${value(p.session_name)} is no longer reserved.`) + details(cancellationDetails.slice(3))) };
       const admin = { to: BOOKING_EMAIL, subject: `Booking cancelled: ${value(p.user_name)} — ${value(p.session_name)}`, html: shell("A booking was cancelled", `${value(p.session_name)} booking cancelled`, paragraph("A booking has just been cancelled. Their details are below.") + details(cancellationDetails)) };
       return [customer, admin];

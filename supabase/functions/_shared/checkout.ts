@@ -1,4 +1,5 @@
-import { classPaymentConfig, coursePaymentConfig, SELF_DEFENCE_PRICE, TASTER_AMOUNT } from "./class-config.ts";
+import { selfDefenceQuote } from "./self-defence.ts";
+import { classPaymentConfig, coursePaymentConfig, TASTER_AMOUNT } from "./class-config.ts";
 
 export type CheckoutPlan = "payg" | "membership" | "taster" | "course";
 
@@ -56,7 +57,10 @@ export function bookingRowsValidationIssue(
   if (rows.some(row => !(row.status === "pending_checkout" || row.status === "pending_payment"))) {
     return "wrong_status";
   }
-  if (plan !== "membership" && rows.some(row => Math.round(Number(row.amount) * 100) !== (plan === "course" ? SELF_DEFENCE_PRICE * 100 : plan === "taster" ? TASTER_AMOUNT : paygAmount))) {
+  const course = plan === "course" ? selfDefenceQuote(booking.num_people ?? 1) : null;
+  if (plan === "course" && (!course || Math.round(Number(booking.amount) * 100) !== course.amount ||
+      rows[0].num_people !== booking.num_people)) return "wrong_amount";
+  if (plan !== "membership" && rows.some(row => Math.round(Number(row.amount) * 100) !== (plan === "course" ? course!.amount : plan === "taster" ? TASTER_AMOUNT : paygAmount))) {
     return "wrong_amount";
   }
   return null;

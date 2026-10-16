@@ -25,7 +25,7 @@ def api(route):
     elif '/rest/v1/bookings' in request.url:
         if request.method == 'POST':
             values = request.post_data_json
-            assert len(values) == 1 and values[0]['amount'] == 90
+            assert len(values) == 1 and values[0]['amount'] == 80
             assert values[0]['plan'] == 'Course (GoCardless)'
             if rows:
                 assert len(rows) == 1 and values[0]['id'] == rows[0]['id'], 'Back/retry must resume the original row'
@@ -112,9 +112,11 @@ with sync_playwright() as p:
         assert card(page).get_by_role('button', name='Book', exact=True).is_enabled()
         assert not emails
         page.get_by_role('button', name='My bookings' if width >= 768 else 'Bookings', exact=True).click()
-        page.get_by_role('button', name='Continue course payment', exact=True).wait_for()
+        page.get_by_text('No upcoming bookings.', exact=True).wait_for()
+        assert page.get_by_role('region', name='Payments awaiting confirmation').count() == 0
         assert page.get_by_role('button', name='Cancel class', exact=True).count() == 0
-        page.get_by_role('button', name='Continue course payment', exact=True).click()
+        page.get_by_role('button', name='Classes', exact=True).first.click()
+        card(page).get_by_role('button', name='Book', exact=True).click()
         accept_checkout_policy(page)
         page.get_by_role('heading', name='GoCardless checkout', exact=True).wait_for()
         page.go_back()

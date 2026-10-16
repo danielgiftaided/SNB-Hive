@@ -1,6 +1,7 @@
+import { selfDefenceQuote, SELF_DEFENCE_CAPACITY } from "../_shared/self-defence.ts";
 import { corsHeaders, json } from "../_shared/http.ts";
 import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../_shared/membership.ts";
-import { classPaymentConfig, classDatesInMonth, coursePaymentConfig, SELF_DEFENCE_DATES, SELF_DEFENCE_PRICE, SELF_DEFENCE_TEMPLATE, CLASS_TASTERS, PAYG_AMOUNT, TASTER_AMOUNT } from "../_shared/class-config.ts";
+import { classPaymentConfig, classDatesInMonth, coursePaymentConfig, SELF_DEFENCE_DATES, SELF_DEFENCE_PRICE, CLASS_TASTERS, PAYG_AMOUNT, TASTER_AMOUNT } from "../_shared/class-config.ts";
 import { templatePaymentRequest } from "../_shared/template-checkout.ts";
 import { tasterPaymentRequest } from "../_shared/taster-checkout.ts";
 import { GoCardlessCheckoutError } from "../_shared/gocardless-checkout-error.ts";
@@ -15,7 +16,7 @@ import {
 const GC_API = Deno.env.get("GOCARDLESS_API_URL") || "https://api.gocardless.com";
 const GC_VERSION = "2015-07-06";
 const PRICES = { payg: PAYG_AMOUNT, membership: MEMBERSHIP_MONTHLY_AMOUNT, taster: TASTER_AMOUNT, course: SELF_DEFENCE_PRICE * 100 } as const;
-const CHECKOUT_VERSION = "class-payments-v10-class-finish";
+const CHECKOUT_VERSION = "class-payments-v11-course-offers";
 
 async function getBooking(id: string) {
   const url = Deno.env.get("SUPABASE_URL");
@@ -23,7 +24,7 @@ async function getBooking(id: string) {
   if (!url || !serviceKey) throw new Error("Supabase function environment is not configured");
   const query = new URLSearchParams({
     id: `eq.${id}`,
-    select: "id,session_id,plan,amount,status,payment_group_id,booking_date,gocardless_payment_id,gocardless_billing_request_id",
+    select: "id,session_id,plan,amount,status,payment_group_id,booking_date,gocardless_payment_id,gocardless_billing_request_id,num_people",
     limit: "1",
   });
   const response = await fetch(`${url}/rest/v1/bookings?${query}`, {
@@ -47,7 +48,7 @@ async function getPaymentGroup(groupId: string) {
   const url = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !serviceKey) throw new Error("Supabase function environment is not configured");
-  const query = new URLSearchParams({ payment_group_id: `eq.${groupId}`, select: "id,session_id,plan,amount,status,payment_group_id,booking_date,gocardless_payment_id" });
+  const query = new URLSearchParams({ payment_group_id: `eq.${groupId}`, select: "id,session_id,plan,amount,status,payment_group_id,booking_date,gocardless_payment_id,num_people" });
   const response = await fetch(`${url}/rest/v1/bookings?${query}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
   if (!response.ok) throw new Error("Booking group lookup failed");
   return await response.json();
@@ -222,6 +223,8 @@ Deno.serve(async request => {
 
     const verified = await getVerifiedBooking(booking_id, plan as CheckoutPlan);
     if ("error" in verified) {
+      if (plan === "course" && verified.error === "wrong_amount") return json({ code: "COURSE_PRICE_CHANGED",
+        error: "Self Defence pricing or ticket quantity has changed. Return to Classes and press Book again at the current price." }, 400);
       return json({
         code: "BOOKING_VERIFICATION_FAILED",
         reason: verified.error,
@@ -269,8 +272,22 @@ Deno.serve(async request => {
       : expectedAmount;
     const metadata = checkoutMetadata(booking_id, booking.payment_group_id, plan as CheckoutPlan);
     const taster = plan === "taster" ? await tasterPaymentRequest(session_id as keyof typeof CLASS_TASTERS) : null;
-    const template = taster || (plan === "course"
-      ? await templatePaymentRequest(SELF_DEFENCE_TEMPLATE, PRICES.course, "GOCARDLESS_SELF_DEFENCE_TEMPLATE_ID") : null);
+    const course = plan === "course" ? selfDefenceQuote(booking.num_people ?? 1) : null;
+    if (plan === "course") {
+      if (!course || course.amount !== expectedAmount) return json({ error: "Self Defence pricing has changed. Return to Classes and press Book again." }, 400);
+      const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const response = await fetch(`${Deno.env.get("SUPABASE_URL")}/rest/v1/bookings?${new URLSearchParams({
+        session_id: "eq.self_defence", status: "in.(paid,confirmed,pending_payment)", select: "id,status,num_people,gocardless_payment_id,plan",
+      })}`, { headers: { apikey: key, Authorization: `Bearer ${key}` } });
+      if (!response.ok) throw new Error("Course availability could not be checked. Please retry.");
+      const reservations = await response.json();
+      if (!Array.isArray(reservations)) throw new Error("Course availability could not be checked.");
+      const reserved = reservations.filter((row: Record<string, unknown>) => row.id !== booking_id &&
+        (row.status === "paid" || row.status === "confirmed" || /^PM/.test(String(row.gocardless_payment_id || ""))))
+        .reduce((sum: number, row: Record<string, unknown>) => sum + (Number(row.num_people) || 1), 0);
+      if (reserved + course.places > SELF_DEFENCE_CAPACITY) return json({ error: "There are not enough places left for this purchase. Return to Classes and choose fewer places." }, 400);
+    }
+    const template = taster || (course ? await templatePaymentRequest(course.templateName, course.amount, course.templateVariable) : null);
     const requestBody = plan !== "membership"
       ? {
           payment_request: {
@@ -294,6 +311,9 @@ Deno.serve(async request => {
           metadata,
         };
 
+    // A template lookup crossing the deadline must not start an outdated offer.
+    if (course && selfDefenceQuote(course.places)?.amount !== expectedAmount) return json({ code: "COURSE_PRICE_CHANGED",
+      error: "The early-bird offer has ended. Return to Classes to book at the current price." }, 400);
     const billingRequest = await gc("/billing_requests", { billing_requests: requestBody }, `class-checkout-${booking_id}`);
     const projectUrl = Deno.env.get("SUPABASE_URL");
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;

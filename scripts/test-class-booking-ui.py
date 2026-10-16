@@ -96,7 +96,7 @@ with sync_playwright() as p:
  self_card.get_by_role('button',name='Book',exact=True).click()
  accept_checkout_policy(page)
  page.get_by_role('heading',name="You're booked! 🎉",exact=True).wait_for()
- assert len(rows)==1 and rows[0]['amount']==90 and rows[0]['status']=='paid'
+ assert len(rows)==1 and rows[0]['amount']==80 and rows[0]['status']=='paid'
  assert rows[0]['plan']=='Course (GoCardless)' and checkout[-1]['plan']=='course'
  assert not emails, 'Browser must not send a confirmation before server verification'
  page.get_by_role('link',name='Return to my bookings',exact=True).click()
@@ -107,7 +107,7 @@ with sync_playwright() as p:
  page.get_by_role('button',name='Classes',exact=True).first.click()
  assert card(page,'Zumba taster').count()==0
  assert not errors,errors
- print('PASS desktop: Thursday BoxFit, direct £90 Self Defence checkout and whole-course cancellation')
+ print('PASS desktop: Thursday BoxFit, early-bird Self Defence checkout and whole-course cancellation')
  user['id']='retry-member';user['email']='retry@example.test';rows=[];checkout=[];fail_booking=True
  context.close();context=fixture_context(browser,viewport={'width':375,'height':812})
  context.add_init_script('localStorage.setItem("snb_session",'+json.dumps(json.dumps(user))+');')
@@ -120,7 +120,7 @@ with sync_playwright() as p:
  card(page,'Self Defence').get_by_role('button',name='Book',exact=True).click()
  accept_checkout_policy(page)
  page.get_by_text('Fixture checkout unavailable',exact=False).wait_for()
- assert len(rows)==1 and rows[0]['amount']==90 and len(checkout)==1
+ assert len(rows)==1 and rows[0]['amount']==80 and len(checkout)==1
  saved_id=rows[0]['id'];fail_checkout=False
  card(page,'Self Defence').get_by_role('button',name='Book',exact=True).click()
  accept_checkout_policy(page)
@@ -141,7 +141,7 @@ with sync_playwright() as p:
  context.route('https://fixture.supabase.test/**',route_api);context.route('https://fonts.googleapis.com/**',lambda route:route.abort())
  page=context.new_page();page.goto('http://127.0.0.1:5174/admin')
  page.get_by_role('button',name=re.compile('^Bookings')).click()
- for class_name,amount in [('Zumba taster',5),('Self Defence',90)]:
+ for class_name,amount in [('Zumba taster',5),('Self Defence',80)]:
   # Use the desktop booking table row for this particular session.
   row=page.locator('tr').filter(has=page.get_by_text(class_name,exact=True))
   action=row.get_by_role('combobox',name='Actions for UI Test Member',exact=True)
@@ -208,28 +208,22 @@ with sync_playwright() as p:
  page.get_by_role('heading',name='Zumba',exact=True).wait_for()
  page.get_by_role('button',name='My bookings',exact=True).click()
  pending=page.get_by_role('region',name='Payments awaiting confirmation')
- pending.wait_for()
- assert page.get_by_role('button',name='Check my payment setup',exact=True).count()==0
- assert pending.get_by_text('Zumba',exact=True).count()==1
- assert page.locator('main').get_by_text('Awaiting payment',exact=True).count()==3
- assert page.locator('main').get_by_text("Your place is reserved. We're checking your original payment setup.",exact=True).count()==2
- assert pending.get_by_text('Payment setup needs checking.',exact=False).count()==1
- assert pending.get_by_role('link',name='Contact Shams',exact=True).get_attribute('href')=='mailto:Shams@snbhive.com'
- assert 'Friday, 9 October 2026' in pending.inner_text()
- assert 'No bookings yet.' not in page.locator('main').inner_text()
+ page.get_by_text('No upcoming bookings.',exact=True).wait_for()
+ assert pending.count()==0
+ assert page.locator('main').get_by_text('Awaiting payment',exact=True).count()==0
  assert page.locator('main').get_by_text('Paid',exact=True).count()==0
  assert len(writes)==writes_before and len(emails)==emails_before and len(checkout)==checkout_before
- assert all(row['status']=='pending_payment' for row in rows), 'Displaying a pending payment must not change payment status'
+ assert all(row['status']=='pending_payment' for row in rows)
  rows[0]['status']='paid';page.evaluate('window.dispatchEvent(new Event("focus"))')
  page.locator('main').get_by_text('Paid',exact=True).wait_for()
- assert pending.get_by_text('Zumba',exact=True).count()==1
+ assert pending.count()==0
  fail_read=True;page.evaluate('window.dispatchEvent(new Event("focus"))')
  page.get_by_role('alert').wait_for()
  assert page.locator('main').get_by_text('Paid',exact=True).count()==1
- assert pending.get_by_text('Zumba',exact=True).count()==1
+ assert pending.count()==0
  fail_read=False;page.get_by_role('button',name='Retry bookings',exact=True).click()
  page.get_by_role('alert').wait_for(state='detached')
- print('PASS member allocation: two referenced 9 October payments reserve places immediately while awaiting payment; NULL reference stays available for verified recovery; refresh failures preserve rows')
+ print('PASS member visibility: unpaid attempts hidden; verified Paid rows shown; quiet recovery and failed refresh preserve stored records')
  sync_ready=True; page.reload()
  page.get_by_role('button',name='My bookings',exact=True).click()
  page.wait_for_function("document.querySelector('main')?.innerText.split('Paid').length === 4")

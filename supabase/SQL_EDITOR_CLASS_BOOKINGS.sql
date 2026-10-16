@@ -10,6 +10,7 @@ begin;
 -- hosted projects recorded the earlier repair migration without executing its
 -- DDL, so a new version is required to make `supabase db push` repair them.
 alter table public.bookings
+  add column if not exists num_people integer,
   add column if not exists booking_date date,
   add column if not exists payment_group_id text,
   add column if not exists gocardless_payment_id text;
