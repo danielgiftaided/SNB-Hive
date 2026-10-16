@@ -82,28 +82,37 @@ with sync_playwright() as p:
     for width in [1280,390]:
         rows=[]; checkouts=[]; authorised=set(); emails=[]
         context,page=setup(browser,width)
-        for name in ['Zumba','BoxFit','Somatic','Strength & Conditioning','Tasters']:
+        for name in ['Zumba','BoxFit','Self Defence','Somatic','Strength & Conditioning','Tasters']:
             assert 'Hackney Central' in card(page,name).inner_text()
         assert '6 Dispensary Lane' in card(page,'Reformer Pilates').inner_text()
         compact=card(page,'Self Defence')
         assert compact.get_by_role('combobox').count()==0
-        for hidden in ['Hackney Central','12:00','18th November','Early bird','£80']:
+        for detail in ['Hackney Central','12:00–14:00','18th November','25th November','2nd December','2-hour session each week for 3 weeks']:
+            assert detail in compact.inner_text()
+        for hidden in ['Early bird','£80']:
             assert hidden not in compact.inner_text()
         course=open_course(page)
         for detail in ['Hackney Central','12:00–14:00','18th November','25th November','2nd December',
-                       'Early bird: £80 for 1 place or £150 for 2. Ends 01 November 2026.']:
+                       'Early bird: £80 for 1 place or £150 for 2. Offer ends 31 October 2026.']:
             assert detail in course.inner_text()
         assert '£80.00 total' in course.inner_text()
-        assert course.get_by_role('combobox').locator('option').count()==11
+        assert course.get_by_role('spinbutton',name='Self Defence places').get_attribute('max')=='11'
+        assert course.get_by_role('spinbutton',name='Self Defence places').get_attribute('min')=='1'
+        for invalid in ['', '0', '-1', '12', '2.5']:
+            course.get_by_role('spinbutton',name='Self Defence places').fill(invalid)
+            assert course.get_by_role('button',name='Continue to payment',exact=True).is_disabled()
+            assert course.get_by_role('spinbutton').get_attribute('aria-invalid')=='true'
+            assert not rows and not checkouts
+        assert course.get_by_text('Early bird:',exact=False).count()==1
         for places in range(1,12):
-            course.get_by_role('combobox').select_option(str(places))
+            course.get_by_role('spinbutton').fill(str(places))
             amount=(places//2)*150+(places%2)*80
             assert f'£{amount:.2f} total' in course.inner_text()
         assert not rows and not checkouts
         page.keyboard.press('Escape')
         assert not course.is_visible() and not rows and not checkouts
         course=open_course(page)
-        course.get_by_role('combobox',name='Self Defence places').select_option('2')
+        course.get_by_role('spinbutton',name='Self Defence places').fill('2')
         assert '£150.00 total' in course.inner_text()
         course.screenshot(path=f'/tmp/snb-self-defence-popup-{width}.png')
         course.get_by_role('button',name='Continue to payment',exact=True).click(); accept_checkout_policy(page)
@@ -113,7 +122,7 @@ with sync_playwright() as p:
         my_bookings(page,width); assert_empty(page)
         page.get_by_role('button',name='Classes',exact=True).first.click()
         course=open_course(page)
-        course.get_by_role('combobox',name='Self Defence places').select_option('2')
+        course.get_by_role('spinbutton',name='Self Defence places').fill('2')
         course.get_by_role('button',name='Continue to payment',exact=True).click(); accept_checkout_policy(page)
         page.get_by_role('heading',name='GoCardless checkout').wait_for()
         assert len(rows)==1 and checkouts[-1]['booking_id']==booking_id
@@ -151,15 +160,15 @@ with sync_playwright() as p:
         print(f'PASS {width}px: £80/£150 chooser, two paid seats/registers/cancellation, Hackney locations except Pilates, unpaid course/PAYG/membership/taster attempts invisible and exits return Classes')
     rows=[]; checkouts=[]; authorised=set()
     context,page=setup(browser,390,at=datetime(2026,10,31,23,59,59,tzinfo=timezone.utc))
-    course=open_course(page); course.get_by_role('combobox',name='Self Defence places').select_option('2')
+    course=open_course(page); course.get_by_role('spinbutton',name='Self Defence places').fill('2')
     course.get_by_role('button',name='Continue to payment',exact=True).click()
     page.get_by_role('dialog',name='Cancellation Policy').wait_for()
     page.clock.fast_forward(1000); accept_checkout_policy(page)
     page.get_by_role('alert').filter(has_text='early-bird offer has ended').wait_for()
     assert not rows and not checkouts and '£180.00 total' in course.inner_text()
-    course.get_by_role('combobox',name='Self Defence places').select_option('1')
+    course.get_by_role('spinbutton',name='Self Defence places').fill('1')
     assert '£90.00 total' in course.inner_text()
-    course.get_by_role('combobox',name='Self Defence places').select_option('2')
+    course.get_by_role('spinbutton',name='Self Defence places').fill('2')
     course.get_by_role('button',name='Continue to payment',exact=True).click(); accept_checkout_policy(page)
     page.get_by_role('heading',name='GoCardless checkout').wait_for()
     assert rows[0]['amount']==180 and rows[0]['num_people']==2
@@ -171,13 +180,13 @@ with sync_playwright() as p:
     page.get_by_role('heading',name='GoCardless checkout').wait_for(); page.go_back()
     first_id=rows[0]['id']
     course=open_course(page)
-    course.get_by_role('combobox',name='Self Defence places').select_option('2')
+    course.get_by_role('spinbutton',name='Self Defence places').fill('2')
     course.get_by_role('button',name='Continue to payment',exact=True).click(); accept_checkout_policy(page)
     page.get_by_role('heading',name='GoCardless checkout').wait_for(); page.go_back()
     assert len(rows)==2 and sorted(row['amount'] for row in rows)==[80,150]
     page.clock.fast_forward(120000)
     course=open_course(page)
-    course.get_by_role('combobox',name='Self Defence places').select_option('2')
+    course.get_by_role('spinbutton',name='Self Defence places').fill('2')
     assert '£180.00 total' in course.inner_text()
     course.get_by_role('button',name='Continue to payment',exact=True).click(); accept_checkout_policy(page)
     page.get_by_role('heading',name='GoCardless checkout').wait_for()
@@ -199,13 +208,16 @@ with sync_playwright() as p:
     checkouts=[]; authorised=set()
     context,page=setup(browser,390)
     course=open_course(page)
-    assert course.get_by_role('combobox').locator('option').all_text_contents()==['1 place','2 places','3 places']
-    course.get_by_role('combobox').select_option('3')
+    assert course.get_by_role('spinbutton').get_attribute('max')=='3'
+    course.get_by_role('spinbutton').fill('4')
+    assert course.get_by_role('button',name='Continue to payment',exact=True).is_disabled()
+    assert not checkouts
+    course.get_by_role('spinbutton').fill('3')
     assert '£230.00 total' in course.inner_text()
     course.get_by_role('button',name='Continue to payment',exact=True).click()
     popup=page.get_by_role('dialog',name='Cancellation Policy',exact=True)
     popup.get_by_role('button',name='Back',exact=True).click()
-    assert course.get_by_role('combobox').input_value()=='3' and not checkouts
+    assert course.get_by_role('spinbutton').input_value()=='3' and not checkouts
     course.get_by_role('button',name='Continue to payment',exact=True).click(); accept_checkout_policy(page)
     page.get_by_role('heading',name='GoCardless checkout').wait_for()
     assert rows[-1]['num_people']==3 and rows[-1]['amount']==230
@@ -214,6 +226,6 @@ with sync_playwright() as p:
     context,page=setup(browser,390)
     assert card(page,'Self Defence').get_by_role('button',name='Full',exact=True).is_disabled()
     context.close(); browser.close()
-    print('PASS compact course card, all details in accessible popup, all 1–11 discounted totals, remaining-capacity selector and policy dismissal preserves quantity')
+    print('PASS course timetable/location/duration on card, booking popup, typed 1–11 discounted quantities with invalid values blocked, remaining-capacity limit and policy dismissal preserves quantity')
     print('PASS changing quantity or expired tariff starts a correctly priced new checkout, preserves old provider attempts and displays only the completed purchase')
     print('PASS exact London offer expiry while policy is open requires review, then £90 per place with no silent higher charge')

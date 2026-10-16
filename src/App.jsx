@@ -838,7 +838,6 @@ function AuthScreen({ onAuth }) {
 
 function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = false, tasterIneligible = false, openingPayment = false }) {
   const Icon = ICONS[cls.icon] || Sparkles;
-  const isCourse = cls.bookingKind === "gocardless_course";
   const full = booked >= cls.capacity;
   const isMember = bookingType === "membership";
   const today = useBookingDay();
@@ -899,7 +898,7 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = 
         </div>
       </div>
 
-      {!isCourse && <ClassSchedule cls={cls}>
+      <ClassSchedule cls={cls}>
         {isMember && !isTaster && (
           <Pill icon={Check}>
             <span style={{ color: TEAL }}>
@@ -907,9 +906,9 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = 
             </span>
           </Pill>
         )}
-      </ClassSchedule>}
+      </ClassSchedule>
 
-      {!isCourse && cls.venue && (
+      {cls.venue && (
         <a
           href={cls.venueMap}
           target="_blank"
@@ -921,7 +920,7 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = 
         </a>
       )}
 
-      {!isCourse && <ClassDetails cls={cls} today={today}/>}
+      <ClassDetails cls={cls} today={today}/>
 
       <div className="flex items-center justify-end pt-2 border-t border-stone-100 mt-auto">
         <button
@@ -1095,11 +1094,13 @@ function TasterCard({ classes, bookings, onBook, admin = false, currentUser, boo
 
 function SelfDefenceBookingModal({ session, booked, busy, error, onBook, onClose }) {
   const dialog = useRef(null);
-  const [places, setPlaces] = useState(1);
+  const [places, setPlaces] = useState("1");
   const now = useBookingTime();
-  const quote = selfDefenceQuote(places, now);
-  const remaining = Math.max(0, session.capacity - booked);
-  const available = places <= remaining && classBookingSchedule(session, now).length > 0;
+  const quote = selfDefenceQuote(Number(places), now);
+  const earlyBird = selfDefenceQuote(1, now).earlyBird;
+  const remaining = Math.max(0, Math.min(SELF_DEFENCE_CAPACITY, session.capacity - booked));
+  const validPlaces = !!quote && Number(places) <= remaining;
+  const available = validPlaces && classBookingSchedule(session, now).length > 0;
   useEffect(() => {
     const element = dialog.current;
     const trigger = document.activeElement;
@@ -1128,19 +1129,20 @@ function SelfDefenceBookingModal({ session, booked, busy, error, onBook, onClose
         </a>
         <ClassDetails cls={session} today={bookingToday(now)}/>
         <label className="text-sm font-medium text-stone-700">Places
-          <select aria-label="Self Defence places" value={places} onChange={event => setPlaces(Number(event.target.value))} disabled={busy || !remaining}
-            className="mt-1 block w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm">
-            {Array.from({ length: remaining }, (_, index) => index + 1).map(count => <option key={count} value={count}>{count} {count === 1 ? "place" : "places"}</option>)}
-          </select>
+          <input type="number" inputMode="numeric" min="1" max={remaining} step="1" required
+            aria-label="Self Defence places" aria-invalid={!validPlaces} aria-describedby="self-defence-places-help"
+            value={places} onChange={event => setPlaces(event.target.value)} disabled={busy || !remaining}
+            className="mt-1 block w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm"/>
         </label>
-        <p aria-live="polite" className="text-sm font-semibold" style={{ color: INK }}>£{(quote.amount / 100).toFixed(2)} total</p>
-        {quote.earlyBird ? <div className="text-xs text-stone-500 space-y-1">
-          <p>Early bird: £80 for 1 place or £150 for 2. Ends 01 November 2026.</p>
+        <p id="self-defence-places-help" className="text-xs text-stone-500">{remaining ? `Enter a whole number from 1 to ${remaining}.` : "This course is full."}</p>
+        <p aria-live="polite" className="text-sm font-semibold" style={{ color: INK }}>{validPlaces ? `£${(quote.amount / 100).toFixed(2)} total` : "Enter a valid number of places to see the total."}</p>
+        {earlyBird ? <div className="text-xs text-stone-500 space-y-1">
+          <p>Early bird: £80 for 1 place or £150 for 2. Offer ends 31 October 2026.</p>
           <p>For larger bookings: £150 per pair, plus £80 for an extra place.</p>
         </div> : <p className="text-xs text-stone-500">£90 per place for the full three-week course.</p>}
-        {!available && <p role="alert" className="text-sm text-red-600">{remaining ? "Please choose fewer places or check the course dates." : "This course is full."}</p>}
+        {!available && <p role="alert" className="text-sm text-red-600">{remaining ? "Please enter a valid number of places and check the course dates." : "This course is full."}</p>}
         {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
-        <button type="button" onClick={() => onBook(session, places, quote.amount)} disabled={busy || !available}
+        <button type="button" onClick={() => { if (available) onBook(session, Number(places), quote.amount); }} disabled={busy || !available}
           className="inline-flex items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-semibold text-white disabled:opacity-50" style={{ backgroundColor: TEAL }}>
           {busy ? "Opening payment…" : "Continue to payment"}<ArrowRight size={14}/>
         </button>
