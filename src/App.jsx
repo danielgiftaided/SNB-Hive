@@ -64,7 +64,7 @@ const DEFAULT_CLASSES = [
     venue: "Hackney Central", venueMap: "https://www.google.com/maps/search/?api=1&query=Hackney+Central+London", whatToBring: "Bring boxing gloves and pads if you have them. Wear comfortable workout clothes and trainers. Bring a water bottle", description: "A high-energy boxing-inspired fitness class combining cardio, conditioning and boxing drills. Suitable for beginners and all fitness levels."},
   { id:"self_defence", name:"Self Defence", tagline:"Build confidence and self-defence skills", day:"3-week course", time:"Wednesdays, 12:00–14:00", capacity:SELF_DEFENCE_CAPACITY, icon:"shield", color:"#6F596E", bookingKind:"gocardless_course", price:SELF_DEFENCE_PRICE, courseDates:SELF_DEFENCE_DATES,
     venue:"Hackney Central", venueMap:"https://www.google.com/maps/search/?api=1&query=Hackney+Central+London",
-    details:[...SELF_DEFENCE_DATES.map(formatCourseDate), "2-hour session each week for 3 weeks"], description:"A three-week Self Defence course. Book all three sessions and pay securely through GoCardless." },
+    details:[...SELF_DEFENCE_DATES.map(formatCourseDate), "2-hour session each week for 3 weeks"], description:"A three-week Self Defence course aimed at building practical self-defence skills in an empowering and accessible course designed to help women feel safer, stronger and more confident. You will learn useful techniques while developing awareness, discipline and self-belief" },
 ];
 
 // Paid weekly classes share one monthly membership tier.
@@ -1138,7 +1138,6 @@ function SelfDefenceBookingModal({ session, booked, busy, error, onBook, onClose
         <p aria-live="polite" className="text-sm font-semibold" style={{ color: INK }}>{validPlaces ? `£${(quote.amount / 100).toFixed(2)} total` : "Enter a valid number of places to see the total."}</p>
         {earlyBird ? <div className="text-xs text-stone-500 space-y-1">
           <p>Early bird: £80 for 1 place or £150 for 2. Offer ends 31 October 2026.</p>
-          <p>For larger bookings: £150 per pair, plus £80 for an extra place.</p>
         </div> : <p className="text-xs text-stone-500">£90 per place for the full three-week course.</p>}
         {!available && <p role="alert" className="text-sm text-red-600">{remaining ? "Please enter a valid number of places and check the course dates." : "This course is full."}</p>}
         {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
