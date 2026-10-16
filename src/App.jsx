@@ -1130,11 +1130,10 @@ function SelfDefenceBookingModal({ session, booked, busy, error, onBook, onClose
         <ClassDetails cls={session} today={bookingToday(now)}/>
         <label className="text-sm font-medium text-stone-700">Places
           <input type="number" inputMode="numeric" min="1" max={remaining} step="1" required
-            aria-label="Self Defence places" aria-invalid={!validPlaces} aria-describedby="self-defence-places-help"
+            aria-label="Self Defence places" aria-invalid={!validPlaces}
             value={places} onChange={event => setPlaces(event.target.value)} disabled={busy || !remaining}
             className="mt-1 block w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm"/>
         </label>
-        <p id="self-defence-places-help" className="text-xs text-stone-500">{remaining ? `Enter a whole number from 1 to ${remaining}.` : "This course is full."}</p>
         <p aria-live="polite" className="text-sm font-semibold" style={{ color: INK }}>{validPlaces ? `£${(quote.amount / 100).toFixed(2)} total` : "Enter a valid number of places to see the total."}</p>
         {earlyBird ? <div className="text-xs text-stone-500 space-y-1">
           <p>Early bird: £80 for 1 place or £150 for 2. Offer ends 31 October 2026.</p>
