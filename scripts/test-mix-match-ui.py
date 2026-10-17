@@ -78,9 +78,13 @@ with sync_playwright() as p:
             if primary=='BoxFit':
                 dates.get_by_label('Membership month',exact=True).select_option('2026-11')
                 assert pay.is_disabled() and dates.get_by_role('checkbox',checked=True).count()==0
-                dates.get_by_label('Membership month',exact=True).select_option('2026-10')
+                assert dates.get_by_role('checkbox').count()==8,'show all eight November dates even while October is current'
                 for group in [zumba,boxfit]:
-                    group.get_by_role('checkbox').nth(0).check();group.get_by_role('checkbox').nth(1).check()
+                    assert group.get_by_role('checkbox').count()==4
+                    group.get_by_role('checkbox').nth(2).check();group.get_by_role('checkbox').nth(3).check()
+                    assert group.get_by_role('checkbox').nth(0).is_disabled()
+                assert zumba.get_by_role('checkbox').nth(3).input_value()=='2026-11-27'
+                assert boxfit.get_by_role('checkbox').nth(3).input_value()=='2026-11-26'
             assert page.get_by_text('£35.00',exact=True).is_visible()
             assert not writes and not checkouts
             pay.click()
@@ -119,6 +123,7 @@ with sync_playwright() as p:
         modal=page.get_by_role('dialog',name='Choose Mix & Match renewal dates',exact=True)
         expect(modal).to_be_visible()
         assert modal.get_by_label('Membership month',exact=True).is_disabled()
+        assert modal.get_by_role('checkbox').count()==8,'renewal selection must also show the full month'
         save=modal.get_by_role('button',name='Save class dates',exact=True)
         assert save.is_disabled()
         for name in ['Zumba — choose 2 dates','BoxFit — choose 2 dates']:
