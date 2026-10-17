@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import CancellationPolicyNotice from "./CancellationPolicyNotice.jsx";
 
-function CheckoutPolicyDialog({ onDecision }) {
+function CheckoutPolicyDialog({ onDecision, confirmationLabel }) {
   const dialog = useRef(null);
   const titleId = useId();
   useEffect(() => {
@@ -21,7 +21,7 @@ function CheckoutPolicyDialog({ onDecision }) {
       <CancellationPolicyNotice showTitle={false}/>
       <div className="mt-5 flex flex-wrap justify-end gap-3">
         <button autoFocus type="button" onClick={() => onDecision(false)} className="rounded-full border border-stone-200 px-4 py-2.5 text-sm text-stone-600">Back</button>
-        <button type="button" onClick={() => onDecision(true)} className="rounded-full bg-[#4B5D4E] px-4 py-2.5 text-sm font-semibold text-white">Continue to GoCardless</button>
+        <button type="button" onClick={() => onDecision(true)} className="rounded-full bg-[#4B5D4E] px-4 py-2.5 text-sm font-semibold text-white">{confirmationLabel}</button>
       </div>
     </dialog>
   );
@@ -29,7 +29,7 @@ function CheckoutPolicyDialog({ onDecision }) {
 
 // Ask before saving an attempt or starting payment. Dismissal leaves the
 // booking form intact and creates no booking or provider request.
-export function useCheckoutPolicy() {
+export function useCheckoutPolicy({ confirmationLabel = "Continue to GoCardless" } = {}) {
   const [open, setOpen] = useState(false);
   const pending = useRef(null);
   const trigger = useRef(null);
@@ -46,5 +46,5 @@ export function useCheckoutPolicy() {
     resolve?.(accepted);
     if (!accepted) requestAnimationFrame(() => { if (trigger.current?.isConnected) trigger.current.focus(); });
   }
-  return { requestPolicy, policyDialog: open ? <CheckoutPolicyDialog onDecision={decide}/> : null };
+  return { requestPolicy, policyDialog: open ? <CheckoutPolicyDialog onDecision={decide} confirmationLabel={confirmationLabel}/> : null };
 }

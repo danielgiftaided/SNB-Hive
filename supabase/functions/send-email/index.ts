@@ -65,7 +65,7 @@ function bookingRows(p: Payload): [string, unknown][] {
     ["Booking type", p.plan], ["Amount", `£${value(p.amount, "0")}`],
   ];
   if (p.num_people) rows.push(["Places", p.num_people]);
-  if (p.booking_dates || p.booking_date) rows.splice(4, 0, ["Lesson date(s)", p.booking_dates ?? p.booking_date]);
+  if (p.booking_dates || p.booking_date) rows.splice(4, 0, ["Lesson date(s)", p.booking_schedule || p.booking_dates || p.booking_date]);
   return rows;
 }
 
@@ -148,6 +148,13 @@ function messagesFor(p: Payload): Message[] {
       const admin = { to: BOOKING_EMAIL, subject: `💳 Payment confirmed: ${value(p.name)} — ${value(p.session_name)}`, html: shell("A class payment was confirmed", directDebit ? "Payment setup confirmed" : "Payment received", paragraph("This booking is now marked Paid in the admin portal.") + details(bookingRows(p))) };
       return [customer, admin];
     }
+    case "mix_match_renewal": {
+      const month = /^\d{4}-\d{2}$/.test(value(p.membership_month)) ? new Intl.DateTimeFormat("en-GB", { month:"long", year:"numeric", timeZone:"Europe/London" }).format(new Date(`${value(p.membership_month)}-01T12:00:00Z`)) : "this month";
+      return [
+        { to, subject:"Mix & Match membership renewed — choose your dates", html:shell("Your monthly membership is ready", "Choose your four classes", paragraph(`Hi ${value(p.name, "there")}, your £35 Mix & Match membership has renewed for ${month}. Your Direct Debit payment setup has been accepted; GoCardless will collect it automatically.`) + paragraph("Open My bookings in the booking app and choose exactly two Zumba dates and two BoxFit dates in your membership month. No lesson dates are reserved until you save your choices. There is no extra payment when you choose your dates.")) },
+        { to:BOOKING_EMAIL, subject:`Mix & Match renewal: ${value(p.name)} — ${month}`, html:shell("A Mix & Match membership renewed", "Membership renewed — dates to be chosen", details([["Member",p.name],["Email",p.email],["Membership month",month],["Amount","£35"],["Classes","2 Zumba and 2 BoxFit — awaiting date selection"]])) },
+      ];
+    }
     case "blast":
       return [{ to, subject: value(p.subject), html: shell(value(p.subject), value(p.subject), paragraph(`Hi ${value(p.to_name, "there")},`) + paragraph(p.message) + `<p style="font-size:12px;color:${BRAND.muted}">You asked to receive SNB Hive class news, events and offers. <a href="${escapeHtml(p.unsubscribe_url)}" style="color:${BRAND.accent}">Unsubscribe from marketing emails</a>. Essential booking emails will continue.</p>`),
         headers:{ "List-Unsubscribe":`<${value(p.unsubscribe_url)}>`, "List-Unsubscribe-Post":"List-Unsubscribe=One-Click" } }];
@@ -220,7 +227,7 @@ Deno.serve(async request => {
       payload.unsubscribe_url = `${base}/functions/v1/marketing-unsubscribe?token=${recipient.token}`;
     }
     const messages = messagesFor(payload);
-    const category = payload.type === "booking_confirmation" ? "booking" : payload.type === "payment_confirmation" ? "payment" : "";
+    const category = payload.type === "booking_confirmation" ? "booking" : payload.type === "payment_confirmation" ? "payment" : payload.type === "mix_match_renewal" ? "mix-renewal" : "";
     await Promise.all(messages.map((message, index) => send(message, category && payload.gocardless_payment_id ? `${category}-${value(payload.gocardless_payment_id)}-${index}` : undefined)));
     console.log(`[send-email] sent type=${value(payload.type)} messages=${messages.length}`);
     return json({ success: true });

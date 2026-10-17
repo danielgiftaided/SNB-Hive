@@ -1,3 +1,4 @@
+import { MIX_MATCH_AMOUNT, MIX_MATCH_PLAN, MIX_MATCH_TEMPLATE_ID, mixMatchBookingIssue } from "../_shared/mix-match.ts";
 import { selfDefenceQuote, SELF_DEFENCE_CAPACITY } from "../_shared/self-defence.ts";
 import { corsHeaders, json } from "../_shared/http.ts";
 import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../_shared/membership.ts";
@@ -15,8 +16,8 @@ import {
 
 const GC_API = Deno.env.get("GOCARDLESS_API_URL") || "https://api.gocardless.com";
 const GC_VERSION = "2015-07-06";
-const PRICES = { payg: PAYG_AMOUNT, membership: MEMBERSHIP_MONTHLY_AMOUNT, taster: TASTER_AMOUNT, course: SELF_DEFENCE_PRICE * 100 } as const;
-const CHECKOUT_VERSION = "class-payments-v11-course-offers";
+const PRICES = { mix_match: MIX_MATCH_AMOUNT, payg: PAYG_AMOUNT, membership: MEMBERSHIP_MONTHLY_AMOUNT, taster: TASTER_AMOUNT, course: SELF_DEFENCE_PRICE * 100 } as const;
+const CHECKOUT_VERSION = "class-payments-v12-mix-match";
 
 async function getBooking(id: string) {
   const url = Deno.env.get("SUPABASE_URL");
@@ -24,7 +25,7 @@ async function getBooking(id: string) {
   if (!url || !serviceKey) throw new Error("Supabase function environment is not configured");
   const query = new URLSearchParams({
     id: `eq.${id}`,
-    select: "id,session_id,plan,amount,status,payment_group_id,booking_date,gocardless_payment_id,gocardless_billing_request_id,num_people",
+    select: "id,user_id,email,session_id,plan,amount,status,payment_group_id,booking_date,gocardless_payment_id,gocardless_billing_request_id,num_people",
     limit: "1",
   });
   const response = await fetch(`${url}/rest/v1/bookings?${query}`, {
@@ -48,7 +49,7 @@ async function getPaymentGroup(groupId: string) {
   const url = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !serviceKey) throw new Error("Supabase function environment is not configured");
-  const query = new URLSearchParams({ payment_group_id: `eq.${groupId}`, select: "id,session_id,plan,amount,status,payment_group_id,booking_date,gocardless_payment_id,num_people" });
+  const query = new URLSearchParams({ payment_group_id: `eq.${groupId}`, select: "id,user_id,email,session_id,plan,amount,status,payment_group_id,booking_date,gocardless_payment_id,num_people" });
   const response = await fetch(`${url}/rest/v1/bookings?${query}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } });
   if (!response.ok) throw new Error("Booking group lookup failed");
   return await response.json();
@@ -287,7 +288,8 @@ Deno.serve(async request => {
         .reduce((sum: number, row: Record<string, unknown>) => sum + (Number(row.num_people) || 1), 0);
       if (reserved + course.places > SELF_DEFENCE_CAPACITY) return json({ error: "There are not enough places left for this purchase. Return to Classes and choose fewer places." }, 400);
     }
-    const template = taster || (course ? await templatePaymentRequest(course.templateName, course.amount, course.templateVariable, course.templateId) : null);
+    const mixMatch = plan === "mix_match" ? await templatePaymentRequest(MIX_MATCH_PLAN, MIX_MATCH_AMOUNT, "GOCARDLESS_MIX_MATCH_TEMPLATE_ID", MIX_MATCH_TEMPLATE_ID) : null;
+    const template = mixMatch || taster || (course ? await templatePaymentRequest(course.templateName, course.amount, course.templateVariable, course.templateId) : null);
     const requestBody = plan !== "membership"
       ? {
           payment_request: {
@@ -295,7 +297,7 @@ Deno.serve(async request => {
             amount: expectedAmount,
             currency: "GBP",
             description: course && course.places > 2 ? `SNB Hive Self Defence - ${course.places} places` : template?.paymentRequest.description || `SNB Hive ${session.name} class`,
-            metadata: { booking_id, ...(template ? { [plan === "taster" ? "taster_template_id" : "course_template_id"]: template.templateId } : {}) },
+            metadata: { booking_id, ...(template ? { [plan === "mix_match" ? "mix_match_template_id" : plan === "taster" ? "taster_template_id" : "course_template_id"]: template.templateId } : {}) },
           },
           mandate_request: template?.mandateRequest || { scheme: "bacs" },
           metadata,
@@ -314,6 +316,7 @@ Deno.serve(async request => {
     // A template lookup crossing the deadline must not start an outdated offer.
     if (course && selfDefenceQuote(course.places)?.amount !== expectedAmount) return json({ code: "COURSE_PRICE_CHANGED",
       error: "The early-bird offer has ended. Return to Classes to book at the current price." }, 400);
+    if (plan === "mix_match" && mixMatchBookingIssue(booking, group)) return json({ error:"These Mix & Match dates are no longer available. Please choose two new dates for each class." }, 400);
     const billingRequest = await gc("/billing_requests", { billing_requests: requestBody }, `class-checkout-${booking_id}`);
     const projectUrl = Deno.env.get("SUPABASE_URL");
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
