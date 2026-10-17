@@ -10,7 +10,7 @@ const colours = ["background", "accent", "ink", "border"].map(name => {
   assert.ok(colour, `App palette includes ${name}`);
   return colour;
 });
-const types = ["verify", "welcome", "reset", "login_mfa", "admin_mfa", "admin", "admin_booking", "bank_transfer_booking", "booking_cancelled", "confirm_taster", "confirm_workshop", "booking_confirmation", "payment_confirmation", "blast"];
+const types = ["verify", "welcome", "reset", "login_mfa", "admin_mfa", "admin", "admin_booking", "bank_transfer_booking", "booking_cancelled", "confirm_taster", "confirm_workshop", "booking_confirmation", "payment_confirmation", "mix_match_renewal", "blast"];
 const source = await readFile(new URL("../supabase/functions/send-email/index.ts", import.meta.url), "utf8");
 assert.deepEqual([...source.matchAll(/case "([^"]+)":/g)].map(match => match[1]).sort(), [...types].sort(), "Cover every notification type");
 const settings = { SUPABASE_URL:"https://fixture.supabase.test", SUPABASE_SERVICE_ROLE_KEY:"fixture-service-key", RESEND_API_KEY: "fixture-resend-key", ADMIN_EMAIL: "admin@example.test", EMAIL_LOGO_URL: "https://old.example.test/old-logo.png" };
@@ -36,7 +36,7 @@ try {
       return new Response('{"id":"fixture-email"}', { status: 200 });
     };
     const payload = {
-      type, to_email: "member@example.test", email: "member@example.test", user_email: "member@example.test",
+      type, membership_month:"2026-11", to_email: "member@example.test", email: "member@example.test", user_email: "member@example.test",
       to_name: "Test <Member>", name: "Test <Member>", user_name: "Test <Member>",
       code: "123456", phone: "07000000000", user_phone: "07000000000", session_name: "BoxFit",
       plan: "Membership — 1 class", amount: 35, status: "paid", booking_date: "Thursday 15 October 2026",
@@ -47,7 +47,7 @@ try {
     };
     const response = await handler(new Request("https://fixture.supabase.test/functions/v1/send-email", { method: "POST", body: JSON.stringify(payload) }));
     assert.equal(response.status, 200, type);
-    const dual = ["bank_transfer_booking", "booking_cancelled", "confirm_workshop", "booking_confirmation", "payment_confirmation"].includes(type);
+    const dual = ["bank_transfer_booking", "booking_cancelled", "confirm_workshop", "booking_confirmation", "payment_confirmation", "mix_match_renewal"].includes(type);
     assert.equal(delivered.length, dual ? 2 : 1, type);
     for (const [index, { body, headers }] of delivered.entries()) {
       for (const colour of colours) assert.ok(body.html.includes(colour), `${type}: match app colour ${colour}`);

@@ -19,3 +19,7 @@ verify_jwt = false
 # Opaque per-member token authorizes withdrawal; no login is required.
 [functions.marketing-unsubscribe]
 verify_jwt = false
+
+# Same custom member sessions as Account; private paid credits are checked server-side.
+[functions.mix-match-membership]
+verify_jwt = false

@@ -12,6 +12,9 @@ const functions = [
   "supabase/functions/send-email/index.ts",
   "supabase/functions/admin-auth/index.ts",
   "supabase/functions/marketing-unsubscribe/index.ts",
+  "supabase/functions/mix-match-membership/index.ts",
+  "supabase/functions/_shared/mix-match.ts",
+  "supabase/functions/_shared/mix-match-storage.ts",
 ];
 
 let failed = false;

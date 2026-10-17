@@ -365,3 +365,5 @@ Vercel and redeploy the site after changing either Vite variable.
   never expose its secrets as `VITE_` environment variables.
 - **HTTPS is required** for password hashing (`crypto.subtle`).
   Vercel provides HTTPS automatically on all deployments.
+
+Mix & Match (two Zumba + two BoxFit dates for £35, renewing monthly) is documented in [MIX_MATCH_MEMBERSHIP.md](docs/MIX_MATCH_MEMBERSHIP.md), including the pinned GoCardless template, renewal date selection, deployment and fixture checks.

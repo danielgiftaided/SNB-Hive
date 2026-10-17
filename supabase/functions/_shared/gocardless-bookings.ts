@@ -1,3 +1,5 @@
+import { mixMatchRpc } from "./mix-match-storage.ts";
+import { MIX_MATCH_AMOUNT, MIX_MATCH_PLAN, isMixMatchPlan, mixMatchBookingIssue } from "./mix-match.ts";
 import { classPaymentConfig, classDatesInMonth, SELF_DEFENCE_DATES } from "./class-config.ts";
 import { weeklyDatesInMonth } from "./membership-bookings.ts";
 import { MEMBERSHIP_MONTHLY_AMOUNT } from "./membership.ts";
@@ -61,6 +63,9 @@ async function insertMissing(rows: Record<string, unknown>[]) {
 }
 
 export async function fillInitialMembership(group: Booking[], paymentId: string, billingRequestId: string) {
+  // Mix & Match reserves only the four expressly selected lessons. Recovery
+  // must never expand it into every weekly lesson for either activity.
+  if (group.some(row => isMixMatchPlan(row.plan))) return;
   const missing: Record<string, unknown>[] = [];
   for (const sessionId of new Set(group.map(row => row.session_id))) {
     const sessionRows = group.filter(row => row.session_id === sessionId);
@@ -90,6 +95,7 @@ export async function sendBookingNotice(paymentId: string, type: "booking_confir
   const marker = type === "booking_confirmation" ? "booking_confirmation_sent_at" : "payment_confirmation_sent_at";
   const rows = await bookings({ gocardless_payment_id: `eq.${paymentId}`, status: type === "payment_confirmation" ? "eq.paid" : "neq.cancelled", select: "*" });
   if (!rows.length || rows.every(row => row[marker])) return;
+  const renewalNotice = rows[0].session_id === "mix_match" && isMixMatchPlan(rows[0].plan);
   const dates = [...new Set(rows.flatMap(row => row.session_id === "self_defence" && String(row.plan).toLowerCase().includes("course")
     ? SELF_DEFENCE_DATES : [row.booking_date]).filter(Boolean))].sort();
   const names = [...new Set(rows.map(row => row.session_name))].join(" & ");
@@ -97,7 +103,9 @@ export async function sendBookingNotice(paymentId: string, type: "booking_confir
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const response = await fetch(`${base}/functions/v1/send-email`, { method: "POST",
     headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ ...rows[0], type, session_name: names,
+    body: JSON.stringify({ ...rows[0], type:renewalNotice ? "mix_match_renewal" : type, session_name: names,
+      membership_month:rows[0].booking_date?.slice(0, 7),
+      booking_schedule: rows.some(row => isMixMatchPlan(row.plan)) ? rows.filter(row => row.booking_date && row.session_id !== "mix_match").map(row => `${row.session_name}: ${new Intl.DateTimeFormat("en-GB", { weekday:"long", day:"numeric", month:"long", year:"numeric", timeZone:"UTC" }).format(new Date(`${row.booking_date}T12:00:00Z`))}`).join("; ") : undefined,
       amount: rows.reduce((sum, row) => sum + Number(row.amount || 0), 0),
       booking_dates: dates.map(date => new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${date}T12:00:00Z`))).join(", "),
     }),
@@ -106,7 +114,7 @@ export async function sendBookingNotice(paymentId: string, type: "booking_confir
   const sentAt = new Date().toISOString();
   await patch({ gocardless_payment_id: `eq.${paymentId}`, status: "neq.cancelled" }, {
     [marker]: sentAt,
-    ...(type === "payment_confirmation" ? { booking_confirmation_sent_at: sentAt } : {}),
+    ...(type === "payment_confirmation" && !renewalNotice ? { booking_confirmation_sent_at: sentAt } : {}),
   });
 }
 
@@ -139,7 +147,10 @@ export async function fulfillBillingRequest(billingRequestId: string, expectedBo
   let group = await groupFor(anchor);
   if (!group.length) return { allocated: false, reason: "booking_group_not_found", ...checkoutDetails };
   if (group.every(row => row.status === "cancelled")) return { allocated: false, reason: "cancelled", ...checkoutDetails };
+  const mixed = isMixMatchPlan(anchor.plan);
+  if (mixed && (request.metadata?.payment_plan !== "mix_match" || mixMatchBookingIssue(anchor, group, new Date(), true))) throw new Error("The Mix & Match booking must contain exactly two Zumba and two BoxFit dates in one month");
   const { payments: payment } = await gc(`/payments/${encodeURIComponent(paymentId)}`);
+  if (mixed && (Number(payment.amount) !== MIX_MATCH_AMOUNT || payment.currency !== "GBP")) throw new Error("Mix & Match payment must be £35 GBP");
   const paymentDetails = { ...checkoutDetails, payment_id: paymentId, payment_status: payment.status };
   if (!acceptedPaymentStatuses.includes(payment.status)) {
     return { allocated: false, reason: "payment_not_authorised", ...paymentDetails };
@@ -150,7 +161,7 @@ export async function fulfillBillingRequest(billingRequestId: string, expectedBo
     status: "paid",
   });
   group = await groupFor({ ...anchor, payment_group_id: groupId });
-  if (request.metadata?.payment_plan === "membership") {
+  if (request.metadata?.payment_plan === "membership" || request.metadata?.payment_plan === "mix_match") {
     await fillInitialMembership(group, paymentId, billingRequestId);
     if (!mandateId) throw new Error("Membership checkout has no mandate reference");
     const session = classPaymentConfig(anchor.session_id);
@@ -160,10 +171,10 @@ export async function fulfillBillingRequest(billingRequestId: string, expectedBo
     const now = new Date();
     const nextMonth = new Date(Math.max(Date.UTC(source.getUTCFullYear(), source.getUTCMonth() + 1, 1, 12),
       Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 12))).toISOString().slice(0, 10);
-    await gc("/subscriptions", { method: "POST", headers: { "Idempotency-Key": `${anchor.session_id}-membership-${bookingId}` },
+    await gc("/subscriptions", { method: "POST", headers: { "Idempotency-Key": `${mixed ? "mix-match" : anchor.session_id}-membership-${bookingId}` },
       body: JSON.stringify({ subscriptions: { amount: MEMBERSHIP_MONTHLY_AMOUNT, currency: "GBP",
-        name: `SNB Hive ${session.name} monthly membership`, interval_unit: "monthly", day_of_month: 1,
-        start_date: nextMonth, links: { mandate: mandateId }, metadata: { booking_id: bookingId, session_id: anchor.session_id },
+        name: mixed ? MIX_MATCH_PLAN : `SNB Hive ${session.name} monthly membership`, interval_unit: "monthly", day_of_month: 1,
+        start_date: nextMonth, links: { mandate: mandateId }, metadata: { booking_id: bookingId, session_id: mixed ? "mix_match" : anchor.session_id },
       } }),
     });
   }
@@ -195,6 +206,17 @@ export async function enrollRecurringMembership(paymentId: string, subscriptionI
   if (existing.some(row => row.payment_group_id === (anchor.payment_group_id || anchor.id))) {
     await fillInitialMembership(sourceGroup, paymentId, anchor.gocardless_billing_request_id || "");
     await markSuccessfulPayment(paymentId, payment);
+    return;
+  }
+  if (isMixMatchPlan(anchor.plan)) {
+    if (Number(payment.amount) !== MIX_MATCH_AMOUNT || payment.currency !== "GBP") throw new Error("Mix & Match renewal must be £35 GBP");
+    const renewal = await mixMatchRpc("record_mix_match_renewal", { p_details:{
+      user_id:anchor.user_id, name:anchor.name, email:anchor.email, phone:anchor.phone || "",
+      payment_id:paymentId, subscription_id:subscriptionId, month:String(payment.charge_date).slice(0, 7),
+      amount:MIX_MATCH_AMOUNT, currency:"GBP",
+    } });
+    await markSuccessfulPayment(paymentId, payment);
+    if (renewal.selected_at) await sendBookingNotice(paymentId, "booking_confirmation");
     return;
   }
   const groupId = `renewal-${paymentId}`;

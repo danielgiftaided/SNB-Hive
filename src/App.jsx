@@ -1,3 +1,6 @@
+import MixMatchRenewals from "./MixMatchRenewals.jsx";
+import MixMatchDates from "./MixMatchDates.jsx";
+import { MIX_MATCH_AMOUNT, MIX_MATCH_PLAN, MIX_MATCH_CLASS_IDS, isMixMatchPlan, mixMatchMonths, mixMatchDates, mixMatchSelectionIssue } from "../supabase/functions/_shared/mix-match.ts";
 import MarketingPreferences, { MarketingChoices, WhatsAppInvitation, marketingSnapshot } from "./MarketingPreferences.jsx";
 import { emailMarketingEligible } from "./marketing.js";
 import { SELF_DEFENCE_CAPACITY, selfDefenceQuote } from "../supabase/functions/_shared/self-defence.ts";
@@ -860,7 +863,7 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = 
   const isTaster = TASTER_MODE || ["taster", "paid_taster"].includes(cls.bookingKind);
   const isTbc = cls.tasterStatus === "tbc";
   const isBooked = !!bookingType;
-  const canBookAnotherPayg = bookingType === "payg";
+  const canBookAnotherPayg = bookingType === "payg" || bookingType === "mix_match";
   const paymentsAvailable = isTaster || PAID_CLASS_IDS.has(cls.id) || isWaitlist || ["bank_transfer", "gocardless_course"].includes(cls.bookingKind);
   const isClosed =
     isTaster &&
@@ -922,6 +925,7 @@ function ClassCard({ cls, booked, onBook, bookingType, onWaitlist, tasterUsed = 
         )}
       </ClassSchedule>
 
+      {bookingType === "mix_match" && <Pill icon={Check}>Mix &amp; Match</Pill>}
       {cls.venue && (
         <a
           href={cls.venueMap}
@@ -1321,6 +1325,17 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
   const now = useBookingTime();
   const today = bookingToday(now);
   const availableDates = classBookingSchedule(session, now);
+  const [mixMonth, setMixMonth] = useState(() => mixMatchMonths(now)[0] || "");
+  const [mixSelection, setMixSelection] = useState({ zumba:[], boxfit:[] });
+  const isMixMatch = plan === "mix_match";
+  const mixIssue = mixMatchSelectionIssue(mixSelection, mixMonth, now);
+
+  function changeMixMonth(month) { setMixMonth(month); setMixSelection({ zumba:[], boxfit:[] }); }
+  useEffect(() => {
+    if (!mixMatchMonths(now).includes(mixMonth)) { changeMixMonth(mixMatchMonths(now)[0] || ""); return; }
+    setMixSelection(previous => Object.fromEntries(MIX_MATCH_CLASS_IDS.map(id =>
+      [id, previous[id].filter(date => mixMatchDates(id, mixMonth, now).includes(date))])));
+  }, [now, mixMonth]);
   const [selectedDates, setSelectedDates] = useState([previousTaster?.bookingDate && availableDates.includes(previousTaster.bookingDate) ? previousTaster.bookingDate : availableDates[0]]);
 
   useEffect(() => {
@@ -1357,7 +1372,7 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
   const membershipStartDate = new Date(`${selectedDates[0]}T12:00:00Z`);
   const firstMembershipAmount = proratedMembershipAmount(membershipStartDate, monthlyMembershipAmount * 100) / 100;
   const amount = isPaidTaster ? TASTER_AMOUNT / 100 : isBankTransfer ? session.price : type==="class"
-    ? (plan==="payg" ? PAYG_PRICE * selectedDates.length : firstMembershipAmount)
+    ? (plan==="payg" ? PAYG_PRICE * selectedDates.length : isMixMatch ? MIX_MATCH_AMOUNT / 100 : firstMembershipAmount)
     : (plan==="deposit" ? session.deposit : session.price);
 
   const bankBookingDates = isPaidTaster ? selectedDates : upcomingBookingDates(session.courseDates || [], today);
@@ -1369,15 +1384,16 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
     if (session.bookingPaused) return setError("Booking opens when dates and times are confirmed.");
     if (isPaidTaster && tasterBookingUsed(previousTaster)) return setError("You have already booked your Zumba taster. Only one taster is available per class, even after cancellation.");
     if (isPaidTaster && userHasBookedRegularClass(bookings, currentUser, session.id)) return setError("Zumba tasters are only for people who have not booked a PAYG or monthly Zumba class.");
+    if (isMixMatch && mixMatchSelectionIssue(mixSelection, mixMonth)) return setError(mixMatchSelectionIssue(mixSelection, mixMonth));
     const currentDates = classPaymentConfig(session.id)?.dates || availableDates;
-    if (type === "class" && !isTaster && (!isBankTransfer || isPaidTaster) &&
+    if (type === "class" && !isMixMatch && !isTaster && (!isBankTransfer || isPaidTaster) &&
         (!selectedDates.length || selectedDates.some(date => !currentDates.includes(date)))) {
       return setError("Please choose an available lesson date.");
     }
     if (isBankTransfer && !bankBookingDates.length) return setError("There are no upcoming course dates available.");
     if (type === "class" && !isBankTransfer && !isTaster) {
       if (!await requestPolicy()) return;
-      if (selectedDates.some(date => !classBookingSchedule(session).includes(date))) {
+      if (isMixMatch ? mixMatchSelectionIssue(mixSelection, mixMonth) : selectedDates.some(date => !classBookingSchedule(session).includes(date))) {
         return setError("Please choose an available lesson date.");
       }
     }
@@ -1446,7 +1462,7 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
     setSaving(true); setError("");
     try {
       const planLabel = type==="class"
-        ? (plan==="payg" ? "Pay as you go" : `Membership — ${activities} class${activities>1?"es":""}`)
+        ? (plan==="payg" ? "Pay as you go" : isMixMatch ? MIX_MATCH_PLAN : `Membership — ${activities} class${activities>1?"es":""}`)
         : (plan==="deposit" ? "Deposit (bank transfer)" : "Paid in full (bank transfer)");
 
       const base = {
@@ -1459,7 +1475,16 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
       };
 
       let bookingId = null;
-      if (plan === "membership" && activities === 2) {
+      if (isMixMatch) {
+        const paymentGroupId = uid();
+        bookingId = paymentGroupId; pendingBookingId = paymentGroupId;
+        const chosen = [session.id, ...MIX_MATCH_CLASS_IDS.filter(id => id !== session.id)].flatMap(id =>
+          [...mixSelection[id]].sort().map(bookingDate => ({ id, bookingDate })));
+        await onConfirm(chosen.map(({ id, bookingDate }, index) => ({
+          ...base, id:index === 0 ? paymentGroupId : uid(), paymentGroupId, bookingDate,
+          sessionId:id, sessionName:classPaymentConfig(id).name, amount:index === 0 ? amount : 0,
+        })));
+      } else if (plan === "membership" && activities === 2) {
         const classes = DEFAULT_CLASSES.filter(c => selectedClasses.includes(c.id));
         const paymentGroupId = uid();
         bookingId = paymentGroupId;
@@ -1660,6 +1685,18 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
                     </div>
                   )}
                 </>)}
+                <button onClick={() => setPlan("mix_match")} className="text-left rounded-xl border-2 p-3.5 transition"
+                  style={{ borderColor:isMixMatch?TEAL:"#E7E2D5" }}>
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-sm">Mix &amp; Match membership</span>
+                    {isMixMatch && <Check size={16} style={{ color:TEAL }}/>}
+                  </div>
+                  <p className="text-xs text-stone-500 mt-0.5">£35 for 2 Zumba and 2 BoxFit classes in one month</p>
+                </button>
+                {isMixMatch && <>
+                  <MixMatchDates month={mixMonth} selection={mixSelection} now={now} onMonthChange={changeMixMonth} onSelectionChange={setMixSelection}/>
+                  <p className="text-xs text-stone-500 px-1">£35 covers your four selected classes. Your membership renews automatically at £35 on the 1st of each month, starting the month after your selected classes. Choose two new dates for each class in My bookings after each renewal. Contact Shams to manage your membership.</p>
+                </>}
               </>) : (<>
                 <label className="text-sm font-medium text-stone-700">How would you like to pay?</label>
                 <button onClick={() => setPlan("deposit")} className="text-left rounded-xl border-2 p-3.5 transition"
@@ -1689,8 +1726,8 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
 
               {error && <p className="text-xs text-red-600">{error}</p>}
 
-              <button onClick={handleConfirm} disabled={saving}
-                className="inline-flex items-center justify-center gap-1.5 font-semibold text-sm py-3 rounded-full transition"
+              <button onClick={handleConfirm} disabled={saving || (isMixMatch && !!mixIssue)}
+                className="inline-flex items-center justify-center gap-1.5 font-semibold text-sm py-3 rounded-full transition disabled:opacity-50"
                 style={{ backgroundColor:TEAL, color:"#fff" }}>
                 {saving ? <><Loader2 size={15} className="animate-spin"/> Opening secure payment…</> : <>Continue to payment <ArrowRight size={15}/></>}
               </button>
@@ -2088,7 +2125,7 @@ function cancellationEmail(booking, fallback = {}) {
   };
 }
 
-function MyBookings({ bookings, currentUser, onCancel }) {
+function MyBookings({ bookings, currentUser, onCancel, onDatesSaved }) {
   const [confirmCancel, setConfirmCancel] = useState(null);
   const [cancelling, setCancelling] = useState(null);
   const [cancelNotice, setCancelNotice] = useState("");
@@ -2098,6 +2135,7 @@ function MyBookings({ bookings, currentUser, onCancel }) {
   const mine = bookings
     .filter(b => bookingBelongsToUser(b, currentUser))
     .filter(customerBookingIsVisible)
+    .filter(booking => booking.sessionId !== "mix_match")
     .filter(isUpcoming);
   const recoveryIds = bookingSyncIds(bookings.filter(b => bookingBelongsToUser(b, currentUser) && isUpcoming(b)));
   async function recoverPendingPayments() {
@@ -2116,6 +2154,7 @@ function MyBookings({ bookings, currentUser, onCancel }) {
   }, [recoveryIds.length]);
   return (
     <div className="max-w-md mx-auto flex flex-col gap-3">
+      <MixMatchRenewals user={currentUser} bookings={bookings} invoke={callEdgeFunction} onSaved={onDatesSaved}/>
       {mine.length===0
         ? <div className="text-center py-12">
             <p className="text-sm text-stone-500">No upcoming bookings.</p>
@@ -2138,6 +2177,7 @@ function MyBookings({ bookings, currentUser, onCancel }) {
                   <StatusBadge status={b.status}/>
                 </div>
                 {cls?.day && cls?.time && <p className="text-xs text-stone-500 mt-1">{cls.courseDates ? upcomingBookingDates(cls.courseDates, today).map(formatBookingDate).join(" · ") : b.bookingDate ? formatBookingDate(b.bookingDate) : cls.day} · {cls.time}</p>}
+                {isMixMatchPlan(b.plan) && <p className="text-xs text-stone-500 mt-1">{MIX_MATCH_PLAN}</p>}
                 {b.sessionId === "self_defence" && <p className="text-xs text-stone-500 mt-1">{bookingPlaceCount(b)} {bookingPlaceCount(b) === 1 ? "place" : "places"} · £{Number(b.amount).toFixed(2)}</p>}
                 {cls?.venue && (
                   <a href={cls.venueMap} target="_blank" rel="noopener noreferrer"
@@ -3770,11 +3810,12 @@ function BookingApp() {
     if (!currentUser) return null;
     const b = bookings.find(b => b.sessionId===id && b.status !== "waitlisted" && bookingIsActive(b) && !isTasterBooking(b)
       && bookingBelongsToUser(b, currentUser) &&
-      (String(b.plan || "").toLowerCase().includes("membership") || bookingIsUpcoming(b, today, getSessionInfo(id)?.courseDates)));
+      ((String(b.plan || "").toLowerCase().includes("membership") && !isMixMatchPlan(b.plan)) || bookingIsUpcoming(b, today, getSessionInfo(id)?.courseDates)));
     if (!b) return null;
     const plan = (b.plan || "").toLowerCase();
     if (plan.includes("waitlist")) return "waitlist";
     if (plan.includes("taster")) return "taster";
+    if (isMixMatchPlan(b.plan)) return "mix_match";
     if (plan.includes("membership")) return "membership";
     if (plan.includes("course")) return "course";
     return "payg";
@@ -3902,6 +3943,7 @@ function BookingApp() {
             ? <>
                 <WelcomeHero currentUser={currentUser}/>
                 <WhatsAppInvitation user={currentUser}/>
+                <MixMatchRenewals user={currentUser} bookings={bookings} invoke={callEdgeFunction} onSaved={reloadBookings}/>
                 {OPEN_DAY.enabled && (
                   <div className="rounded-xl px-4 py-3 mb-4 flex flex-wrap items-center justify-between gap-3" style={{ backgroundColor:"#FBF3E3", border:"1px solid #C99A4B" }}>
                     <div className="flex items-center gap-2.5">
@@ -3954,7 +3996,7 @@ function BookingApp() {
                 ? <AccountPage currentUser={currentUser} onUpdate={s => setCurrentUser(s)}/>
                 : tab==="studio-hire"
                   ? <StudioHireForm currentUser={currentUser}/>
-                  : <MyBookings bookings={bookings} currentUser={currentUser} onCancel={cancelMyBooking}/>
+                  : <MyBookings bookings={bookings} currentUser={currentUser} onCancel={cancelMyBooking} onDatesSaved={reloadBookings}/>
         }
       </main>
 

@@ -1,7 +1,8 @@
+import { isMixMatchPlan, mixMatchBookingIssue } from "./mix-match.ts";
 import { selfDefenceQuote } from "./self-defence.ts";
 import { classPaymentConfig, coursePaymentConfig, TASTER_AMOUNT } from "./class-config.ts";
 
-export type CheckoutPlan = "payg" | "membership" | "taster" | "course";
+export type CheckoutPlan = "payg" | "membership" | "mix_match" | "taster" | "course";
 
 export function checkoutMetadata(
   bookingId: string,
@@ -36,6 +37,11 @@ export function bookingRowsValidationIssue(
   if (rows.length === 0) return "missing_payment_group";
   if (booking.payment_group_id !== booking.id || rows.some(row => row?.payment_group_id !== booking.payment_group_id)) {
     return "wrong_payment_group";
+  }
+  if (plan !== "mix_match" && rows.some(row => isMixMatchPlan(row.plan))) return "wrong_plan";
+  if (plan === "mix_match") {
+    if (rows.some(row => !["pending_checkout", "pending_payment"].includes(String(row.status)))) return "wrong_status";
+    return mixMatchBookingIssue(booking, rows) ? "wrong_plan" : null;
   }
   const expectedPlan = plan === "course" ? "course (gocardless)" : plan === "taster" ? "taster (gocardless)" : plan === "membership" ? "membership" : "pay as you go";
   if (typeof booking.plan !== "string" || !booking.plan.toLowerCase().includes(expectedPlan) ||
