@@ -719,7 +719,7 @@ function AuthScreen({ onAuth }) {
                   </span>
                 </label>
               )}
-              {mode === "register" && <MarketingChoices choices={marketingChoices} onChange={setMarketingChoices} disabled={loading}/>}
+              {mode === "register" && <MarketingChoices registration choices={marketingChoices} onChange={setMarketingChoices} disabled={loading}/>}
               {error   && <div className="ff-body text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>}
               {success && <div className="ff-body text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2">{success}</div>}
               <button onClick={mode==="register"?handleRegister:handleLogin} disabled={loading}

@@ -1,6 +1,6 @@
 # Email and WhatsApp preferences
 
-Registration offers two independent, optional, unticked choices, separate from the required terms checkbox:
+Registration offers two independent, optional, unticked choices under “Stay in touch”, separate from the required terms checkbox. The registration section has no “(optional)” suffix or explanatory paragraphs; Account and the invitation panels retain their guidance:
 
 - Email class news, events and offers.
 - An invitation to the SNB Hive WhatsApp group for class news, events and offers.
@@ -19,7 +19,7 @@ The app queues delivery after successful verification without blocking account a
 
 ## Recording and changing choices
 
-`public.users` stores each current channel choice, the consent version, latest change time/source and email-verification marker. A database trigger records each explicit signup choice or changed channel, including the exact wording, source and a server timestamp, in `snb_private.marketing_consent_events`. Ordinary browser roles cannot read, insert or change that audit table or the private unsubscribe tokens. Existing users and cached older registration forms without the consent version are not treated as consenting.
+`public.users` stores each current channel choice, the consent version, latest change time/source and email-verification marker. A database trigger records each explicit signup choice or changed channel, including the exact wording, source and a server timestamp, in `snb_private.marketing_consent_events`. Registration version `2026-10-17.1` records the shortened checkbox wording; historical `2026-10-17` events retain the original privacy sentence, which is still displayed in Account. Ordinary browser roles cannot read, insert or change that audit table or the private unsubscribe tokens. Existing users and cached older registration forms without the consent version are not treated as consenting.
 
 Account changes use `save_marketing_preferences` and write only channels the member actually changed. The existing app's member session is retained; this change does not replace the app's account-authentication system. Profile/password upserts cannot overwrite marketing preferences, both in the adapter and in the database trigger. This prevents stale tabs or cached older app versions from undoing an unsubscribe. An email-only opt-out does not change WhatsApp, and a WhatsApp-only edit does not restore email consent.
 
@@ -33,7 +33,7 @@ When sending promotions outside the app, honour the recorded current email choic
 
 ## Deployment
 
-Merge deploys `20261017000000_marketing_consent.sql` and `20261017010000_signup_welcome.sql` through the existing Edge Functions workflow, checks that all six RPCs exist, deploys public `marketing-unsubscribe`, then deploys the mailer. Deploy the frontend after the migration is confirmed. No new provider credentials are required. The private consent tables deliberately have no browser read/write grants; the mailer uses the existing Supabase service key. The normal app account/session model is unchanged.
+Merge deploys `20261017000000_marketing_consent.sql`, `20261017010000_signup_welcome.sql` and `20261017020000_registration_consent_wording.sql` through the existing Edge Functions workflow, checks that all six RPCs exist, deploys public `marketing-unsubscribe`, then deploys the mailer. Deploy the frontend after the migration is confirmed. No new provider credentials are required. The private consent tables deliberately have no browser read/write grants; the mailer uses the existing Supabase service key. The normal app account/session model is unchanged.
 
 ## Verification
 

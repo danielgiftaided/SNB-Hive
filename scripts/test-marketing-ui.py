@@ -68,7 +68,10 @@ with sync_playwright() as p:
             page.get_by_role('button',name='Register',exact=True).click()
             assert not page.get_by_role('checkbox',name=EMAIL,exact=True).is_checked()
             assert not page.get_by_role('checkbox',name=WHATSAPP,exact=True).is_checked()
-            assert 'Your phone number will be visible to other group members.' in page.locator('fieldset').inner_text()
+            assert page.locator('fieldset legend').inner_text()=='Stay in touch'
+            for removed in ['(optional)','Your phone number will be visible to other group members.','This does not include SMS or marketing calls.','Both choices are optional.','Booking emails will still be sent.']:
+                assert removed not in page.locator('fieldset').inner_text()
+            assert page.get_by_role('checkbox',name=WHATSAPP,exact=True).get_attribute('aria-describedby') is None
             assert not page.get_by_role('checkbox',name=EMAIL,exact=True).get_attribute('required')
             page.get_by_label('First Name').fill('Marketing');page.get_by_label('Last Name').fill('Member')
             page.get_by_label('Email address').fill('member@example.test');page.get_by_label('Mobile number').fill('07912345678')
@@ -80,6 +83,7 @@ with sync_playwright() as p:
             page.get_by_role('button',name='Create my account',exact=True).click()
             page.get_by_role('heading',name='Check your email',exact=True).wait_for()
             assert len(users)==1 and users[0]['marketing_email_opt_in']==email and users[0]['marketing_whatsapp_opt_in']==whatsapp
+            assert users[0]['marketing_consent_version']=='2026-10-17.1'
             assert users[0]['marketing_email_confirmed_at'] is None
             assert page.evaluate('localStorage.getItem("snb_session")') is None,'signup must await verification before granting access'
             assert not any(m['type']=='welcome' for m in mails),'no welcome before verification'
