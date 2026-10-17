@@ -6,6 +6,7 @@ globalThis.Deno = { env:{get:key=>settings[key]}, serve:fn=>{handler=fn;} };
 globalThis.fetch = async (url, init={}) => {
   calls.push({url,init});
   if (url.endsWith('/rpc/marketing_email_recipient')) return new Response(JSON.stringify(recipient),{status:failConsent?503:200});
+  if (url.endsWith('/rpc/prepare_signup_verification')) return new Response('true');
   assert.equal(url,'https://api.resend.com/emails');
   deliveries.push(JSON.parse(init.body));
   return new Response('{"id":"fixture-mail"}',{status:200});
@@ -36,7 +37,7 @@ try {
     assert.equal((await post(payload)).status,200);
   }
   assert.equal(deliveries.length,5,'verification and both booking/payment recipients remain independent of consent');
-  assert.ok(calls.every(call=>call.url==='https://api.resend.com/emails'));
+  assert.ok(calls.every(call=>call.url==='https://api.resend.com/emails'||call.url.endsWith('/rpc/prepare_signup_verification')));
   console.log('PASS actual mail handler: server consent gate, withdrawn/unverified suppression, fail-closed lookup, trusted recipient/unsubscribe headers and unaffected essential emails');
   let unsubscribeHandler;
   globalThis.Deno.serve=fn=>{unsubscribeHandler=fn;};

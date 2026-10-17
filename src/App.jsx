@@ -575,6 +575,7 @@ function AuthScreen({ onAuth }) {
             try { verified = await storage.updateMarketingPreferences(user.id, { marketingEmailConfirmedAt:new Date().toISOString() }); }
             catch { console.error("[SNB] Marketing email activation deferred; account verification succeeded."); }
           }
+          await storage.set("snb_welcome_pending", { email:user.email, code, expiresAt:Date.now() + 23 * 60 * 60 * 1000 });
           const s = { id:user.id, name:user.name, email:user.email, phone:user.phone, ...marketingSnapshot(verified), expiresAt: Date.now() + SESSION_DURATION_MS };
           await storage.set("snb_session", s); onAuth(s);
         }
@@ -587,6 +588,7 @@ function AuthScreen({ onAuth }) {
             try { verified = await storage.updateMarketingPreferences(user.id, { marketingEmailConfirmedAt:new Date().toISOString() }); }
             catch { console.error("[SNB] Marketing email activation deferred; account verification succeeded."); }
           }
+          await storage.set("snb_welcome_pending", { email:user.email, code, expiresAt:Date.now() + 23 * 60 * 60 * 1000 });
           const s = { id:user.id, name:user.name, email:user.email, phone:user.phone, ...marketingSnapshot(verified), expiresAt: Date.now() + SESSION_DURATION_MS };
           await storage.set("snb_session", s); onAuth(s);
         }
@@ -3702,6 +3704,33 @@ function BookingApp() {
       setAuthLoading(false);
     })();
   }, []);
+
+  // Start the separate welcome immediately after verification. Delivery failure
+  // must not block account access. Retry pending delivery while the app is open,
+  // on focus and after refresh; the server checks the code and deduplicates.
+  useEffect(() => {
+    if (!currentUser?.email) return;
+    let active = true, busy = false;
+    async function deliverWelcome() {
+      if (!active || busy) return;
+      busy = true;
+      try {
+        const pending = await storage.get("snb_welcome_pending");
+        if (!pending || pending.email !== currentUser.email) return;
+        if (pending.expiresAt < Date.now()) { await storage.remove("snb_welcome_pending"); return; }
+        const result = await callEdgeFunction("send-email", { type:"welcome", to_email:pending.email, code:pending.code });
+        if (result.success) {
+          const latest = await storage.get("snb_welcome_pending");
+          if (latest?.email === pending.email && latest?.expiresAt === pending.expiresAt) await storage.remove("snb_welcome_pending");
+        }
+      } catch { console.error("[SNB] Welcome email delivery deferred; account access is available."); }
+      finally { busy = false; }
+    }
+    deliverWelcome();
+    const timer = window.setInterval(deliverWelcome, 60000);
+    window.addEventListener("focus", deliverWelcome);
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener("focus", deliverWelcome); };
+  }, [currentUser?.email]);
 
   useEffect(() => {
     if (!currentUser?.id) return;

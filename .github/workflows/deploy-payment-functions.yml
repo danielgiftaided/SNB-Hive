@@ -15,6 +15,7 @@ on:
       - "supabase/migrations/20261015010000_resume_unfinished_tasters.sql"
       - "supabase/migrations/20261016000000_course_places.sql"
       - "supabase/migrations/20261017000000_marketing_consent.sql"
+      - "supabase/migrations/20261017010000_signup_welcome.sql"
       - "supabase/config.toml"
       - ".github/workflows/deploy-payment-functions.yml"
   workflow_dispatch:
@@ -130,7 +131,8 @@ jobs:
           node --input-type=module <<'NODE'
           import { readFileSync, writeFileSync } from 'node:fs';
           const query = readFileSync('supabase/migrations/20261017000000_marketing_consent.sql', 'utf8') +
-            "\nselect to_regprocedure('public.save_marketing_preferences(text,boolean,boolean,boolean)') is not null and to_regprocedure('public.marketing_email_recipient(text)') is not null and to_regprocedure('public.unsubscribe_marketing_email(text)') is not null as marketing_consent_ready;";
+            readFileSync('supabase/migrations/20261017010000_signup_welcome.sql', 'utf8') +
+            "\nselect to_regprocedure('public.save_marketing_preferences(text,boolean,boolean,boolean)') is not null and to_regprocedure('public.marketing_email_recipient(text)') is not null and to_regprocedure('public.unsubscribe_marketing_email(text)') is not null and to_regprocedure('public.prepare_signup_verification(text,text)') is not null and to_regprocedure('public.signup_welcome_recipient(text,text)') is not null and to_regprocedure('public.mark_signup_welcome_sent(text,uuid)') is not null as marketing_consent_ready;";
           writeFileSync(process.env.RUNNER_TEMP + '/marketing-consent.json', JSON.stringify({ query }));
           NODE
           curl --fail --silent --show-error \

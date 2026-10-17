@@ -8,7 +8,7 @@ with urlopen('http://127.0.0.1:5174/src/storage.js') as r:
     assert 'https://fixture.supabase.test' in r.read().decode()
 EMAIL='Email me SNB Hive class news, events and special offers.'
 WHATSAPP='I would like to join the SNB Hive WhatsApp group for class news, events and offers.'
-users=[]; mails=[]; writes=[]; fail_preferences=False
+users=[]; mails=[]; writes=[]; fail_preferences=False; fail_welcome=False
 
 def api(route):
     global users
@@ -47,7 +47,10 @@ def api(route):
         row['marketing_consent_version']='2026-10-17';row['marketing_consent_updated_at']='2026-10-17T10:00:00Z'
         result=row
     elif path=='/functions/v1/send-email':
-        mails.append(req.post_data_json);result={'success':True}
+        mails.append(req.post_data_json)
+        if fail_welcome and req.post_data_json['type']=='welcome':
+            route.fulfill(status=503,content_type='application/json',body='{"error":"fixture welcome failure"}');return
+        result={'success':True}
     elif path=='/rest/v1/rpc/class_taster_eligibility':result=taster_availability([],req.post_data_json)
     elif path=='/rest/v1/bookings' or path=='/rest/v1/studio_hire_enquiries':result=[]
     else:raise AssertionError(req.url)
@@ -79,9 +82,15 @@ with sync_playwright() as p:
             assert len(users)==1 and users[0]['marketing_email_opt_in']==email and users[0]['marketing_whatsapp_opt_in']==whatsapp
             assert users[0]['marketing_email_confirmed_at'] is None
             assert page.evaluate('localStorage.getItem("snb_session")') is None,'signup must await verification before granting access'
+            assert not any(m['type']=='welcome' for m in mails),'no welcome before verification'
             code=next(m['code'] for m in mails if m['type']=='verify')
             deferred = width==390 and email and not whatsapp
             fail_preferences=deferred
+            page.get_by_placeholder('000000').fill('999999' if code!='999999' else '888888')
+            page.get_by_role('button',name='Verify',exact=True).click()
+            page.get_by_text('Incorrect code. Please try again.',exact=True).wait_for()
+            assert not any(m['type']=='welcome' for m in mails)
+            fail_welcome=width==390 and not email and not whatsapp
             page.get_by_placeholder('000000').fill(code);page.get_by_role('button',name='Verify',exact=True).click()
             page.get_by_role('heading',name='Zumba',exact=True).wait_for()
             assert bool(users[0]['marketing_email_confirmed_at'])==(email and not deferred)
@@ -90,6 +99,20 @@ with sync_playwright() as p:
             if whatsapp:
                 assert page.get_by_role('link',name='Join WhatsApp group',exact=True).get_attribute('href')=='https://chat.whatsapp.com/FixtureInvite123'
             assert [m['type'] for m in mails].count('verify')==1
+            if fail_welcome:
+                page.wait_for_function('localStorage.getItem("snb_welcome_pending") !== null')
+                # Account access succeeds even when the optional welcome failed.
+                assert page.get_by_role('heading',name='Zumba',exact=True).is_visible()
+                fail_welcome=False
+                page.evaluate('window.dispatchEvent(new Event("focus"))')
+            page.wait_for_function('localStorage.getItem("snb_welcome_pending") === null')
+            welcomes=[m for m in mails if m['type']=='welcome']
+            expected_welcomes=2 if width==390 and not email and not whatsapp else 1
+            assert len(welcomes)==expected_welcomes and welcomes[0]['code']==code
+            assert 'whatsapp_opt_in' not in welcomes[0],'server must resolve the saved preference'
+            page.reload();page.get_by_role('heading',name='Zumba',exact=True).wait_for()
+            assert len([m for m in mails if m['type']=='welcome'])==expected_welcomes,'refresh must not repeat welcome'
+
             page.get_by_role('button',name='Account',exact=True).first.click()
             section=page.get_by_role('heading',name='Communication preferences',exact=True).locator('..')
             section.get_by_role('button',name='Save preferences',exact=True).wait_for(state='visible')

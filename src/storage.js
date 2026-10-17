@@ -129,7 +129,7 @@ const storage = {
   },
 
   async remove(key) {
-    if (key === "snb_session" || key.startsWith("vc_")) localRemove(key);
+    if (key === "snb_session" || key === "snb_welcome_pending" || key.startsWith("vc_")) localRemove(key);
   },
 
 };
