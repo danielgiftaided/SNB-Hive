@@ -15,6 +15,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { bookingRowsForUpsert, toCamel, toSnake } from "./storage-shape.js";
 import { readBookings } from "./booking-reader.js";
+import { MARKETING_CONSENT_VERSION } from "./marketing.js";
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -29,6 +30,31 @@ const localRemove = key => localStorage.removeItem(key);
 
 // ── Main adapter ──────────────────────────────────────────────────────────────
 const storage = {
+
+  async createUser(user, choices) {
+    const { error } = await supabase.from("users").insert(toSnake({ ...user,
+      marketingEmailOptIn: choices.email === true, marketingWhatsappOptIn: choices.whatsapp === true,
+      marketingConsentVersion:MARKETING_CONSENT_VERSION,
+    }));
+    if (error) throw new Error(error.message);
+  },
+
+  async getUser(id) {
+    const { data, error } = await supabase.from("users").select("id,marketing_email_opt_in,marketing_whatsapp_opt_in,marketing_email_confirmed_at,marketing_consent_updated_at,marketing_consent_version,marketing_consent_source").eq("id", id).single();
+    if (error) throw new Error(error.message);
+    return toCamel(data);
+  },
+
+  async updateMarketingPreferences(id, changes) {
+    const { data, error } = await supabase.rpc("save_marketing_preferences", {
+      p_member_id:id,
+      p_email:typeof changes.marketingEmailOptIn === "boolean" ? changes.marketingEmailOptIn : null,
+      p_whatsapp:typeof changes.marketingWhatsappOptIn === "boolean" ? changes.marketingWhatsappOptIn : null,
+      p_confirm_email:!!changes.marketingEmailConfirmedAt,
+    });
+    if (error) throw new Error(error.message);
+    return toCamel(data);
+  },
 
   subscribeToBookings(onChange) {
     const channel = supabase
@@ -73,7 +99,10 @@ const storage = {
 
     // User accounts → upsert into Supabase
     if (key === "snb_users") {
-      const rows = (Array.isArray(value) ? value : [value]).map(toSnake);
+      // Profile/password saves must never replay an old consent snapshot and
+      // undo a more recent unsubscribe or a change on another device.
+      const rows = (Array.isArray(value) ? value : [value]).map(user =>
+        toSnake(Object.fromEntries(Object.entries(user).filter(([field]) => !field.startsWith("marketing")))));
       const { error } = await supabase.from("users").upsert(rows);
       if (error) { console.error("[storage] set users:", error.message); throw new Error(error.message); }
       return;
@@ -100,7 +129,7 @@ const storage = {
   },
 
   async remove(key) {
-    if (key === "snb_session" || key.startsWith("vc_")) localRemove(key);
+    if (key === "snb_session" || key === "snb_welcome_pending" || key.startsWith("vc_")) localRemove(key);
   },
 
 };

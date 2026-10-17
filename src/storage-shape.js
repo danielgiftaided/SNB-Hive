@@ -18,6 +18,12 @@ const SNAKE = {
   workshopType: "workshop_type",
   otherType: "other_type",
   numPeople: "num_people",
+  marketingEmailOptIn: "marketing_email_opt_in",
+  marketingWhatsappOptIn: "marketing_whatsapp_opt_in",
+  marketingEmailConfirmedAt: "marketing_email_confirmed_at",
+  marketingConsentUpdatedAt: "marketing_consent_updated_at",
+  marketingConsentVersion: "marketing_consent_version",
+  marketingConsentSource: "marketing_consent_source",
 };
 
 const CAMEL = Object.fromEntries(Object.entries(SNAKE).map(([key, value]) => [value, key]));

@@ -1,3 +1,5 @@
+import MarketingPreferences, { MarketingChoices, WhatsAppInvitation, marketingSnapshot } from "./MarketingPreferences.jsx";
+import { emailMarketingEligible } from "./marketing.js";
 import { SELF_DEFENCE_CAPACITY, selfDefenceQuote } from "../supabase/functions/_shared/self-defence.ts";
 import { useCheckoutPolicy } from "./use-checkout-policy.jsx";
 import TermsContent from "./TermsContent.jsx";
@@ -449,9 +451,10 @@ function AuthScreen({ onAuth }) {
   const [error, setError]         = useState("");
   const [success, setSuccess]     = useState("");
   const [agreed, setAgreed]       = useState(false);
+  const [marketingChoices, setMarketingChoices] = useState({ email:false, whatsapp:false });
 
   function f(k, v) { setForm(p => ({...p, [k]:v})); setError(""); setSuccess(""); }
-  function switchMode(m) { setMode(m); setError(""); setSuccess(""); setCode(""); setAgreed(false); }
+  function switchMode(m) { setMode(m); setError(""); setSuccess(""); setCode(""); setAgreed(false); if (m === "register") setMarketingChoices({ email:false, whatsapp:false }); }
 
   async function getUsers() { return (await storage.get("snb_users")) || []; }
 
@@ -471,8 +474,7 @@ function AuthScreen({ onAuth }) {
       const salt = generateSalt();
       const passwordHash = await hashPassword(form.password, salt);
       const user = { id:uid(), name:`${form.firstName.trim()} ${form.lastName.trim()}`, email:form.email.trim().toLowerCase(), phone:form.phone.trim(), passwordHash, salt, createdAt:new Date().toISOString() };
-      await storage.set("snb_users", [...users, user]);
-      const session = { id:user.id, name:user.name, email:user.email, phone:user.phone };
+      await storage.createUser(user, marketingChoices);
       // Send verification code — required before login is granted
       try {
         const code = genCode();
@@ -482,7 +484,6 @@ function AuthScreen({ onAuth }) {
         callEdgeFunction("send-email", { type:"admin", user_name:user.name, user_email:user.email, user_phone:user.phone, signup_time:new Date().toLocaleString("en-GB") })
           .then(() => console.log("[SNB] Admin notified of new signup"))
           .catch(e => console.error("[SNB admin notify FAILED]:", e.message));
-        await storage.set("snb_session", session);
         setVEmail(user.email);
         setResetMode(false);
         switchMode("verify");
@@ -569,14 +570,26 @@ function AuthScreen({ onAuth }) {
         const users = await getUsers();
         const user = users.find(u => u.email === verifyEmail);
         if (user) {
-          const s = { id:user.id, name:user.name, email:user.email, phone:user.phone, expiresAt: Date.now() + SESSION_DURATION_MS };
+          let verified = user;
+          if (user.marketingEmailOptIn === true && !user.marketingEmailConfirmedAt) {
+            try { verified = await storage.updateMarketingPreferences(user.id, { marketingEmailConfirmedAt:new Date().toISOString() }); }
+            catch { console.error("[SNB] Marketing email activation deferred; account verification succeeded."); }
+          }
+          await storage.set("snb_welcome_pending", { email:user.email, code, expiresAt:Date.now() + 23 * 60 * 60 * 1000 });
+          const s = { id:user.id, name:user.name, email:user.email, phone:user.phone, ...marketingSnapshot(verified), expiresAt: Date.now() + SESSION_DURATION_MS };
           await storage.set("snb_session", s); onAuth(s);
         }
       } else {
         const users = await getUsers();
         const user = users.find(u => u.email === verifyEmail);
         if (user) {
-          const s = { id:user.id, name:user.name, email:user.email, phone:user.phone, expiresAt: Date.now() + SESSION_DURATION_MS };
+          let verified = user;
+          if (user.marketingEmailOptIn === true && !user.marketingEmailConfirmedAt) {
+            try { verified = await storage.updateMarketingPreferences(user.id, { marketingEmailConfirmedAt:new Date().toISOString() }); }
+            catch { console.error("[SNB] Marketing email activation deferred; account verification succeeded."); }
+          }
+          await storage.set("snb_welcome_pending", { email:user.email, code, expiresAt:Date.now() + 23 * 60 * 60 * 1000 });
+          const s = { id:user.id, name:user.name, email:user.email, phone:user.phone, ...marketingSnapshot(verified), expiresAt: Date.now() + SESSION_DURATION_MS };
           await storage.set("snb_session", s); onAuth(s);
         }
       }
@@ -706,6 +719,7 @@ function AuthScreen({ onAuth }) {
                   </span>
                 </label>
               )}
+              {mode === "register" && <MarketingChoices choices={marketingChoices} onChange={setMarketingChoices} disabled={loading}/>}
               {error   && <div className="ff-body text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>}
               {success && <div className="ff-body text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2">{success}</div>}
               <button onClick={mode==="register"?handleRegister:handleLogin} disabled={loading}
@@ -2176,7 +2190,7 @@ function AdminDashboard({ bookings, onMarkPaid, onMarkPending, onCancel, onResto
     if (!notifSubject.trim() || !notifMessage.trim()) return;
     setNStatus("sending");
     try {
-      const users = (await storage.get("snb_users")) || [];
+      const users = ((await storage.get("snb_users")) || []).filter(emailMarketingEligible);
       let sent = 0;
       for (const u of users) {
         await callEdgeFunction("send-email", { type:"blast", to_email:u.email, to_name:u.name, subject:notifSubject, message:notifMessage });
@@ -2389,6 +2403,11 @@ function AccountPage({ currentUser, onUpdate }) {
           style={{backgroundColor:TEAL,color:"#fff"}}>{saving ? "Saving…" : "Save changes"}</button>
       </div>
 
+      <MarketingPreferences user={currentUser} onChange={async updated => {
+        const session = { ...currentUser, ...marketingSnapshot(updated) };
+        await storage.set("snb_session", session); onUpdate(session);
+      }}/>
+
       <div className={card}>
         <h3 className="ff-display text-base font-semibold" style={{color:INK}}>Change password</h3>
         {[["current","Current password",""],["next","New password","At least 10 characters, incl. a letter and a number"],["confirm","Confirm new password",""]].map(([k,label,ph]) => (
@@ -2443,10 +2462,12 @@ function PrivacyPage() {
       <p><strong>Who we are:</strong> SNB Hive. Contact: shams@snbhive.com</p>
       <p><strong>What we collect:</strong> Your name, email address, and mobile number when you create an account, and booking details when you register for a class or retreat.</p>
       <p><strong>Why we collect it:</strong> To manage your bookings, send you confirmation emails, and notify you of class updates. We do not sell your data to third parties.</p>
+      <p><strong>Optional marketing:</strong> With your separate consent, we send email class news, events and offers, and provide an invitation to our WhatsApp group. Both choices are optional and do not affect your bookings. We record your choices, the wording shown, when they changed and how consent was given. You can change your choices in Account or unsubscribe using the link in any marketing email. Essential account, booking and payment emails continue.</p>
+      <p><strong>WhatsApp:</strong> Joining our group is your choice. In a standard group, your phone number is visible to other members. Group consent does not include SMS, marketing calls or separate promotional WhatsApp messages. WhatsApp processes your information under its own privacy terms. To stop group messages, leave the group in WhatsApp; changing your app preference does not remove you from an existing group.</p>
       <p><strong>How we store it:</strong> Your data is stored securely in Supabase (EU-based servers). Passwords are stored as salted hashes — we cannot read your password.</p>
-      <p><strong>How long we keep it:</strong> We keep your data for as long as you have an active account. You can request deletion at any time by emailing shams@snbhive.com.</p>
+      <p><strong>How long we keep it:</strong> We keep your data for as long as you have an active account. You can request deletion at any time by emailing shams@snbhive.com. We retain minimal consent and withdrawal records as needed to honour your preferences and prevent unwanted marketing.</p>
       <p><strong>Your rights (UK GDPR):</strong> You have the right to access, correct, or delete your personal data. Contact us at shams@snbhive.com to exercise these rights.</p>
-      <p><strong>Last updated:</strong> July 2026</p>
+      <p><strong>Last updated:</strong> 17 October 2026</p>
     </PolicyPage>
   );
 }
@@ -3118,7 +3139,7 @@ function AdminPage() {
     if (!notifSubject.trim() || !notifMessage.trim()) return;
     setNStatus("sending");
     try {
-      const users = (await storage.get("snb_users")) || [];
+      const users = ((await storage.get("snb_users")) || []).filter(emailMarketingEligible);
       let sent = 0;
       for (const u of users) {
         await callEdgeFunction("send-email", { type:"blast", to_email:u.email, to_name:u.name, subject:notifSubject, message:notifMessage });
@@ -3448,8 +3469,9 @@ function AdminPage() {
                   className="ff-body w-full rounded-full border border-stone-200 pl-8 pr-3 py-1.5 text-xs focus:outline-none"/>
               </div>
               <button onClick={() => {
-                const headers = ["Name","Email","Phone","Signed Up"];
-                const rows = members.map(m => [m.name, m.email, m.phone||"", m.createdAt ? new Date(m.createdAt).toLocaleDateString("en-GB") : ""]);
+                const headers = ["Name","Email","Phone","Signed Up","Email Marketing","WhatsApp Group","Preferences Updated","Consent Version"];
+                const rows = members.map(m => [m.name, m.email, m.phone||"", m.createdAt ? new Date(m.createdAt).toLocaleDateString("en-GB") : "",
+                  emailMarketingEligible(m) ? "Opted in" : "Not opted in", m.marketingWhatsappOptIn === true ? "Opted in" : "Not opted in", m.marketingConsentUpdatedAt || "", m.marketingConsentVersion || ""]);
                 downloadCSV(headers, rows, "snb-members.csv", { textColumns: [2] });
               }} className="ff-body inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border border-stone-200 bg-white text-stone-600 hover:bg-stone-50">
                 <Download size={13}/> Export CSV
@@ -3469,7 +3491,8 @@ function AdminPage() {
                 .slice().sort((a,b) => new Date(b.createdAt||0) - new Date(a.createdAt||0))
                 .map(m => (
                   <div key={m.id} className="grid grid-cols-4 gap-4 px-4 py-3 border-b border-stone-50 hover:bg-stone-50 transition last:border-0">
-                    <p className="ff-body text-sm font-medium" style={{ color: INK }}>{m.name}</p>
+                    <div><p className="ff-body text-sm font-medium" style={{ color: INK }}>{m.name}</p>
+                      <p className="ff-body text-xs text-stone-500">Email marketing: {emailMarketingEligible(m) ? "Opted in" : "Not opted in"}<br/>WhatsApp group: {m.marketingWhatsappOptIn === true ? "Opted in" : "Not opted in"}</p></div>
                     <p className="ff-body text-sm text-stone-500 truncate">{m.email}</p>
                     <p className="ff-body text-sm text-stone-500">{m.phone || "—"}</p>
                     <p className="ff-body text-sm text-stone-500">
@@ -3483,13 +3506,14 @@ function AdminPage() {
             {/* Send notification */}
             <div className="bg-white rounded-xl border border-stone-200 p-5 shadow-sm flex flex-col gap-3">
               <p className="ff-body text-sm font-semibold flex items-center gap-2" style={{ color: INK }}>
-                <Bell size={15}/> Send notification to all members
+                <Bell size={15}/> Send marketing email to opted-in members
               </p>
+              <p className="ff-body text-xs text-stone-500">{members.filter(emailMarketingEligible).length} members have opted in to email marketing. Each email includes an unsubscribe link.</p>
               <input value={notifSubject} onChange={e => setNSubject(e.target.value)}
                 placeholder="Subject — e.g. New class added!"
                 className="ff-body w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2"/>
               <textarea value={notifMessage} onChange={e => setNMessage(e.target.value)}
-                placeholder="Your message to all members…" rows={4}
+                placeholder="Your marketing message…" rows={4}
                 className="ff-body w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 resize-none"/>
               {notifStatus === "not_configured" && (
                 <p className="ff-body text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
@@ -3500,13 +3524,13 @@ function AdminPage() {
                 const [,sent,total] = notifStatus.split("_");
                 return <p className="ff-body text-xs text-stone-500">Sending… {sent} of {total}</p>;
               })()}
-              {notifStatus === "sent"  && <p className="ff-body text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2">✓ Notification sent to all members!</p>}
+              {notifStatus === "sent"  && <p className="ff-body text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2">✓ Marketing emails sent. Members who have unsubscribed were skipped.</p>}
               {notifStatus === "error" && <p className="ff-body text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">Failed — please try again.</p>}
               <button onClick={handleSendBlast}
-                disabled={notifStatus==="sending"||!notifSubject.trim()||!notifMessage.trim()}
+                disabled={notifStatus.startsWith("sending")||!notifSubject.trim()||!notifMessage.trim()||!members.some(emailMarketingEligible)}
                 className="ff-body inline-flex items-center justify-center gap-2 font-semibold text-sm py-2.5 rounded-full disabled:opacity-50"
                 style={{ backgroundColor: TEAL, color: "#fff" }}>
-                {notifStatus.startsWith("sending") ? <Loader2 size={14} className="animate-spin"/> : <><Send size={14}/> Send to all members</>}
+                {notifStatus.startsWith("sending") ? <Loader2 size={14} className="animate-spin"/> : <><Send size={14}/> Send to opted-in members</>}
               </button>
             </div>
           </div>
@@ -3681,6 +3705,47 @@ function BookingApp() {
     })();
   }, []);
 
+  // Start the separate welcome immediately after verification. Delivery failure
+  // must not block account access. Retry pending delivery while the app is open,
+  // on focus and after refresh; the server checks the code and deduplicates.
+  useEffect(() => {
+    if (!currentUser?.email) return;
+    let active = true, busy = false;
+    async function deliverWelcome() {
+      if (!active || busy) return;
+      busy = true;
+      try {
+        const pending = await storage.get("snb_welcome_pending");
+        if (!pending || pending.email !== currentUser.email) return;
+        if (pending.expiresAt < Date.now()) { await storage.remove("snb_welcome_pending"); return; }
+        const result = await callEdgeFunction("send-email", { type:"welcome", to_email:pending.email, code:pending.code });
+        if (result.success) {
+          const latest = await storage.get("snb_welcome_pending");
+          if (latest?.email === pending.email && latest?.expiresAt === pending.expiresAt) await storage.remove("snb_welcome_pending");
+        }
+      } catch { console.error("[SNB] Welcome email delivery deferred; account access is available."); }
+      finally { busy = false; }
+    }
+    deliverWelcome();
+    const timer = window.setInterval(deliverWelcome, 60000);
+    window.addEventListener("focus", deliverWelcome);
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener("focus", deliverWelcome); };
+  }, [currentUser?.email]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    let active = true;
+    async function refreshPreferences() {
+      try {
+        const user = await storage.getUser(currentUser.id);
+        if (active) setCurrentUser(previous => previous?.id === user.id ? { ...previous, ...marketingSnapshot(user) } : previous);
+      } catch { /* Account preferences provides a retry if this request fails. */ }
+    }
+    refreshPreferences();
+    window.addEventListener("focus", refreshPreferences);
+    return () => { active = false; window.removeEventListener("focus", refreshPreferences); };
+  }, [currentUser?.id]);
+
   // Show the Open Day popup once per browser session after login — not on
   // every render/navigation, but again on a fresh session (new tab/browser
   // restart) so returning users still see it once more.
@@ -3836,6 +3901,7 @@ function BookingApp() {
           : tab==="classes"
             ? <>
                 <WelcomeHero currentUser={currentUser}/>
+                <WhatsAppInvitation user={currentUser}/>
                 {OPEN_DAY.enabled && (
                   <div className="rounded-xl px-4 py-3 mb-4 flex flex-wrap items-center justify-between gap-3" style={{ backgroundColor:"#FBF3E3", border:"1px solid #C99A4B" }}>
                     <div className="flex items-center gap-2.5">

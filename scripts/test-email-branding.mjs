@@ -10,10 +10,10 @@ const colours = ["background", "accent", "ink", "border"].map(name => {
   assert.ok(colour, `App palette includes ${name}`);
   return colour;
 });
-const types = ["verify", "reset", "login_mfa", "admin_mfa", "admin", "admin_booking", "bank_transfer_booking", "booking_cancelled", "confirm_taster", "confirm_workshop", "booking_confirmation", "payment_confirmation", "blast"];
+const types = ["verify", "welcome", "reset", "login_mfa", "admin_mfa", "admin", "admin_booking", "bank_transfer_booking", "booking_cancelled", "confirm_taster", "confirm_workshop", "booking_confirmation", "payment_confirmation", "blast"];
 const source = await readFile(new URL("../supabase/functions/send-email/index.ts", import.meta.url), "utf8");
 assert.deepEqual([...source.matchAll(/case "([^"]+)":/g)].map(match => match[1]).sort(), [...types].sort(), "Cover every notification type");
-const settings = { RESEND_API_KEY: "fixture-resend-key", ADMIN_EMAIL: "admin@example.test", EMAIL_LOGO_URL: "https://old.example.test/old-logo.png" };
+const settings = { SUPABASE_URL:"https://fixture.supabase.test", SUPABASE_SERVICE_ROLE_KEY:"fixture-service-key", RESEND_API_KEY: "fixture-resend-key", ADMIN_EMAIL: "admin@example.test", EMAIL_LOGO_URL: "https://old.example.test/old-logo.png" };
 let handler;
 const previousDeno = globalThis.Deno;
 const previousFetch = globalThis.fetch;
@@ -25,6 +25,11 @@ try {
   for (const type of types) {
     const delivered = [];
     globalThis.fetch = async (url, init) => {
+      if (url === "https://fixture.supabase.test/rest/v1/rpc/marketing_email_recipient") {
+        return new Response(JSON.stringify({ email:"member@example.test", name:"Test <Member>", token:"a".repeat(64) }), { status:200 });
+      }
+      if (url.endsWith('/rpc/prepare_signup_verification') || url.endsWith('/rpc/mark_signup_welcome_sent')) return new Response('true');
+      if (url.endsWith('/rpc/signup_welcome_recipient')) return new Response(JSON.stringify({id:'member',email:'member@example.test',name:'Test <Member>',whatsapp_opt_in:true,delivery_key:'fixture-key'}));
       assert.equal(url, "https://api.resend.com/emails");
       assert.equal(init.method, "POST");
       delivered.push({ body: JSON.parse(init.body), headers: init.headers });
@@ -64,7 +69,7 @@ try {
     }
     console.log(`PASS ${type}: matching palette and inline app logo; ${delivered.length} recipient(s), calendar and idempotency preserved`);
   }
-  globalThis.fetch = async () => new Response("Fixture provider unavailable", { status: 503 });
+  globalThis.fetch = async url => url.endsWith("/rpc/prepare_signup_verification") ? new Response("true") : new Response("Fixture provider unavailable", { status: 503 });
   assert.equal((await handler(new Request("https://fixture.supabase.test/functions/v1/send-email", { method: "POST", body: JSON.stringify({ type: "verify", to_email: "member@example.test", code: "123456" }) }))).status, 500);
   console.log("PASS provider failures still report an error; no live emails sent");
 } finally {

@@ -15,3 +15,7 @@ verify_jwt = false
 # or a public project key alone cannot allocate a class or mark payment paid.
 [functions.gocardless-sync]
 verify_jwt = false
+
+# Opaque per-member token authorizes withdrawal; no login is required.
+[functions.marketing-unsubscribe]
+verify_jwt = false

@@ -1,6 +1,7 @@
 import { corsHeaders, json } from "../_shared/http.ts";
 import { CLASS_BANK_ACCOUNT } from "../_shared/class-config.ts";
 import { EMAIL_LOGO_CONTENT } from "../_shared/email-logo.ts";
+import { whatsappGroupUrl } from "../_shared/whatsapp-config.ts";
 
 const RESEND_API = "https://api.resend.com/emails";
 const SENDER_EMAIL = Deno.env.get("SENDER_EMAIL") || "shams@snbhive.com";
@@ -17,7 +18,7 @@ const BRAND = {
 };
 
 type Payload = Record<string, unknown>;
-type Message = { to: string; subject: string; html: string; attachments?: Attachment[] };
+type Message = { to: string; subject: string; html: string; attachments?: Attachment[]; headers?: Record<string, string> };
 type Attachment = { filename: string; content: string; content_id?: string };
 
 function value(input: unknown, fallback = "") {
@@ -88,7 +89,17 @@ function messagesFor(p: Payload): Message[] {
   const to = value(p.to_email ?? p.email);
   switch (type) {
     case "verify":
-      return [{ to, subject: "Welcome to SNB Hive — verify your email", html: shell("Confirm your SNB Hive account", `Welcome, ${value(p.to_name, "there")}!`, paragraph("Enter this code in the app to finish creating your account.") + codeBox(p.code)) }];
+      return [{ to, subject: "Verify your SNB Hive email", html: shell("Confirm your SNB Hive account", "Verify your email", paragraph(`Hi ${value(p.to_name, "there")}, enter this code in the app to finish creating your account. If you did not request an account, you can safely ignore this email.`) + codeBox(p.code)) }];
+    case "welcome": {
+      const group = p.whatsapp_opt_in === true ? whatsappGroupUrl(Deno.env.get("WHATSAPP_GROUP_URL")) : "";
+      const invitation = group ? paragraph("You asked for an invitation to our WhatsApp group. Joining is optional. Your phone number will be visible to other group members.") +
+        `<p style="margin:0 0 22px"><a href="${escapeHtml(group)}" style="color:${BRAND.accent};font-weight:bold">Join the SNB Hive WhatsApp group</a></p>` + paragraph("You can manage your communication preferences in Account. If you join the group, you can leave at any time in WhatsApp.") : "";
+      return [{ to, subject: "Welcome to SNB Hive!", html: shell("Your account is ready — welcome to the Hive", `Welcome, ${value(p.to_name, "there")}!`,
+        paragraph("Your email is verified and your SNB Hive account is ready. We're happy to have you with us!") +
+        paragraph("SNB Hive is a welcoming community for women to socialise, nurture their wellbeing and blossom. In the booking app, you'll find our regular BoxFit and Zumba classes, tasters for new class members, and our three-week Self Defence course.") +
+        paragraph("The Classes page shows current dates, times and availability. You can view confirmed bookings in My bookings and manage your details in Account.") + invitation +
+        paragraph("If you need a hand getting started or have a question about a class, just reply to this email. We look forward to meeting you!") + paragraph("Shams and the SNB Hive team")) }];
+    }
     case "reset":
       return [{ to, subject: "Reset your SNB Hive password", html: shell("Your password reset code", "Let's get you back in", paragraph("Enter this code in the app to choose a new password. If you did not request this, you can safely ignore this email.") + codeBox(p.code)) }];
     case "login_mfa":
@@ -138,7 +149,8 @@ function messagesFor(p: Payload): Message[] {
       return [customer, admin];
     }
     case "blast":
-      return [{ to, subject: value(p.subject), html: shell(value(p.subject), value(p.subject), paragraph(`Hi ${value(p.to_name, "there")},`) + paragraph(p.message)) }];
+      return [{ to, subject: value(p.subject), html: shell(value(p.subject), value(p.subject), paragraph(`Hi ${value(p.to_name, "there")},`) + paragraph(p.message) + `<p style="font-size:12px;color:${BRAND.muted}">You asked to receive SNB Hive class news, events and offers. <a href="${escapeHtml(p.unsubscribe_url)}" style="color:${BRAND.accent}">Unsubscribe from marketing emails</a>. Essential booking emails will continue.</p>`),
+        headers:{ "List-Unsubscribe":`<${value(p.unsubscribe_url)}>`, "List-Unsubscribe-Post":"List-Unsubscribe=One-Click" } }];
     default:
       throw new Error(`Unknown email type: ${type}`);
   }
@@ -151,9 +163,24 @@ async function send(message: Message, idempotencyKey?: string) {
   const response = await fetch(RESEND_API, {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}) },
-    body: JSON.stringify({ from: `Shams B <${SENDER_EMAIL}>`, to: [message.to], reply_to: ADMIN_EMAIL, subject: message.subject, html: message.html, attachments: [{ filename: "logo-pink-gold.png", content: EMAIL_LOGO_CONTENT, content_id: LOGO_ID }, ...(message.attachments || [])] }),
+    body: JSON.stringify({ from: `Shams B <${SENDER_EMAIL}>`, to: [message.to], reply_to: ADMIN_EMAIL, subject: message.subject, html: message.html, ...(message.headers ? { headers:message.headers } : {}), attachments: [{ filename: "logo-pink-gold.png", content: EMAIL_LOGO_CONTENT, content_id: LOGO_ID }, ...(message.attachments || [])] }),
   });
   if (!response.ok) throw new Error(`Resend ${response.status}: ${await response.text()}`);
+}
+
+async function signupRpc(name: string, body: Payload) {
+  const base = Deno.env.get("SUPABASE_URL"), key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!base || !key) throw new Error("Signup email delivery is not configured");
+  const response = await fetch(`${base}/rest/v1/rpc/${name}`, { method: "POST",
+    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!response.ok) throw new Error(`Signup email delivery could not complete ${name}`);
+  return await response.json();
+}
+
+async function signupCodeHash(email: unknown, code: unknown) {
+  if (!/^\d{6}$/.test(value(code))) throw new Error("A six-digit verification code is required");
+  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${value(email).trim().toLowerCase()}:${value(code)}`));
+  return Array.from(new Uint8Array(bytes), byte => byte.toString(16).padStart(2, "0")).join("");
 }
 
 Deno.serve(async request => {
@@ -161,6 +188,37 @@ Deno.serve(async request => {
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
   try {
     const payload = await request.json();
+    if (["verify", "login_mfa"].includes(payload.type)) {
+      await signupRpc("prepare_signup_verification", { p_email: value(payload.to_email).trim().toLowerCase(),
+        p_code_hash: await signupCodeHash(payload.to_email, payload.code) });
+    }
+    if (payload.type === "welcome") {
+      const recipient = await signupRpc("signup_welcome_recipient", { p_email: value(payload.to_email).trim().toLowerCase(),
+        p_code_hash: await signupCodeHash(payload.to_email, payload.code) });
+      if (!recipient) return json({ success: true, skipped: true, reason: "no_pending_welcome" });
+      // Never trust caller-supplied identity, consent, invitation or delivery key.
+      const trusted = { type: "welcome", to_email: recipient.email, to_name: recipient.name, whatsapp_opt_in: recipient.whatsapp_opt_in };
+      await send(messagesFor(trusted)[0], `signup-welcome-${recipient.delivery_key}`);
+      if (await signupRpc("mark_signup_welcome_sent", { p_user_id: recipient.id, p_delivery_key: recipient.delivery_key }) !== true) {
+        throw new Error("Welcome email delivery acknowledgement could not be saved");
+      }
+      console.log("[send-email] sent type=welcome messages=1");
+      return json({ success: true });
+    }
+    if (payload.type === "blast") {
+      const base = Deno.env.get("SUPABASE_URL");
+      const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (!base || !key) throw new Error("Marketing preferences are not configured");
+      const response = await fetch(`${base}/rest/v1/rpc/marketing_email_recipient`, { method:"POST",
+        headers:{ apikey:key, Authorization:`Bearer ${key}`, "Content-Type":"application/json" },
+        body:JSON.stringify({ p_email:value(payload.to_email).trim().toLowerCase() }) });
+      if (!response.ok) throw new Error("Could not verify marketing consent. No marketing email was sent.");
+      const recipient = await response.json();
+      if (!recipient) return json({ success:true, skipped:true, reason:"not_opted_in" });
+      if (!/^[a-f0-9]{64}$/.test(recipient.token || "")) throw new Error("Could not create an unsubscribe link. No marketing email was sent.");
+      payload.to_email = recipient.email; payload.to_name = recipient.name;
+      payload.unsubscribe_url = `${base}/functions/v1/marketing-unsubscribe?token=${recipient.token}`;
+    }
     const messages = messagesFor(payload);
     const category = payload.type === "booking_confirmation" ? "booking" : payload.type === "payment_confirmation" ? "payment" : "";
     await Promise.all(messages.map((message, index) => send(message, category && payload.gocardless_payment_id ? `${category}-${value(payload.gocardless_payment_id)}-${index}` : undefined)));

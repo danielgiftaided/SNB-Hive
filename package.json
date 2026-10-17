@@ -23,7 +23,10 @@
     "test:self-defence-offers": "node scripts/test-self-defence-offers.mjs",
     "test:self-defence-checkout": "node scripts/test-self-defence-checkout.mjs",
     "test:class-taster-checkout": "node scripts/test-class-taster-checkout.mjs",
-    "test:taster-database": "node scripts/test-taster-database.mjs"
+    "test:taster-database": "node scripts/test-taster-database.mjs",
+    "test:marketing-email": "node scripts/test-marketing-email.mjs",
+    "test:marketing-database": "node scripts/test-marketing-database.mjs",
+    "test:signup-welcome": "node scripts/test-signup-welcome.mjs"
   },
   "dependencies": {
     "@fontsource/cormorant-garamond": "5.3.0",
