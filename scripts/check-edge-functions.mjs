@@ -11,6 +11,7 @@ const functions = [
   "supabase/functions/_shared/gocardless-checkout-error.ts",
   "supabase/functions/send-email/index.ts",
   "supabase/functions/admin-auth/index.ts",
+  "supabase/functions/marketing-unsubscribe/index.ts",
 ];
 
 let failed = false;

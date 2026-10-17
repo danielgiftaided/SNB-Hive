@@ -7,6 +7,8 @@ Current class booking rules and deployment steps for the £5 tasters,
 live BoxFit and £90 Self Defence GoCardless course are in
 [`docs/CLASS_BOOKING_CHANGES.md`](docs/CLASS_BOOKING_CHANGES.md).
 
+Registration opt-ins, communication preferences, WhatsApp invitation placement and marketing unsubscribe deployment are documented in [Marketing preferences](docs/MARKETING_PREFERENCES.md).
+
 ## Mobile app
 
 The staged plan for turning this web app into downloadable iOS and Android

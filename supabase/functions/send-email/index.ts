@@ -17,7 +17,7 @@ const BRAND = {
 };
 
 type Payload = Record<string, unknown>;
-type Message = { to: string; subject: string; html: string; attachments?: Attachment[] };
+type Message = { to: string; subject: string; html: string; attachments?: Attachment[]; headers?: Record<string, string> };
 type Attachment = { filename: string; content: string; content_id?: string };
 
 function value(input: unknown, fallback = "") {
@@ -138,7 +138,8 @@ function messagesFor(p: Payload): Message[] {
       return [customer, admin];
     }
     case "blast":
-      return [{ to, subject: value(p.subject), html: shell(value(p.subject), value(p.subject), paragraph(`Hi ${value(p.to_name, "there")},`) + paragraph(p.message)) }];
+      return [{ to, subject: value(p.subject), html: shell(value(p.subject), value(p.subject), paragraph(`Hi ${value(p.to_name, "there")},`) + paragraph(p.message) + `<p style="font-size:12px;color:${BRAND.muted}">You asked to receive SNB Hive class news, events and offers. <a href="${escapeHtml(p.unsubscribe_url)}" style="color:${BRAND.accent}">Unsubscribe from marketing emails</a>. Essential booking emails will continue.</p>`),
+        headers:{ "List-Unsubscribe":`<${value(p.unsubscribe_url)}>`, "List-Unsubscribe-Post":"List-Unsubscribe=One-Click" } }];
     default:
       throw new Error(`Unknown email type: ${type}`);
   }
@@ -151,7 +152,7 @@ async function send(message: Message, idempotencyKey?: string) {
   const response = await fetch(RESEND_API, {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}) },
-    body: JSON.stringify({ from: `Shams B <${SENDER_EMAIL}>`, to: [message.to], reply_to: ADMIN_EMAIL, subject: message.subject, html: message.html, attachments: [{ filename: "logo-pink-gold.png", content: EMAIL_LOGO_CONTENT, content_id: LOGO_ID }, ...(message.attachments || [])] }),
+    body: JSON.stringify({ from: `Shams B <${SENDER_EMAIL}>`, to: [message.to], reply_to: ADMIN_EMAIL, subject: message.subject, html: message.html, ...(message.headers ? { headers:message.headers } : {}), attachments: [{ filename: "logo-pink-gold.png", content: EMAIL_LOGO_CONTENT, content_id: LOGO_ID }, ...(message.attachments || [])] }),
   });
   if (!response.ok) throw new Error(`Resend ${response.status}: ${await response.text()}`);
 }
@@ -161,6 +162,20 @@ Deno.serve(async request => {
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
   try {
     const payload = await request.json();
+    if (payload.type === "blast") {
+      const base = Deno.env.get("SUPABASE_URL");
+      const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (!base || !key) throw new Error("Marketing preferences are not configured");
+      const response = await fetch(`${base}/rest/v1/rpc/marketing_email_recipient`, { method:"POST",
+        headers:{ apikey:key, Authorization:`Bearer ${key}`, "Content-Type":"application/json" },
+        body:JSON.stringify({ p_email:value(payload.to_email).trim().toLowerCase() }) });
+      if (!response.ok) throw new Error("Could not verify marketing consent. No marketing email was sent.");
+      const recipient = await response.json();
+      if (!recipient) return json({ success:true, skipped:true, reason:"not_opted_in" });
+      if (!/^[a-f0-9]{64}$/.test(recipient.token || "")) throw new Error("Could not create an unsubscribe link. No marketing email was sent.");
+      payload.to_email = recipient.email; payload.to_name = recipient.name;
+      payload.unsubscribe_url = `${base}/functions/v1/marketing-unsubscribe?token=${recipient.token}`;
+    }
     const messages = messagesFor(payload);
     const category = payload.type === "booking_confirmation" ? "booking" : payload.type === "payment_confirmation" ? "payment" : "";
     await Promise.all(messages.map((message, index) => send(message, category && payload.gocardless_payment_id ? `${category}-${value(payload.gocardless_payment_id)}-${index}` : undefined)));

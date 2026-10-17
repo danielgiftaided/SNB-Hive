@@ -19,7 +19,7 @@ assert 'https://fixture.supabase.test' in source and 'test-public-key' in source
 
 members = [
     dict(id='member', name='Zoë "Bee", O’Brien', email='zoe@example.test',
-         phone='447960123456', created_at='2026-10-12T12:00:00Z'),
+         phone='447960123456', created_at='2026-10-12T12:00:00Z', marketing_email_opt_in=True, marketing_email_confirmed_at='2026-10-17T09:00:00Z', marketing_consent_updated_at='2026-10-17T09:00:00Z', marketing_consent_version='2026-10-17'),
     dict(id='missing', name='Missing details', email='missing@example.test'),
     dict(id='multiline', name='Line one\nLine two', email='lines@example.test',
          phone='07987654321', created_at='2026-10-13T12:00:00Z'),
@@ -64,12 +64,14 @@ with sync_playwright() as p:
         page.goto('http://127.0.0.1:5174/admin')
         page.get_by_text(members[0]['email'], exact=True).wait_for()
         rows = exported(page)
-        assert rows[0] == ['Name', 'Email', 'Phone', 'Signed Up']
-        assert all(len(row) == 4 for row in rows) and len(rows) == 5
-        assert rows[1] == [members[0]['name'], members[0]['email'], '="447960123456"', '12/10/2026']
-        assert rows[2] == ['Missing details', 'missing@example.test', '', '']
-        assert rows[3] == ['Line one\nLine two', 'lines@example.test', '="07987654321"', '13/10/2026']
+        assert rows[0] == ['Name', 'Email', 'Phone', 'Signed Up', 'Email Marketing', 'WhatsApp Group', 'Preferences Updated', 'Consent Version']
+        assert all(len(row) == 8 for row in rows) and len(rows) == 5
+        assert rows[1][:4] == [members[0]['name'], members[0]['email'], '="447960123456"', '12/10/2026']
+        assert rows[2][:4] == ['Missing details', 'missing@example.test', '', '']
+        assert rows[3][:4] == ['Line one\nLine two', 'lines@example.test', '="07987654321"', '13/10/2026']
         assert rows[4][2] == '="+44 7960 123456"'
+        assert rows[1][4:] == ['Opted in','Not opted in','2026-10-17T09:00:00Z','2026-10-17']
+        assert rows[2][4:] == ['Not opted in','Not opted in','','']
         page.get_by_role('button', name=re.compile('^Bookings')).click()
         table = page.locator('table') if width >= 640 else page.locator('div.sm\\:hidden.divide-y')
         table.get_by_text('Membership - 1 class', exact=True).wait_for()

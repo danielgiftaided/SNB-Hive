@@ -13,7 +13,7 @@ const colours = ["background", "accent", "ink", "border"].map(name => {
 const types = ["verify", "reset", "login_mfa", "admin_mfa", "admin", "admin_booking", "bank_transfer_booking", "booking_cancelled", "confirm_taster", "confirm_workshop", "booking_confirmation", "payment_confirmation", "blast"];
 const source = await readFile(new URL("../supabase/functions/send-email/index.ts", import.meta.url), "utf8");
 assert.deepEqual([...source.matchAll(/case "([^"]+)":/g)].map(match => match[1]).sort(), [...types].sort(), "Cover every notification type");
-const settings = { RESEND_API_KEY: "fixture-resend-key", ADMIN_EMAIL: "admin@example.test", EMAIL_LOGO_URL: "https://old.example.test/old-logo.png" };
+const settings = { SUPABASE_URL:"https://fixture.supabase.test", SUPABASE_SERVICE_ROLE_KEY:"fixture-service-key", RESEND_API_KEY: "fixture-resend-key", ADMIN_EMAIL: "admin@example.test", EMAIL_LOGO_URL: "https://old.example.test/old-logo.png" };
 let handler;
 const previousDeno = globalThis.Deno;
 const previousFetch = globalThis.fetch;
@@ -25,6 +25,9 @@ try {
   for (const type of types) {
     const delivered = [];
     globalThis.fetch = async (url, init) => {
+      if (url === "https://fixture.supabase.test/rest/v1/rpc/marketing_email_recipient") {
+        return new Response(JSON.stringify({ email:"member@example.test", name:"Test <Member>", token:"a".repeat(64) }), { status:200 });
+      }
       assert.equal(url, "https://api.resend.com/emails");
       assert.equal(init.method, "POST");
       delivered.push({ body: JSON.parse(init.body), headers: init.headers });
