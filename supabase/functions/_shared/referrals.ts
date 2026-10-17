@@ -1,0 +1,42 @@
+import { mixMatchRpc } from "./mix-match-storage.ts";
+import { bookings, gc, type Booking } from "./gocardless-bookings.ts";
+
+// The UI's Paid status means mandate setup, not bank collection. Referrals
+// deliberately wait for the provider's actual confirmed/paid_out status.
+export async function qualifyReferralPayment(paymentId: string, payment: { status:string; amount?:number; currency?:string; created_at?:string; metadata?:{booking_id?:string}; links?:{subscription?:string} }) {
+  if (!["confirmed","paid_out"].includes(payment.status)) return;
+  const subscription = payment.links?.subscription ? (await gc(`/subscriptions/${encodeURIComponent(payment.links.subscription)}`)).subscriptions : null;
+  let rootId = subscription?.metadata?.booking_id || payment.metadata?.booking_id;
+  if (!rootId) {
+    const [row] = await bookings({ gocardless_payment_id:`eq.${paymentId}`, select:"*", limit:"1" });
+    rootId = row?.payment_group_id || row?.id;
+  }
+  if (!rootId) return;
+  // Binding was recorded by checkout before the browser left the app; mutable
+  // public booking rows cannot redirect a reward to a different member later.
+  const binding = await mixMatchRpc("referral_checkout_for_booking", { p_booking_id:rootId });
+  if (!binding) return;
+  const { billing_requests:request } = await gc(`/billing_requests/${encodeURIComponent(binding.billing_request_id)}`);
+  if (request.status !== "fulfilled" || request.metadata?.booking_id !== rootId || !["membership","mix_match"].includes(request.metadata?.payment_plan)) return;
+  if (subscription) {
+    const mandate = request.links?.mandate_request_mandate || request.mandate_request?.links?.mandate;
+    if (!mandate || subscription.links?.mandate !== mandate || subscription.interval_unit !== "monthly" || Number(subscription.amount) !== 3500 || subscription.currency !== "GBP") return;
+  } else if ((request.links?.payment_request_payment || request.payment_request?.links?.payment) !== paymentId) return;
+  if ((!subscription && Number(request.payment_request?.amount) !== Number(payment.amount)) || (subscription && Number(payment.amount) !== 3500) || !payment.created_at) return;
+  await mixMatchRpc("award_referral_reward", { p_details:{ billing_request_id:binding.billing_request_id,
+    payment_id:paymentId,status:payment.status,amount:payment.amount,currency:payment.currency,created_at:payment.created_at } });
+}
+
+export async function sendReferralBookingNotice(booking: Booking) {
+  if (booking.booking_confirmation_sent_at || booking.status === "cancelled") return;
+  const base = Deno.env.get("SUPABASE_URL"), key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const response = await fetch(`${base}/functions/v1/send-email`, { method:"POST", headers:{ apikey:key,Authorization:`Bearer ${key}`,"Content-Type":"application/json" },
+    body:JSON.stringify({ ...booking,type:"booking_confirmation",booking_dates:booking.booking_date }) });
+  if (!response.ok) throw new Error("Referral booking confirmation email could not be sent");
+  await bookings({ id:`eq.${booking.id}` }, { method:"PATCH",body:JSON.stringify({ booking_confirmation_sent_at:new Date().toISOString() }) });
+}
+
+export async function referralHash(value: string) {
+  const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value)));
+  return [...bytes].map(byte=>byte.toString(16).padStart(2,"0")).join("");
+}

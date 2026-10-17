@@ -1,3 +1,4 @@
+import { qualifyReferralPayment } from "./referrals.ts";
 import { mixMatchRpc } from "./mix-match-storage.ts";
 import { MIX_MATCH_AMOUNT, MIX_MATCH_PLAN, isMixMatchPlan, mixMatchBookingIssue } from "./mix-match.ts";
 import { classPaymentConfig, classDatesInMonth, SELF_DEFENCE_DATES } from "./class-config.ts";
@@ -124,6 +125,7 @@ export async function markSuccessfulPayment(paymentId: string, verifiedPayment?:
   await patch({ gocardless_payment_id: `eq.${paymentId}`, status: mutableStatuses }, { status: "paid" });
   // One combined booking/payment-setup confirmation, rather than a second
   // receipt at payout. Saved markers and mail-provider idempotency cover retries.
+  await qualifyReferralPayment(paymentId, payment);
   await sendBookingNotice(paymentId, "payment_confirmation");
   return true;
 }

@@ -26,7 +26,7 @@ globalThis.fetch=async(input,init={})=>{
  if(url.pathname==='/functions/v1/send-email')return emailHandler(new Request(input,{method:'POST',body:init.body}));
  if(url.pathname.startsWith('/rest/v1/rpc/')){
    assert.equal(init.headers.Authorization,'Bearer fixture-service');
-   const name=url.pathname.split('/').at(-1);assert.ok(['record_mix_match_renewal','mix_match_months_for_member','select_mix_match_dates'].includes(name));
+   const name=url.pathname.split('/').at(-1);assert.ok(['record_mix_match_renewal','mix_match_months_for_member','select_mix_match_dates','bind_referral_checkout','referral_checkout_for_booking','award_referral_reward'].includes(name));
    const args=Object.values(body).map(value=>typeof value==='object'?JSON.stringify(value):value);
    try {return response((await db.query(`select public.${name}(${args.map((_,i)=>'$'+(i+1)).join(',')}) result`,args)).rows[0].result);}
    catch(error){return response({message:error.message},400);}
@@ -72,10 +72,11 @@ const post=(handler,payload)=>handler(new Request('https://fixture.supabase.test
 const data=async(sql,args=[])=> (await db.query(sql,args)).rows;
 try {
  await db.exec(`create role anon;create role authenticated;create role service_role;
- create table users(id text primary key);
+ create table users(id text primary key,name text,email text,phone text);
  create table bookings(id text primary key,user_id text,name text,email text,phone text,session_id text,session_name text,type text,plan text,amount numeric,status text,booking_date date,payment_group_id text,gocardless_payment_id text,gocardless_billing_request_id text,num_people integer,booking_confirmation_sent_at timestamptz,payment_confirmation_sent_at timestamptz);
- insert into users values('member');`);
- const migration=readFileSync('supabase/migrations/20261017030000_mix_match_memberships.sql','utf8');await db.exec(migration);await db.exec(migration);
+ insert into users(id,name,email) values('referrer','Existing Referrer','referrer@example.test');`);
+ const migration=readFileSync('supabase/migrations/20261017030000_mix_match_memberships.sql','utf8');await db.exec(migration);await db.exec(migration);await db.exec(readFileSync('supabase/migrations/20261017040000_referral_scheme.sql','utf8'));
+ await db.exec("insert into users(id,name,email,referral_signup_code) select 'member','Test Member','member@example.test',code from snb_private.referral_codes where user_id='referrer'");
  await import('../supabase/functions/send-email/index.ts');emailHandler=handler;
  await import('../supabase/functions/gocardless-checkout/index.ts');const checkout=handler;
  await import('../supabase/functions/gocardless-webhook/index.ts');const webhookHandler=handler;
@@ -97,7 +98,7 @@ try {
  assert.equal((await (await post(sync,{booking_id:'initial'})).json()).allocated,false,'leaving checkout incomplete cannot make bookings active');
  for(const plan of ['membership','payg'])assert.equal((await post(checkout,{...request,plan})).status,400,'mixed bookings cannot enter a different checkout tariff');
  billing.status='fulfilled';billing.links={payment_request_payment:'PM_INITIAL',mandate_request_mandate:'MD1'};
- payments.set('PM_INITIAL',{id:'PM_INITIAL',status:'pending_submission',amount:3500,currency:'GBP',charge_date:choices[0].booking_date});
+ payments.set('PM_INITIAL',{id:'PM_INITIAL',created_at:fixtureNow,status:'pending_submission',amount:3500,currency:'GBP',charge_date:choices[0].booking_date});
  await webhook({resource_type:'billing_requests',action:'fulfilled',links:{billing_request:'BRQ1'}});
  let booked=await sqlRows();assert.equal(booked.length,4);assert.ok(booked.every(row=>row.status==='paid'&&row.gocardless_payment_id==='PM_INITIAL'));
  assert.equal(mails.length,2);assert.deepEqual(mails.map(mail=>mail.to[0]).sort(),['member@example.test','shams@snbhive.com']);
@@ -105,6 +106,9 @@ try {
  assert.equal(subscriptions.size,1);const subscription=[...subscriptions.values()][0];assert.equal(subscription.amount,3500);assert.equal(subscription.day_of_month,1);assert.equal(subscription.name,MIX_MATCH_PLAN);
  const nextMonth=new Date(`${month}-01T12:00:00Z`);nextMonth.setUTCMonth(nextMonth.getUTCMonth()+1);assert.equal(subscription.start_date,nextMonth.toISOString().slice(0,10));
  await webhook({resource_type:'billing_requests',action:'fulfilled',links:{billing_request:'BRQ1'}});assert.equal(subscriptions.size,1);assert.equal(mails.length,2);assert.equal((await sqlRows()).length,4);
+ payments.get('PM_INITIAL').status='confirmed';
+ await webhook({resource_type:'payments',action:'confirmed',links:{payment:'PM_INITIAL'}});
+ assert.equal((await data("select public.referral_dashboard('referrer') result"))[0].result.credits.length,1,'actual checkout privately binds the registered referral and confirmed payment funds one reward');
  fixtureNow=subscription.start_date+'T12:00:00Z';const renewalMonth=fixtureNow.slice(0,7);
  payments.set('PM_RENEWAL',{id:'PM_RENEWAL',status:'pending_submission',amount:3500,currency:'GBP',charge_date:subscription.start_date,links:{subscription:subscription.id}});
  const event={resource_type:'payments',action:'created',links:{payment:'PM_RENEWAL',subscription:subscription.id}};

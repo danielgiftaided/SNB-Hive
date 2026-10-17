@@ -28,6 +28,7 @@
     "test:marketing-database": "node scripts/test-marketing-database.mjs",
     "test:mix-match": "node scripts/test-mix-match.mjs",
     "test:mix-match-payments": "node scripts/test-mix-match-payments.mjs",
+    "test:referral-scheme": "node scripts/test-referral-scheme.mjs",
     "test:signup-welcome": "node scripts/test-signup-welcome.mjs"
   },
   "dependencies": {

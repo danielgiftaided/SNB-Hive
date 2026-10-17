@@ -10,6 +10,7 @@ on:
       - "supabase/functions/send-email/**"
       - "supabase/functions/marketing-unsubscribe/**"
       - "supabase/functions/mix-match-membership/**"
+      - "supabase/functions/referral-scheme/**"
       - "supabase/functions/_shared/**"
       - "supabase/migrations/20261012000000_move_boxfit_booking_dates.sql"
       - "supabase/migrations/20261015000000_taster_card_eligibility.sql"
@@ -19,6 +20,7 @@ on:
       - "supabase/migrations/20261017010000_signup_welcome.sql"
       - "supabase/migrations/20261017020000_registration_consent_wording.sql"
       - "supabase/migrations/20261017030000_mix_match_memberships.sql"
+      - "supabase/migrations/20261017040000_referral_scheme.sql"
       - "supabase/config.toml"
       - ".github/workflows/deploy-payment-functions.yml"
   workflow_dispatch:
@@ -182,6 +184,31 @@ jobs:
 
       - name: Deploy Mix and Match membership dates
         run: supabase functions deploy mix-match-membership --no-verify-jwt --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Ensure referral rewards are available
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from 'node:fs';
+          const query = readFileSync('supabase/migrations/20261017040000_referral_scheme.sql', 'utf8') +
+            "\nselect to_regprocedure('public.bind_referral_checkout(text,text,text)') is not null and to_regprocedure('public.referral_checkout_for_booking(text)') is not null and to_regprocedure('public.award_referral_reward(jsonb)') is not null and to_regprocedure('public.referral_dashboard(text)') is not null and to_regprocedure('public.redeem_referral_reward(text,uuid,text,date)') is not null and to_regprocedure('public.prepare_referral_access(text,text)') is not null and to_regprocedure('public.verify_referral_access(text,text,text)') is not null and to_regprocedure('public.authorize_referral_access(text,text)') is not null and to_regprocedure('public.revoke_referral_access(text,text)') is not null as referral_ready;";
+          writeFileSync(process.env.RUNNER_TEMP + '/referral.json', JSON.stringify({ query }));
+          NODE
+          curl --fail --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            --header "Content-Type: application/json" \
+            --data-binary "@$RUNNER_TEMP/referral.json" \
+            --output "$RUNNER_TEMP/referral-result.json" \
+            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query"
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const result = JSON.parse(readFileSync(process.env.RUNNER_TEMP + '/referral-result.json', 'utf8'));
+          if (!Array.isArray(result) || result.length !== 1 || result[0]?.referral_ready !== true) throw new Error('Referral storage was not confirmed.');
+          console.log('Referral attribution and private rewards ready.');
+          NODE
+
+      - name: Deploy referral scheme
+        run: supabase functions deploy referral-scheme --no-verify-jwt --project-ref "$SUPABASE_PROJECT_REF"
 
       - name: Deploy email sender
         run: supabase functions deploy send-email --no-verify-jwt --project-ref "$SUPABASE_PROJECT_REF"

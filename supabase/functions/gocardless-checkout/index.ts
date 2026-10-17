@@ -1,3 +1,4 @@
+import { mixMatchRpc } from "../_shared/mix-match-storage.ts";
 import { MIX_MATCH_AMOUNT, MIX_MATCH_PLAN, MIX_MATCH_TEMPLATE_ID, mixMatchBookingIssue, mixMatchDates } from "../_shared/mix-match.ts";
 import { selfDefenceQuote, SELF_DEFENCE_CAPACITY } from "../_shared/self-defence.ts";
 import { corsHeaders, json } from "../_shared/http.ts";
@@ -319,6 +320,9 @@ Deno.serve(async request => {
       error: "The early-bird offer has ended. Return to Classes to book at the current price." }, 400);
     if (plan === "mix_match" && mixMatchBookingIssue(booking, group)) return json({ error:"These Mix & Match dates are no longer available. Please choose two new dates for each class." }, 400);
     const billingRequest = await gc("/billing_requests", { billing_requests: requestBody }, `class-checkout-${booking_id}`);
+    if ((plan === "membership" || plan === "mix_match") && booking.user_id) {
+      await mixMatchRpc("bind_referral_checkout", { p_billing_request_id:billingRequest.billing_requests.id,p_booking_id:booking_id,p_member_id:booking.user_id });
+    }
     const projectUrl = Deno.env.get("SUPABASE_URL");
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const saved = await fetch(`${projectUrl}/rest/v1/bookings?${new URLSearchParams({

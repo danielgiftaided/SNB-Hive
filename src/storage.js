@@ -31,10 +31,11 @@ const localRemove = key => localStorage.removeItem(key);
 // ── Main adapter ──────────────────────────────────────────────────────────────
 const storage = {
 
-  async createUser(user, choices) {
+  async createUser(user, choices, referralCode = "") {
     const { error } = await supabase.from("users").insert(toSnake({ ...user,
       marketingEmailOptIn: choices.email === true, marketingWhatsappOptIn: choices.whatsapp === true,
       marketingConsentVersion:MARKETING_CONSENT_VERSION,
+      ...(referralCode ? { referral_signup_code:referralCode } : {}),
     }));
     if (error) throw new Error(error.message);
   },
@@ -102,7 +103,7 @@ const storage = {
       // Profile/password saves must never replay an old consent snapshot and
       // undo a more recent unsubscribe or a change on another device.
       const rows = (Array.isArray(value) ? value : [value]).map(user =>
-        toSnake(Object.fromEntries(Object.entries(user).filter(([field]) => !field.startsWith("marketing")))));
+        toSnake(Object.fromEntries(Object.entries(user).filter(([field]) => !field.startsWith("marketing") && field !== "referral_signup_code"))));
       const { error } = await supabase.from("users").upsert(rows);
       if (error) { console.error("[storage] set users:", error.message); throw new Error(error.message); }
       return;
