@@ -13,6 +13,8 @@ const functions = [
   "supabase/functions/admin-auth/index.ts",
   "supabase/functions/marketing-unsubscribe/index.ts",
   "supabase/functions/mix-match-membership/index.ts",
+  "supabase/functions/referral-scheme/index.ts",
+  "supabase/functions/_shared/referrals.ts",
   "supabase/functions/_shared/mix-match.ts",
   "supabase/functions/_shared/mix-match-storage.ts",
 ];

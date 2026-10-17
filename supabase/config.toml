@@ -23,3 +23,7 @@ verify_jwt = false
 # Same custom member sessions as Account; private paid credits are checked server-side.
 [functions.mix-match-membership]
 verify_jwt = false
+
+# Public access challenge; dashboard/redemption check server-issued member tokens.
+[functions.referral-scheme]
+verify_jwt = false

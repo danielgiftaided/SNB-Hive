@@ -1,3 +1,5 @@
+import ReferralScheme from "./ReferralScheme.jsx";
+import { captureReferralCode, clearReferralCode, normaliseReferralCode, referralAccess, clearReferralAccess } from "./referrals.js";
 import MixMatchRenewals from "./MixMatchRenewals.jsx";
 import MixMatchDates from "./MixMatchDates.jsx";
 import { MIX_MATCH_AMOUNT, MIX_MATCH_PLAN, MIX_MATCH_CLASS_IDS, isMixMatchPlan, mixMatchMonths, mixMatchDates, mixMatchSelectionIssue } from "../supabase/functions/_shared/mix-match.ts";
@@ -386,6 +388,8 @@ function BookingActions({ booking, onStatusChange }) {
   const isCancelled = booking.status === "cancelled";
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const isReferral = booking.plan === "Referral reward";
+  if (isReferral && isCancelled) return <p className="text-xs text-stone-500">Rebook returned credits in Referral Scheme.</p>;
 
   return (
     <div className="flex flex-col gap-1">
@@ -410,7 +414,7 @@ function BookingActions({ booking, onStatusChange }) {
       ) : (
         <>
           {classPaymentIsPending(booking) && <option value="check_payment">Check original payment</option>}
-          <option value="paid" disabled={booking.status === "paid" || classPaymentIsPending(booking)}>Paid</option>
+          {!isReferral && <option value="paid" disabled={booking.status === "paid" || classPaymentIsPending(booking)}>Paid</option>}
           <option value="cancelled">Cancelled</option>
         </>
       )}
@@ -443,7 +447,8 @@ function CapacityRing({ booked, capacity, color }) {
 /* ---- AUTH SCREEN ---- */
 
 function AuthScreen({ onAuth }) {
-  const [mode, setMode]           = useState("login"); // register | login | forgot | verify | new_password
+  const [referralCode, setReferralCode] = useState(captureReferralCode);
+  const [mode, setMode]           = useState(() => referralCode ? "register" : "login"); // register | login | forgot | verify | new_password
   const [resetMode, setResetMode] = useState(false);      // true = verify is for password reset
   const [loginMfaMode, setLoginMfaMode] = useState(false); // true = verify is a post-password login MFA step, not signup
   const [verifyEmail, setVEmail]  = useState("");
@@ -477,7 +482,8 @@ function AuthScreen({ onAuth }) {
       const salt = generateSalt();
       const passwordHash = await hashPassword(form.password, salt);
       const user = { id:uid(), name:`${form.firstName.trim()} ${form.lastName.trim()}`, email:form.email.trim().toLowerCase(), phone:form.phone.trim(), passwordHash, salt, createdAt:new Date().toISOString() };
-      await storage.createUser(user, marketingChoices);
+      await storage.createUser(user, marketingChoices, normaliseReferralCode(referralCode));
+      clearReferralCode();
       // Send verification code — required before login is granted
       try {
         const code = genCode();
@@ -497,7 +503,7 @@ function AuthScreen({ onAuth }) {
           ? "Email service not set up yet. Please contact shams@snbhive.com to complete your registration."
           : "Couldn't send your verification email — please try again in a moment.");
       }
-    } catch(e) { if (!error) setError("Something went wrong — please try again."); }
+    } catch(e) { setError(e.message || "Something went wrong — please try again."); }
     finally { setLoading(false); }
   }
 
@@ -722,6 +728,12 @@ function AuthScreen({ onAuth }) {
                   </span>
                 </label>
               )}
+              {mode === "register" && <div>
+                <label htmlFor="signup-referral-code" className="ff-body text-sm font-medium text-stone-700">Referral code</label>
+                <input id="signup-referral-code" value={referralCode} onChange={e=>{setReferralCode(e.target.value.toUpperCase());setError("");}} maxLength={30} autoCapitalize="characters" autoComplete="off"
+                  className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm"/>
+                <p className="ff-body mt-1 text-xs text-stone-500">Have a friend’s code? Add it here, or leave this blank.</p>
+              </div>}
               {mode === "register" && <MarketingChoices registration choices={marketingChoices} onChange={setMarketingChoices} disabled={loading}/>}
               {error   && <div className="ff-body text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>}
               {success && <div className="ff-body text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2">{success}</div>}
@@ -2177,6 +2189,7 @@ function MyBookings({ bookings, currentUser, onCancel, onDatesSaved }) {
                   <StatusBadge status={b.status}/>
                 </div>
                 {cls?.day && cls?.time && <p className="text-xs text-stone-500 mt-1">{cls.courseDates ? upcomingBookingDates(cls.courseDates, today).map(formatBookingDate).join(" · ") : b.bookingDate ? formatBookingDate(b.bookingDate) : cls.day} · {cls.time}</p>}
+                {b.plan === "Referral reward" && <p className="text-xs text-stone-500 mt-1">Referral reward · Free lesson</p>}
                 {isMixMatchPlan(b.plan) && <p className="text-xs text-stone-500 mt-1">{MIX_MATCH_PLAN}</p>}
                 {b.sessionId === "self_defence" && <p className="text-xs text-stone-500 mt-1">{bookingPlaceCount(b)} {bookingPlaceCount(b) === 1 ? "place" : "places"} · £{Number(b.amount).toFixed(2)}</p>}
                 {cls?.venue && (
@@ -2334,7 +2347,7 @@ function AdminDashboard({ bookings, onMarkPaid, onMarkPending, onCancel, onResto
                       )}
                       {b.status!=="cancelled"
                         ? <button onClick={() => onCancel(b.id)} title="Cancel" className="p-1.5 rounded-lg hover:bg-stone-100 text-red-500"><Ban size={15}/></button>
-                        : <button onClick={() => onRestore(b.id)} title="Restore" className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400"><RotateCcw size={15}/></button>
+                        : b.plan !== "Referral reward" && <button onClick={() => onRestore(b.id)} title="Restore" className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400"><RotateCcw size={15}/></button>
                       }
                     </div>
                   </div>
@@ -3715,6 +3728,7 @@ function BookingApp() {
     { id:"retreats", label:"Retreats", shortLabel:"Retreats", icon:Sparkles },
     { id:"studio-hire", label:"Studio Hire", shortLabel:"Hire", icon:MapPin },
     { id:"bookings", label:"My bookings", shortLabel:"Bookings", icon:Calendar },
+    { id:"referrals", label:"Referral Scheme", shortLabel:"Referrals", icon:UserPlus },
     { id:"account", label:"Account", shortLabel:"Account", icon:ShieldCheck },
   ];
 
@@ -3870,6 +3884,11 @@ function BookingApp() {
     setBookings(current => current.map(b => b.id===id || b.paymentGroupId===id ? {...b, status} : b));
   }
   async function handleSignOut() {
+    if (currentUser?.id) {
+      const token=referralAccess(currentUser.id);
+      clearReferralAccess(currentUser.id);
+      if (token) callEdgeFunction("referral-scheme",{action:"sign_out",member_id:currentUser.id,access_token:token}).catch(()=>{});
+    }
     await storage.remove("snb_session");
     setCurrentUser(null); setBookings([]); setTab("classes");
   }
@@ -3992,6 +4011,8 @@ function BookingApp() {
               </>
             : tab==="retreats"
               ? <ComingSoon/>
+              : tab==="referrals"
+                ? <ReferralScheme user={currentUser} invoke={callEdgeFunction} onBooked={reloadBookings}/>
               : tab==="account"
                 ? <AccountPage currentUser={currentUser} onUpdate={s => setCurrentUser(s)}/>
                 : tab==="studio-hire"
@@ -4001,7 +4022,7 @@ function BookingApp() {
       </main>
 
       <nav aria-label="Main navigation" className="snb-mobile-nav mobile-safe-bottom fixed inset-x-0 bottom-0 z-40 backdrop-blur md:hidden">
-        <div className="mx-auto grid max-w-lg grid-cols-5 px-1 pt-1.5">
+        <div className="mx-auto grid max-w-lg grid-cols-6 px-1 pt-1.5">
           {customerTabs.map(({ id, shortLabel, icon:TabIcon }) => {
             const active = tab === id;
             return (
