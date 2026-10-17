@@ -71,6 +71,21 @@ try {
     assert.equal((await db.query(`select has_table_privilege('${role}','snb_private.marketing_unsubscribe_tokens','select') ok`)).rows[0].ok,false);
     assert.equal((await db.query(`select has_table_privilege('${role}','snb_private.marketing_consent_events','insert') ok`)).rows[0].ok,false);
   }
+  const oldEvents = (await db.query("select * from snb_private.marketing_consent_events order by id")).rows;
+  const wordingMigration = readFileSync('supabase/migrations/20261017020000_registration_consent_wording.sql','utf8');
+  await db.exec(wordingMigration);await db.exec(wordingMigration);
+  assert.deepEqual((await db.query("select * from snb_private.marketing_consent_events order by id")).rows,oldEvents,'wording migration must not rewrite historical consent');
+  await db.exec("insert into users(id,name,email,marketing_email_opt_in,marketing_whatsapp_opt_in,marketing_consent_version) values('short-copy','Short Copy','short@example.test',false,true,'2026-10-17.1'),('old-copy','Old Copy','old-copy@example.test',false,true,'2026-10-17')");
+  let wordingEvents = (await db.query("select * from snb_private.marketing_consent_events where user_id='short-copy' order by id")).rows;
+  assert.equal(wordingEvents.length,2);assert.equal(wordingEvents[0].wording,EMAIL_MARKETING_COPY);
+  assert.equal(wordingEvents[1].wording,WHATSAPP_MARKETING_COPY);assert.equal(wordingEvents[1].version,'2026-10-17.1');
+  const oldCopyEvent = (await db.query("select * from snb_private.marketing_consent_events where user_id='old-copy' and channel='whatsapp'")).rows[0];
+  assert.equal(oldCopyEvent.wording,WHATSAPP_MARKETING_COPY+' '+WHATSAPP_PRIVACY_COPY,'cached previous form keeps its actual wording');
+  await db.exec("select save_marketing_preferences('short-copy',null,false,false)");
+  wordingEvents = (await db.query("select * from snb_private.marketing_consent_events where user_id='short-copy' order by id")).rows;
+  assert.equal(wordingEvents.at(-1).source,'account');assert.equal(wordingEvents.at(-1).version,'2026-10-17');
+  assert.equal(wordingEvents.at(-1).wording,WHATSAPP_MARKETING_COPY+' '+WHATSAPP_PRIVACY_COPY,'Account still displays its full notice');
+  console.log('PASS revised registration wording is recorded accurately; historical records, cached forms and Account wording preserved');
   const result = await db.exec(deployedQuery);
   writeFileSync(join(directory,'marketing-consent-result.json'),JSON.stringify(result.at(-1).rows));
   execFileSync(process.execPath,['--input-type=module','-e',scripts[1]],{env:environment});

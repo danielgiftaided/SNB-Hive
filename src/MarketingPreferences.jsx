@@ -6,19 +6,19 @@ export function marketingSnapshot(user) {
   return Object.fromEntries(Object.entries(user).filter(([key]) => key.startsWith("marketing")));
 }
 
-export function MarketingChoices({ choices, onChange, disabled = false }) {
+export function MarketingChoices({ choices, onChange, disabled = false, registration = false }) {
   return <fieldset disabled={disabled} className="ff-body flex flex-col gap-3">
-    <legend className="mb-2 text-sm font-medium text-stone-700">Stay in touch (optional)</legend>
+    <legend className="mb-2 text-sm font-medium text-stone-700">Stay in touch{registration ? "" : " (optional)"}</legend>
     <label className="flex items-start gap-2.5 text-xs text-stone-600 leading-relaxed cursor-pointer">
       <input name="emailMarketing" type="checkbox" checked={choices.email} onChange={event => onChange({ ...choices, email:event.target.checked })} className="mt-0.5 shrink-0"/>
       <span>{EMAIL_MARKETING_COPY}</span>
     </label>
     <label className="flex items-start gap-2.5 text-xs text-stone-600 leading-relaxed cursor-pointer">
-      <input name="whatsappMarketing" type="checkbox" checked={choices.whatsapp} onChange={event => onChange({ ...choices, whatsapp:event.target.checked })} aria-describedby="whatsapp-privacy" className="mt-0.5 shrink-0"/>
+      <input name="whatsappMarketing" type="checkbox" checked={choices.whatsapp} onChange={event => onChange({ ...choices, whatsapp:event.target.checked })} aria-describedby={registration ? undefined : "whatsapp-privacy"} className="mt-0.5 shrink-0"/>
       <span>{WHATSAPP_MARKETING_COPY}</span>
     </label>
-    <p id="whatsapp-privacy" className="text-xs text-stone-500">{WHATSAPP_PRIVACY_COPY}</p>
-    <p className="text-xs text-stone-500">Both choices are optional. Change them in Account at any time or use the unsubscribe link in marketing emails. Booking emails will still be sent.</p>
+    {!registration && <p id="whatsapp-privacy" className="text-xs text-stone-500">{WHATSAPP_PRIVACY_COPY}</p>}
+    {!registration && <p className="text-xs text-stone-500">Both choices are optional. Change them in Account at any time or use the unsubscribe link in marketing emails. Booking emails will still be sent.</p>}
   </fieldset>;
 }
 
