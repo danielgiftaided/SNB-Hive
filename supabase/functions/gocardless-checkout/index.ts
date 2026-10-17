@@ -1,4 +1,4 @@
-import { MIX_MATCH_AMOUNT, MIX_MATCH_PLAN, MIX_MATCH_TEMPLATE_ID, mixMatchBookingIssue } from "../_shared/mix-match.ts";
+import { MIX_MATCH_AMOUNT, MIX_MATCH_PLAN, MIX_MATCH_TEMPLATE_ID, mixMatchBookingIssue, mixMatchDates } from "../_shared/mix-match.ts";
 import { selfDefenceQuote, SELF_DEFENCE_CAPACITY } from "../_shared/self-defence.ts";
 import { corsHeaders, json } from "../_shared/http.ts";
 import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../_shared/membership.ts";
@@ -235,9 +235,10 @@ Deno.serve(async request => {
     }
     const { booking, group } = verified;
     const tasterDate = plan === "taster" && booking_date !== undefined ? booking_date : booking.booking_date;
-    // A membership reserves every remaining lesson in its first calendar
+    // A single-class membership reserves every remaining lesson in its first calendar
     // month, even if that month has five classes and the picker shows four.
-    const allowedDates = plan === "course" ? SELF_DEFENCE_DATES : plan === "membership" && booking.booking_date
+    const allowedDates = plan === "course" ? SELF_DEFENCE_DATES : plan === "mix_match" && booking.booking_date
+      ? mixMatchDates(session_id as "zumba" | "boxfit", String(booking.booking_date).slice(0, 7)) : plan === "membership" && booking.booking_date
       ? classDatesInMonth(session_id, String(booking.booking_date)).filter(date => date >= String(booking.booking_date)) : session.dates;
     if ((booking.session_id && booking.session_id !== session_id) ||
         (plan === "membership" && booking.booking_date && !session.dates.includes(String(booking.booking_date))) ||

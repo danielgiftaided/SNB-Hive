@@ -1,4 +1,4 @@
-import { classPaymentConfig, classDatesInMonth } from "./class-config.ts";
+import { CLASS_PAYMENTS, bookingToday, classHasFinished, classDatesInMonth } from "./class-config.ts";
 
 export const MIX_MATCH_AMOUNT = 3500;
 export const MIX_MATCH_TEMPLATE_ID = "BRT01M5574NTKNCPZ6E02F03RB290";
@@ -11,16 +11,20 @@ export function isMixMatchPlan(value: unknown) {
   return String(value || "").trim().toLowerCase() === MIX_MATCH_PLAN.toLowerCase();
 }
 
-// Use the same four rolling dates as each live class. A membership's four
-// chosen lessons must fit in one calendar month, with two of each activity.
+// A membership offers every scheduled, unfinished date in its calendar month.
+// The normal PAYG/taster four-date rolling window does not limit this picker.
 export function mixMatchMonths(now = new Date()): string[] {
-  const byClass = MIX_MATCH_CLASS_IDS.map(id => classPaymentConfig(id, now)?.dates || []);
-  return [...new Set(byClass.flat().map(date => date.slice(0, 7)))].sort().filter(month =>
-    byClass.every(dates => dates.filter(date => date.startsWith(month + "-")).length >= 2));
+  const first = new Date(`${bookingToday(now).slice(0, 7)}-01T12:00:00Z`);
+  const next = new Date(first);
+  next.setUTCMonth(next.getUTCMonth() + 1);
+  return [first, next].map(date => date.toISOString().slice(0, 7)).filter(month =>
+    MIX_MATCH_CLASS_IDS.every(id => mixMatchDates(id, month, now).length >= 2));
 }
 
 export function mixMatchDates(id: MixMatchClass, month: string, now = new Date()): string[] {
-  return (classPaymentConfig(id, now)?.dates || []).filter(date => date.startsWith(month + "-"));
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return [];
+  return classDatesInMonth(id, `${month}-01`).filter(date =>
+    date >= CLASS_PAYMENTS[id].dates[0] && !classHasFinished(id, date, now));
 }
 
 export function mixMatchSelectionIssue(selection: MixMatchSelection, month: string, now = new Date()): string | null {

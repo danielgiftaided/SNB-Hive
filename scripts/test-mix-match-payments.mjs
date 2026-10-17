@@ -87,7 +87,7 @@ try {
    const result=await webhookHandler(new Request('https://fixture.supabase.test/webhook',{method:'POST',body,headers:{'Webhook-Signature':signature}}));
    assert.equal(result.status,200,await result.text());
  }
- const month=mixMatchMonths()[0], choices=['zumba','boxfit'].flatMap(session_id=>mixMatchDates(session_id,month).slice(0,2).map(booking_date=>({session_id,booking_date})));
+ const month=mixMatchMonths().at(-1), choices=['zumba','boxfit'].flatMap(session_id=>mixMatchDates(session_id,month).slice(-2).map(booking_date=>({session_id,booking_date})));
  for(const [i,choice] of choices.entries())await db.query(`insert into bookings(id,user_id,name,email,phone,session_id,session_name,type,plan,amount,status,booking_date,payment_group_id) values($1,'member','Test Member','member@example.test','07000000000',$2,$3,'class',$4,$5,'pending_payment',$6,'initial')`,[i?'initial-'+i:'initial',choice.session_id,choice.session_id==='zumba'?'Zumba':'BoxFit',MIX_MATCH_PLAN,i?0:35,choice.booking_date]);
  const request={booking_id:'initial',session_id:'zumba',plan:'mix_match',return_url:'https://app.example.test/payment-complete?booking_id=initial',exit_url:'https://app.example.test/'};
  assert.equal((await post(checkout,request)).status,200);
