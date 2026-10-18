@@ -86,7 +86,18 @@ try{
  for(const file of ['20261017000000_marketing_consent.sql','20261017010000_signup_welcome.sql','20261017020000_registration_consent_wording.sql'])await db.exec(readFileSync('supabase/migrations/'+file,'utf8'));
  await db.exec(readFileSync('supabase/migrations/20261017030000_mix_match_memberships.sql','utf8'));
  const migration=readFileSync('supabase/migrations/20261017040000_referral_scheme.sql','utf8');await db.exec(migration);
- const existingCode=await code('existing');await db.exec(migration);await db.exec(readFileSync('supabase/migrations/20261018000000_referral_membership_credits.sql','utf8'));assert.equal(await code('existing'),existingCode,'migration retries preserve share links');
+ const existingCode=await code('existing');await db.exec(migration);
+ // Upgrade an already-spent legacy referrer credit without restoring it, while
+ // giving the previously qualified referred member their new independent credit.
+ await member('legacy-owner');await member('legacy-friend',await code('legacy-owner'));
+ await db.exec("alter table snb_private.referrals add column reward_notice_sent_at timestamptz; update snb_private.referrals set earned_at=now(),payment_id='PM_LEGACY',booking_id='legacy-used',redemption_count=2,reward_notice_sent_at=now() where referred_id='legacy-friend'; insert into snb_private.referral_redemptions select 'legacy-used',id,referrer_id from snb_private.referrals where referred_id='legacy-friend';");
+ const legacyId=(await data("select id from snb_private.referrals where referred_id='legacy-friend'"))[0].id;
+ await db.exec(readFileSync('supabase/migrations/20261018000000_referral_membership_credits.sql','utf8'));
+ assert.equal((await dashboard('legacy-owner')).credits.length,0,'upgrade preserves an already spent credit');
+ const legacyCredit=(await data('select * from snb_private.referral_credits where id=$1',[legacyId]))[0];assert.equal(legacyCredit.booking_id,'legacy-used');assert.equal(legacyCredit.redemption_count,2);assert.ok(legacyCredit.reward_notice_sent_at,'upgrade preserves notice acknowledgement and old UUID');
+ assert.equal((await dashboard('legacy-friend')).credits.length,1,'already qualified referred members get one independent credit');
+ assert.deepEqual((await rpc('referral_reward_notices',{p_member_id:null,p_payment_id:'PM_LEGACY'})).map(n=>n.beneficiary_role),['referred'],'upgrade does not resend acknowledged referrer notice');
+ assert.equal(await code('existing'),existingCode,'migration retries preserve share links');
  await member('friend',existingCode.toLowerCase());await member('friend2',existingCode);
  await member('plain');
  assert.equal((await dashboard('existing')).pending,2);assert.equal((await dashboard('friend')).pending,0);
@@ -137,11 +148,16 @@ try{
  failMail=false;
  await Promise.all([qualifyReferralPayment(p.id,{...p,status:'paid_out'}),qualifyReferralPayment(p.id,{...p,status:'confirmed'})]);
  assert.equal((await dashboard('existing')).credits.length,1);assert.equal((await dashboard('existing')).pending,1);
- const rewardMails=mails.filter(m=>/earned a free|Referral reward earned/.test(m.subject));assert.equal(rewardMails.length,2);assert.deepEqual(rewardMails.map(m=>m.to[0]).sort(),['existing@example.test','shams@snbhive.com']);
+ const rewardMails=mails.filter(m=>/earned a free|Referral reward earned/.test(m.subject));assert.equal(rewardMails.length,4);assert.deepEqual(rewardMails.map(m=>m.to[0]).sort(),['existing@example.test','friend@example.test','shams@snbhive.com','shams@snbhive.com']);
+ assert.match(rewardMails.find(m=>m.to[0]==='friend@example.test').html,/Your first monthly membership payment/);
+ assert.ok(rewardMails.some(m=>m.to[0]==='shams@snbhive.com'&&m.html.includes('The referred member is eligible')));
+ const friendCredit=(await dashboard('friend')).credits[0];assert.ok(friendCredit);assert.notEqual(friendCredit.id,(await dashboard('existing')).credits[0].id,'each person owns a separate credit');
+ assert.equal((await data("select * from bookings where type='referral_credit' and user_id='friend'")).length,1,'referred member sees their own credit in My bookings');
+ await assert.rejects(rpc('redeem_referral_reward',{p_member_id:'existing',p_credit_id:friendCredit.id,p_session_id:'boxfit',p_booking_date:classPaymentConfig('boxfit').dates[0]}),/not available/,'referrer cannot spend the referred member’s credit');
  assert.equal((await data("select * from bookings where type='referral_credit' and user_id='existing'")).length,1,'unused free credit appears in My bookings without a lesson date');
  // A later monthly renewal does not generate another reward.
  subscriptions.set('SB1',{metadata:{booking_id:'root'},links:{mandate:'MD1'},amount:3500,currency:'GBP',interval_unit:'monthly'});
- await qualifyReferralPayment('PM_RENEWAL',{...p,metadata:{},status:'confirmed',amount:3500,links:{subscription:'SB1'}});assert.equal((await dashboard('existing')).earned,1);
+ await qualifyReferralPayment('PM_RENEWAL',{...p,metadata:{},status:'confirmed',amount:3500,links:{subscription:'SB1'}});assert.equal((await dashboard('existing')).earned,1);assert.equal((await dashboard('friend')).earned,1,'renewals never award either side twice');
  // Mix & Match qualifies under its own original checkout; PAYG does not.
  await rpc('bind_referral_checkout',{p_billing_request_id:'BRQ2',p_booking_id:'root2',p_member_id:'friend2'});
  requests.set('BRQ2',{status:'fulfilled',metadata:{booking_id:'root2',payment_plan:'payg'},payment_request:{amount:3500},links:{payment_request_payment:'PM_MIX'}});
@@ -181,7 +197,7 @@ try{
  const fullAttempt=await post(referral,{...redeem,credit_id:credits[1].id,booking_date:full});assert.equal(fullAttempt.status,400);assert.match((await fullAttempt.json()).error,/full/);assert.equal((await dashboard('existing')).credits.length,2,'full class does not spend credit');
  // A late cancellation consumes the lesson (seed historical redemption using
  // private service storage, since new past-date reservations are rejected).
- const late='referral-late';await db.query('update snb_private.referrals set booking_id=$1 where id=$2',[late,credits[1].id]);await db.query('insert into snb_private.referral_redemptions values($1,$2,$3)',[late,credits[1].id,'existing']);
+ const late='referral-late';await db.query('update snb_private.referral_credits set booking_id=$1 where id=$2',[late,credits[1].id]);await db.query('insert into snb_private.referral_redemptions values($1,$2,$3)',[late,credits[1].id,'existing']);
  await db.query("insert into bookings(id,user_id,plan,session_id,booking_date,status) values($1,'existing','Referral reward','boxfit','2020-01-02','confirmed')",[late]);
  await rpc('sync_referral_credit_entry',{p_credit_id:credits[1].id});
  await db.query("update bookings set status='cancelled' where id=$1",[late]);assert.equal((await dashboard('existing')).credits.length,1,'late cancellation does not restore reward');
@@ -208,13 +224,38 @@ try{
    await qualifyReferralPayment(pm,{...p,status:'confirmed',amount:3500,created_at:fixtureNow,metadata:{booking_id:root}});
    return (await dashboard('existing')).credits.at(-1).id;
  }
- async function source(session,id){
-   const root='owner-'+session,mandate='MD_'+session;
-   await db.query("insert into bookings(id,user_id,name,email,phone,session_id,session_name,type,plan,amount,status,booking_date,payment_group_id,gocardless_payment_id) values($1,'existing','Existing Member','existing@example.test','07000000000',$2,$2,'class',$3,35,'paid','2099-10-02',$1,'PM_OWNER_INITIAL')",[root,session==='mix_match'?'zumba':session,session==='mix_match'?'Mix & Match - Hive 4 Membership':'Monthly membership']);
+ async function source(session,id,owner='existing'){
+   const root='owner-'+owner+'-'+session,mandate='MD_'+owner+'_'+session;
+   await db.query("insert into bookings(id,user_id,name,email,phone,session_id,session_name,type,plan,amount,status,booking_date,payment_group_id,gocardless_payment_id) values($1,$4,$4,$5,'07000000000',$2,$2,'class',$3,35,'paid','2099-10-02',$1,'PM_OWNER_INITIAL')",[root,session==='mix_match'?'zumba':session,session==='mix_match'?'Mix & Match - Hive 4 Membership':'Monthly membership',owner,owner+'@example.test']);
    const sub={id,status:'active',amount:3500,currency:'GBP',interval_unit:'monthly',interval:1,day_of_month:1,start_date:'2099-11-01',metadata:{booking_id:root,session_id:session},links:{mandate},upcoming_payments:[{amount:3500,charge_date:'2099-11-02'}]};subscriptions.set(id,sub);
-   mandates.set(mandate,{id:mandate,status:'active',links:{customer:'CU_OWNER'},next_possible_charge_date:'2099-10-22'});customers.set('CU_OWNER',{email:'existing@example.test'});return sub;
+   mandates.set(mandate,{id:mandate,status:'active',links:{customer:'CU_'+owner},next_possible_charge_date:'2099-10-22'});customers.set('CU_'+owner,{email:owner+'@example.test'});return sub;
  }
  async function deliver(event){const raw=JSON.stringify({events:[event]}),key=await crypto.subtle.importKey('raw',new TextEncoder().encode(settings.GOCARDLESS_WEBHOOK_SECRET),{name:'HMAC',hash:'SHA-256'},false,['sign']);return webhookHandler(new Request('https://fixture.supabase.test/hook',{method:'POST',body:raw,headers:{'Webhook-Signature':Buffer.from(await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(raw))).toString('hex')}}));}
+
+ // The referred member can independently reduce their own membership payment.
+ const friendSub=await source('zumba','SB_FRIEND','friend');
+ payments.set('PM_FRIEND_NOV',{...p,id:'PM_FRIEND_NOV',status:'pending_submission',amount:3500,charge_date:'2099-11-02',links:{subscription:friendSub.id,mandate:friendSub.links.mandate}});
+ await db.exec("update snb_private.referral_access_challenges set sent_at=now()-interval '2 minutes' where user_id='friend'");
+ assert.equal((await post(referral,{action:'request_access',member_id:'friend'})).status,200);
+ const friendCode=mails.at(-1).html.match(/>(\d{6})<\/strong>/)[1];
+ const friendProof=await post(referral,{action:'verify_access',member_id:'friend',code:friendCode});assert.equal(friendProof.status,200);const friendToken=(await friendProof.json()).access_token;
+ const friendApply={action:'membership_credit',member_id:'friend',access_token:friendToken,credit_id:friendCredit.id,subscription_id:friendSub.id};
+ assert.equal((await post(referral,{...friendApply,credit_id:credits[0].id})).status,400,'referred member cannot assign the referrer’s credit');
+ const referrerBefore=(await dashboard('existing')).credits;
+ const friendApplied=await post(referral,friendApply);assert.equal(friendApplied.status,200,await friendApplied.clone().text());
+ const friendReduced=paymentCreates.at(-1);assert.equal(friendReduced.amount,2625);assert.equal(friendReduced.links.mandate,friendSub.links.mandate);assert.equal(payments.get('PM_FRIEND_NOV').status,'cancelled');
+ friendReduced.status='confirmed';assert.equal((await deliver({resource_type:'payments',action:'confirmed',links:{payment:friendReduced.id}})).status,200);
+ assert.equal((await dashboard('friend')).credits.length,0);assert.deepEqual((await dashboard('existing')).credits,referrerBefore,'referred member redemption leaves referrer credit unchanged');
+ assert.equal(subscriptions.get(friendSub.id).amount,3500,'later referred-member renewals remain £35');
+ assert.equal((await post(referral,friendApply)).status,200,'referred-member assignment retries are idempotent');
+ assert.equal((await post(referral,{action:'redeem',member_id:'friend',access_token:friendToken,credit_id:friendCredit.id,session_id:'boxfit',booking_date:classPaymentConfig('boxfit').dates[0]})).status,400,'referred member cannot spend a membership credit twice');
+ // The other beneficiary can choose a free class instead of a reduction.
+ const otherFriendCredit=(await dashboard('friend2')).credits[0];
+ const freeFriend=await rpc('redeem_referral_reward',{p_member_id:'friend2',p_credit_id:otherFriendCredit.id,p_session_id:'zumba',p_booking_date:classPaymentConfig('zumba').dates[2]});
+ assert.equal((await dashboard('friend2')).credits.length,0);assert.deepEqual((await dashboard('existing')).credits,referrerBefore);
+ await db.query("update bookings set status='cancelled' where id=$1",[freeFriend.booking_id]);assert.equal((await dashboard('friend2')).credits.length,1,'early cancellation restores only the referred member’s free-class credit');
+ console.log('PASS both beneficiaries have private independent credits, their own eligibility emails and My bookings entries, free classes and £26.25 renewals');
+ const createsBeforeReferrer=paymentCreates.length;
  const zsub=await source('zumba','SB_ZUMBA'),zcredit=await earn('z-referred');
  let benefits=await (await post(referral,{action:'dashboard',member_id:'existing',access_token:accessToken})).json();
  assert.equal(benefits.memberships.find(m=>m.id===zsub.id).month,'2099-11');
@@ -224,17 +265,17 @@ try{
  assert.equal((await post(referral,apply)).status,200,'retrying assignment is idempotent');
  payments.set('PM_Z_NOV',{id:'PM_Z_NOV',amount:3500,currency:'GBP',status:'pending_submission',charge_date:'2099-11-02',links:{subscription:zsub.id,mandate:zsub.links.mandate}});
  const zEvent={resource_type:'payments',action:'created',links:{payment:'PM_Z_NOV',subscription:zsub.id}};
- failCreate=true;assert.equal((await deliver(zEvent)).status,500);assert.equal(payments.get('PM_Z_NOV').status,'cancelled');assert.equal(paymentCreates.length,0);
- failCreate=false;loseCreateReply=true;const cancelledEvent={resource_type:'payments',action:'cancelled',links:{payment:'PM_Z_NOV'}};assert.equal((await deliver(cancelledEvent)).status,500);assert.equal(paymentCreates.length,1,'lost acknowledgement still creates only one canonical payment');
- assert.equal((await deliver(cancelledEvent)).status,200);assert.equal(paymentCreates.length,1);assert.equal((await deliver(zEvent)).status,200);assert.equal(paymentCreates.length,1);
- const reduced=paymentCreates[0];assert.equal(reduced.amount,2625);assert.equal(zsub.amount,3500,'subscription is never amended');
+ failCreate=true;assert.equal((await deliver(zEvent)).status,500);assert.equal(payments.get('PM_Z_NOV').status,'cancelled');assert.equal(paymentCreates.length,createsBeforeReferrer);
+ failCreate=false;loseCreateReply=true;const cancelledEvent={resource_type:'payments',action:'cancelled',links:{payment:'PM_Z_NOV'}};assert.equal((await deliver(cancelledEvent)).status,500);assert.equal(paymentCreates.length,createsBeforeReferrer+1,'lost acknowledgement still creates only one canonical payment');
+ assert.equal((await deliver(cancelledEvent)).status,200);assert.equal(paymentCreates.length,createsBeforeReferrer+1);assert.equal((await deliver(zEvent)).status,200);assert.equal(paymentCreates.length,createsBeforeReferrer+1);
+ const reduced=paymentCreates[createsBeforeReferrer];assert.equal(reduced.amount,2625);assert.equal(zsub.amount,3500,'subscription is never amended');
  let allocated=await data('select * from bookings where gocardless_payment_id=$1',[reduced.id]);assert.ok(allocated.length>=4);assert.equal(allocated.reduce((s,b)=>s+Number(b.amount),0),26.25);
  assert.ok(mails.at(-2).html.includes('£26.25'),'member receipt shows the actual reduced amount');
  reduced.status='confirmed';assert.equal((await deliver({resource_type:'payments',action:'confirmed',links:{payment:reduced.id}})).status,200);
  benefits=await (await post(referral,{action:'dashboard',member_id:'existing',access_token:accessToken})).json();assert.equal(benefits.discounts.find(d=>d.id===zcredit).state,'applied');
  payments.set('PM_Z_DEC',{id:'PM_Z_DEC',amount:3500,currency:'GBP',status:'pending_submission',charge_date:'2099-12-01',links:{subscription:zsub.id,mandate:zsub.links.mandate}});
  assert.equal((await deliver({resource_type:'payments',action:'created',links:{payment:'PM_Z_DEC',subscription:zsub.id}})).status,200);
- assert.equal(payments.get('PM_Z_DEC').amount,3500);assert.equal(payments.get('PM_Z_DEC').status,'pending_submission');assert.equal(paymentCreates.length,1,'following month is full price');
+ assert.equal(payments.get('PM_Z_DEC').amount,3500);assert.equal(payments.get('PM_Z_DEC').status,'pending_submission');assert.equal(paymentCreates.length,createsBeforeReferrer+1,'following month is full price');
  // Existing full-price enrolments are updated, not duplicated, including a
  // previously cancelled lesson. The payment itself is still cancellable.
  const bsub=await source('boxfit','SB_BOXFIT');payments.set('PM_B_NOV',{id:'PM_B_NOV',amount:3500,currency:'GBP',status:'pending_submission',charge_date:'2099-11-02',links:{subscription:bsub.id,mandate:bsub.links.mandate}});
@@ -278,6 +319,7 @@ try{
  subscriptions.set('SB_OTHER',{...bsub,id:'SB_OTHER',metadata:{booking_id:'other-root',session_id:'boxfit'},links:{mandate:'MD_OTHER'}});mandates.set('MD_OTHER',{id:'MD_OTHER',links:{customer:'CU_OTHER'}});customers.set('CU_OTHER',{email:'other-person@example.test'});
  benefits=await (await post(referral,{action:'dashboard',member_id:'existing',access_token:accessToken})).json();assert.ok(!benefits.memberships.some(m=>m.id==='SB_OTHER'));
  assert.equal((await post(referral,{...apply,credit_id:ownershipCredit,subscription_id:'SB_OTHER'})).status,400);assert.equal((await dashboard('existing')).credits.length,1);
+ assert.equal((await data("select has_table_privilege('anon','snb_private.referral_credits','SELECT') allowed"))[0].allowed,false);
  for(const signature of ['referral_discount_state(text,jsonb)','referral_reward_notices(text,text)','mark_referral_reward_notice(uuid)','sync_referral_credit_entry(uuid)'])assert.equal((await data('select has_function_privilege($1,$2,$3) allowed',['anon','public.'+signature,'EXECUTE']))[0].allowed,false);
  console.log('PASS bank-submission race, accurate postponed month, queued-credit release, no double use, provider-customer ownership and private billing RPCs');
  console.log('PASS actual £26.25 replacements for Zumba, BoxFit and Mix & Match; submitted-payment cutoff; one-off saving only; outage/lost-response recovery; preserved bookings/cancellations; unchanged £35 subscriptions');
@@ -287,8 +329,8 @@ try{
  const deployEnv={...process.env,RUNNER_TEMP:deploymentTemp};execFileSync(process.execPath,['--input-type=module','-e',deployScripts[0]],{env:deployEnv});
  const deployQuery=JSON.parse(readFileSync(join(deploymentTemp,'referral.json'),'utf8')).query;
  assert.equal((deployQuery.match(/^begin;/gm)||[]).length,1);assert.equal((deployQuery.match(/^commit;/gm)||[]).length,1,'referral follow-on migration must deploy atomically');
- const jobsBefore=await data('select * from snb_private.referral_discounts order by id');const entriesBefore=await data("select * from bookings where type='referral_credit' order by id");
- const deployed=await db.exec(deployQuery);assert.equal(deployed.at(-1).rows[0].referral_ready,true);
+ const creditsBefore=await data('select * from snb_private.referral_credits order by id');const jobsBefore=await data('select * from snb_private.referral_discounts order by id');const entriesBefore=await data("select * from bookings where type='referral_credit' order by id");
+ const deployed=await db.exec(deployQuery);assert.equal(deployed.at(-1).rows[0].referral_ready,true);assert.deepEqual(await data('select * from snb_private.referral_credits order by id'),creditsBefore,'redeployment never duplicates or restores either beneficiary’s spent credits');
  assert.deepEqual(await data('select * from snb_private.referral_discounts order by id'),jobsBefore,'redeployment preserves assigned/applied/released credits');
  assert.deepEqual(await data("select * from bookings where type='referral_credit' order by id"),entriesBefore,'redeployment does not duplicate My bookings credit entries');
  writeFileSync(join(deploymentTemp,'referral-result.json'),JSON.stringify(deployed.at(-1).rows));execFileSync(process.execPath,['--input-type=module','-e',deployScripts[1]],{env:deployEnv});

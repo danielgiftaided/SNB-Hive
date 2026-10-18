@@ -100,11 +100,16 @@ function messagesFor(p: Payload): Message[] {
         paragraph("The Classes page shows current dates, times and availability. You can view confirmed bookings in My bookings and manage your details in Account.") + invitation +
         paragraph("If you need a hand getting started or have a question about a class, just reply to this email. We look forward to meeting you!") + paragraph("Shams and the SNB Hive team")) }];
     }
-    case "referral_reward":
+    case "referral_reward": {
+      const referred = p.beneficiary_role === "referred";
+      const introduction = referred
+        ? `Hi ${value(p.to_name,"there")}, welcome to SNB Hive! Your first monthly membership payment has now been confirmed. As you joined through a referral, you are eligible for one free Pay as you go credit.`
+        : `Hi ${value(p.to_name,"there")}, thank you for sharing SNB Hive! Your referred member’s first monthly membership payment has now been confirmed, so you are eligible for one free Pay as you go credit.`;
       return [
-        {to,subject:"You’ve earned a free SNB Hive class credit",html:shell("Your referral has qualified","A free lesson, with our thanks",paragraph(`Hi ${value(p.to_name,"there")}, thank you for sharing SNB Hive! Your referred member’s first monthly membership payment has now been confirmed, so you are eligible for one free Pay as you go credit.`)+paragraph("Your credit is in My bookings. Use it for a regular Zumba or BoxFit lesson, or apply it to an eligible monthly membership (including Mix & Match) to reduce one £35 payment by £8.75 to £26.25. Subsequent monthly payments remain £35. GoCardless processing cutoffs may mean the next eligible collection is used."))},
-        {to:BOOKING_EMAIL,subject:`Referral reward earned: ${value(p.to_name)}`,html:shell("A member earned a referral credit","Free Pay as you go credit earned",paragraph("A referred member’s first monthly membership payment has been confirmed. The referrer is eligible for one free Pay as you go credit in My bookings, redeemable for Zumba or BoxFit, or an £8.75 reduction on one eligible monthly membership payment.")+details([["Referrer",p.to_name],["Email",p.to_email],["Reward reference",p.reward_id]]))},
+        {to,subject:"You’ve earned a free SNB Hive class credit",html:shell(referred ? "Your referral welcome credit" : "Your referral has qualified","A free lesson, with our thanks",paragraph(introduction)+paragraph("Your credit is in My bookings. Use it for a regular Zumba or BoxFit lesson, or apply it to an eligible monthly membership (including Mix & Match) to reduce one £35 payment by £8.75 to £26.25. Subsequent monthly payments remain £35. GoCardless processing cutoffs may mean the next eligible collection is used."))},
+        {to:BOOKING_EMAIL,subject:`Referral reward earned: ${value(p.to_name)}`,html:shell("A member earned a referral credit","Free Pay as you go credit earned",paragraph(`A referred member’s first monthly membership payment has been confirmed. The ${referred ? "referred member" : "referrer"} is eligible for one free Pay as you go credit in My bookings, redeemable for Zumba or BoxFit, or an £8.75 reduction on one eligible monthly membership payment.`)+details([[referred ? "Referred member" : "Referrer",p.to_name],["Email",p.to_email],["Reward reference",p.reward_id]]))},
       ];
+    }
     case "referral_access":
       return [{ to,subject:"Your SNB Hive referral access code",html:shell("Verify access to your referral rewards","Your referral access code",paragraph(`Hi ${value(p.to_name,"there")}, enter this code in Referral Scheme to access your invitations and free lesson credits. If you did not request this, ignore this email.`)+codeBox(p.code)) }];
     case "reset":

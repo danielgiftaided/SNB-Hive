@@ -1,29 +1,55 @@
 -- Reward notifications, My bookings credit entries and one-off renewal savings.
 begin;
 alter table snb_private.referrals add column if not exists reward_notice_sent_at timestamptz;
+-- Attribution is shared, but each beneficiary owns and spends a separate credit.
+-- Preserve legacy referrer UUIDs, spent bookings, notices and provider keys.
+create table if not exists snb_private.referral_credits (
+  id uuid primary key default gen_random_uuid(),
+  referral_id uuid not null references snb_private.referrals(id) on delete cascade,
+  member_id text not null references public.users(id) on delete cascade,
+  beneficiary_role text not null check(beneficiary_role in ('referrer','referred')),
+  earned_at timestamptz not null, payment_id text not null,
+  booking_id text, redemption_count integer not null default 0,
+  reward_notice_sent_at timestamptz,
+  unique(referral_id,beneficiary_role), unique(referral_id,member_id)
+);
+create index if not exists referral_credits_by_member on snb_private.referral_credits(member_id);
+revoke all on snb_private.referral_credits from public,anon,authenticated;
+insert into snb_private.referral_credits(id,referral_id,member_id,beneficiary_role,earned_at,payment_id,booking_id,redemption_count,reward_notice_sent_at)
+  select id,id,referrer_id,'referrer',earned_at,payment_id,booking_id,redemption_count,reward_notice_sent_at
+  from snb_private.referrals where earned_at is not null on conflict do nothing;
+insert into snb_private.referral_credits(referral_id,member_id,beneficiary_role,earned_at,payment_id)
+  select id,referred_id,'referred',earned_at,payment_id from snb_private.referrals where earned_at is not null on conflict do nothing;
+-- The historic referral_id column now identifies the individual credit.
+alter table snb_private.referral_redemptions drop constraint if exists referral_redemptions_referral_id_fkey;
+alter table snb_private.referral_redemptions add constraint referral_redemptions_referral_id_fkey
+  foreign key(referral_id) references snb_private.referral_credits(id);
+
 create table if not exists snb_private.referral_memberships (
   subscription_id text primary key, user_id text not null references public.users(id),
   session_id text not null check(session_id in ('zumba','boxfit','mix_match')),
   mandate_id text not null, next_charge_date date not null, verified_at timestamptz not null default now()
 );
 create table if not exists snb_private.referral_discounts (
-  id uuid primary key references snb_private.referrals(id),
+  id uuid primary key references snb_private.referral_credits(id),
   user_id text not null references public.users(id), subscription_id text not null references snb_private.referral_memberships(subscription_id),
   month date not null check(extract(day from month)=1), state text not null default 'queued'
     check(state in ('queued','cancelling','replaced','applied','released')),
   original_payment_id text unique, replacement_payment_id text unique, note text,
   created_at timestamptz not null default clock_timestamp()
 );
+alter table snb_private.referral_discounts drop constraint if exists referral_discounts_id_fkey;
+alter table snb_private.referral_discounts add constraint referral_discounts_id_fkey foreign key(id) references snb_private.referral_credits(id);
 create unique index if not exists one_referral_discount_per_month on snb_private.referral_discounts(subscription_id,month) where state<>'released';
 revoke all on snb_private.referral_memberships,snb_private.referral_discounts from public,anon,authenticated;
 
 create or replace function public.sync_referral_credit_entry(p_credit_id uuid)
 returns void language plpgsql security definer set search_path=public,pg_temp as $$
-declare reward snb_private.referrals%rowtype; member public.users%rowtype; credit_status text;
+declare reward snb_private.referral_credits%rowtype; member public.users%rowtype; credit_status text;
 begin
-  select * into reward from snb_private.referrals where id=p_credit_id;
+  select * into reward from snb_private.referral_credits where id=p_credit_id;
   if not found or reward.earned_at is null then return; end if;
-  select * into member from public.users where id=reward.referrer_id;
+  select * into member from public.users where id=reward.member_id;
   select access_email into member.email from snb_private.referral_codes where user_id=member.id;
   credit_status := case when reward.booking_id is not null or exists(select 1 from snb_private.referral_discounts where id=reward.id and state='applied') then 'cancelled' else 'confirmed' end;
   insert into public.bookings(id,user_id,name,email,phone,session_id,session_name,type,plan,amount,status,payment_group_id)
@@ -33,15 +59,15 @@ end $$;
 
 create or replace function public.referral_reward_notices(p_member_id text default null,p_payment_id text default null)
 returns jsonb language sql security definer set search_path=public,pg_temp as $$
-  select coalesce(jsonb_agg(jsonb_build_object('id',r.id,'member_id',r.referrer_id,'name',u.name,'email',c.access_email,'payment_id',r.payment_id)),'[]'::jsonb)
-    from snb_private.referrals r join public.users u on u.id=r.referrer_id join snb_private.referral_codes c on c.user_id=r.referrer_id
+  select coalesce(jsonb_agg(jsonb_build_object('id',r.id,'member_id',r.member_id,'beneficiary_role',r.beneficiary_role,'name',u.name,'email',c.access_email,'payment_id',r.payment_id)),'[]'::jsonb)
+    from snb_private.referral_credits r join public.users u on u.id=r.member_id join snb_private.referral_codes c on c.user_id=r.member_id
     where r.earned_at is not null and r.reward_notice_sent_at is null
-      and (p_member_id is null or r.referrer_id=p_member_id) and (p_payment_id is null or r.payment_id=p_payment_id);
+      and (p_member_id is null or r.member_id=p_member_id) and (p_payment_id is null or r.payment_id=p_payment_id);
 $$;
 create or replace function public.mark_referral_reward_notice(p_credit_id uuid)
 returns boolean language plpgsql security definer set search_path=public,pg_temp as $$
 begin
-  update snb_private.referrals set reward_notice_sent_at=coalesce(reward_notice_sent_at,clock_timestamp()) where id=p_credit_id and earned_at is not null;
+  update snb_private.referral_credits set reward_notice_sent_at=coalesce(reward_notice_sent_at,clock_timestamp()) where id=p_credit_id and earned_at is not null;
   return found;
 end $$;
 
@@ -49,7 +75,7 @@ end $$;
 -- the function; browser fields cannot fund credits or link another mandate.
 create or replace function public.referral_discount_state(p_action text,p_details jsonb)
 returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
-declare reward snb_private.referrals%rowtype; job snb_private.referral_discounts%rowtype;
+declare reward snb_private.referral_credits%rowtype; job snb_private.referral_discounts%rowtype;
   membership snb_private.referral_memberships%rowtype; target date;
 begin
   if p_action='identity' then
@@ -67,13 +93,13 @@ begin
       from snb_private.referral_discounts d join snb_private.referral_memberships m on m.subscription_id=d.subscription_id
       where d.user_id=p_details->>'member_id' and d.state<>'released');
   elsif p_action='reserve' then
-    select * into reward from snb_private.referrals where id=(p_details->>'credit_id')::uuid and referrer_id=p_details->>'member_id' for update;
+    select * into reward from snb_private.referral_credits where id=(p_details->>'credit_id')::uuid and member_id=p_details->>'member_id' for update;
     if not found or reward.earned_at is null or reward.booking_id is not null then raise exception 'This free credit is not available'; end if;
     select * into job from snb_private.referral_discounts where id=reward.id;
     if found and job.state<>'released' then
       if job.subscription_id=p_details->>'subscription_id' then return to_jsonb(job); end if;
       raise exception 'This credit is already assigned to a membership'; end if;
-    select * into membership from snb_private.referral_memberships where subscription_id=p_details->>'subscription_id' and user_id=reward.referrer_id;
+    select * into membership from snb_private.referral_memberships where subscription_id=p_details->>'subscription_id' and user_id=reward.member_id;
     if not found or membership.verified_at<clock_timestamp()-interval '5 minutes' then raise exception 'Refresh your memberships before applying this credit'; end if;
     target := ((p_details->>'month')||'-01')::date;
     if extract(day from target)<>1 or target < (date_trunc('month',clock_timestamp() at time zone 'Europe/London')+interval '1 month')::date then
@@ -81,7 +107,7 @@ begin
     perform pg_advisory_xact_lock(hashtext(membership.subscription_id||target::text));
     if exists(select 1 from snb_private.referral_discounts where subscription_id=membership.subscription_id and month=target and state<>'released') then
       raise exception 'A referral credit is already assigned to this month. Refresh to choose the next month'; end if;
-    insert into snb_private.referral_discounts(id,user_id,subscription_id,month) values(reward.id,reward.referrer_id,membership.subscription_id,target)
+    insert into snb_private.referral_discounts(id,user_id,subscription_id,month) values(reward.id,reward.member_id,membership.subscription_id,target)
       on conflict(id) do update set subscription_id=excluded.subscription_id,month=excluded.month,state='queued',note=null,original_payment_id=null,replacement_payment_id=null;
   elsif p_action='for_payment' then
     select * into job from snb_private.referral_discounts where subscription_id=p_details->>'subscription_id' and state<>'released'
@@ -131,9 +157,9 @@ begin
 end $$;
 create or replace function public.redeem_referral_reward(p_member_id text,p_credit_id uuid,p_session_id text,p_booking_date date)
 returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
-declare reward snb_private.referrals%rowtype; member public.users%rowtype; booking public.bookings%rowtype; new_id text;
+declare reward snb_private.referral_credits%rowtype; member public.users%rowtype; booking public.bookings%rowtype; new_id text;
 begin
-  select * into reward from snb_private.referrals where id=p_credit_id and referrer_id=p_member_id for update;
+  select * into reward from snb_private.referral_credits where id=p_credit_id and member_id=p_member_id for update;
   if not found or reward.earned_at is null then raise exception 'This free lesson is not available'; end if;
   if exists(select 1 from snb_private.referral_discounts where id=reward.id and state<>'released') then raise exception 'This credit is assigned to a membership payment'; end if;
   if reward.booking_id is not null then
@@ -155,7 +181,7 @@ begin
   select * into member from public.users where id=p_member_id;
   select access_email into member.email from snb_private.referral_codes where user_id=p_member_id;
   new_id := 'referral-'||reward.id::text||'-'||(reward.redemption_count+1)::text;
-  update snb_private.referrals set booking_id=new_id,redemption_count=redemption_count+1 where id=reward.id;
+  update snb_private.referral_credits set booking_id=new_id,redemption_count=redemption_count+1 where id=reward.id;
   insert into snb_private.referral_redemptions values(new_id,reward.id,p_member_id);
   insert into public.bookings(id,user_id,name,email,phone,session_id,session_name,type,plan,amount,status,booking_date,payment_group_id)
     values(new_id,member.id,member.name,member.email,member.phone,p_session_id,case when p_session_id='zumba' then 'Zumba' else 'BoxFit' end,
@@ -179,7 +205,7 @@ begin
        or (NEW.status is distinct from OLD.status and NEW.status is distinct from 'cancelled') then raise exception 'Referral bookings can only be cancelled'; end if;
     if NEW.status='cancelled' and OLD.status<>'cancelled' and
       ((OLD.booking_date + case when OLD.session_id='zumba' then time '12:00' else time '13:00' end) at time zone 'Europe/London') >= clock_timestamp()+interval '24 hours' then
-      update snb_private.referrals set booking_id=null where id=redemption.referral_id and booking_id=OLD.id;
+      update snb_private.referral_credits set booking_id=null where id=redemption.referral_id and booking_id=OLD.id;
       perform public.sync_referral_credit_entry(redemption.referral_id);
     end if;
   elsif NEW.plan='Referral reward' then raise exception 'A verified referral credit is required';
@@ -197,7 +223,15 @@ begin
       and c.user_id=r.referred_id and r.earned_at is null
       and (p_details->>'created_at')::timestamptz >= r.created_at;
   awarded := found;
-  for credit in select id from snb_private.referrals where payment_id=p_details->>'payment_id' and earned_at is not null loop
+  -- Unique attribution/role pairs and DO NOTHING make concurrent webhooks,
+  -- renewal events and redeployments preserve each independently spent credit.
+  insert into snb_private.referral_credits(id,referral_id,member_id,beneficiary_role,earned_at,payment_id)
+    select id,id,referrer_id,'referrer',earned_at,payment_id from snb_private.referrals
+    where payment_id=p_details->>'payment_id' and earned_at is not null on conflict do nothing;
+  insert into snb_private.referral_credits(referral_id,member_id,beneficiary_role,earned_at,payment_id)
+    select id,referred_id,'referred',earned_at,payment_id from snb_private.referrals
+    where payment_id=p_details->>'payment_id' and earned_at is not null on conflict do nothing;
+  for credit in select id from snb_private.referral_credits where payment_id=p_details->>'payment_id' loop
     perform public.sync_referral_credit_entry(credit.id);
   end loop;
   return awarded;
@@ -206,9 +240,9 @@ create or replace function public.referral_dashboard(p_member_id text)
 returns jsonb language sql security definer set search_path=public,pg_temp as $$
   select jsonb_build_object('code',c.code,
     'pending',(select count(*) from snb_private.referrals where referrer_id=c.user_id and earned_at is null),
-    'earned',(select count(*) from snb_private.referrals where referrer_id=c.user_id and earned_at is not null),
+    'earned',(select count(*) from snb_private.referral_credits where member_id=c.user_id),
     'credits',coalesce((select jsonb_agg(jsonb_build_object('id',r.id,'earned_at',r.earned_at) order by r.earned_at)
-      from snb_private.referrals r where r.referrer_id=c.user_id and earned_at is not null and booking_id is null and not exists(select 1 from snb_private.referral_discounts d where d.id=r.id and state<>'released')),'[]'::jsonb))
+      from snb_private.referral_credits r where r.member_id=c.user_id and booking_id is null and not exists(select 1 from snb_private.referral_discounts d where d.id=r.id and state<>'released')),'[]'::jsonb))
   from snb_private.referral_codes c where c.user_id=p_member_id;
 $$;
 
@@ -235,7 +269,7 @@ end $$;
 
 
 do $$ declare credit record; begin
-  for credit in select id from snb_private.referrals where earned_at is not null loop perform public.sync_referral_credit_entry(credit.id); end loop;
+  for credit in select id from snb_private.referral_credits loop perform public.sync_referral_credit_entry(credit.id); end loop;
 end $$;
 revoke all on function public.sync_referral_credit_entry(uuid),public.referral_reward_notices(text,text),public.mark_referral_reward_notice(uuid),public.referral_discount_state(text,jsonb) from public,anon,authenticated;
 grant execute on function public.sync_referral_credit_entry(uuid),public.referral_reward_notices(text,text),public.mark_referral_reward_notice(uuid),public.referral_discount_state(text,jsonb) to service_role;

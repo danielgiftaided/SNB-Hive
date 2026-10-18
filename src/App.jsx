@@ -733,7 +733,7 @@ function AuthScreen({ onAuth }) {
                 <label htmlFor="signup-referral-code" className="ff-body text-sm font-medium text-stone-700">Referral code</label>
                 <input id="signup-referral-code" value={referralCode} onChange={e=>{setReferralCode(e.target.value.toUpperCase());setError("");}} maxLength={30} autoCapitalize="characters" autoComplete="off"
                   className="ff-body mt-1 w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm"/>
-                <p className="ff-body mt-1 text-xs text-stone-500">Have a friend’s code? Add it here, or leave this blank.</p>
+                <p className="ff-body mt-1 text-xs text-stone-500">Have a friend’s code? Add it here and you both earn a credit after your first monthly membership payment is confirmed. Leave blank if you don’t have one.</p>
               </div>}
               {mode === "register" && <MarketingChoices registration choices={marketingChoices} onChange={setMarketingChoices} disabled={loading}/>}
               {error   && <div className="ff-body text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>}

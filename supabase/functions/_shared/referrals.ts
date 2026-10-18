@@ -49,7 +49,7 @@ export async function sendReferralRewardNotices(memberId?:string,paymentId?:stri
   const notices=await mixMatchRpc("referral_reward_notices",{p_member_id:memberId||null,p_payment_id:paymentId||null});
   const base=Deno.env.get("SUPABASE_URL"),key=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   for(const notice of notices) {
-    const response=await fetch(`${base}/functions/v1/send-email`,{method:"POST",headers:{apikey:key,Authorization:`Bearer ${key}`,"Content-Type":"application/json"},body:JSON.stringify({type:"referral_reward",reward_id:notice.id,to_email:notice.email,to_name:notice.name})});
+    const response=await fetch(`${base}/functions/v1/send-email`,{method:"POST",headers:{apikey:key,Authorization:`Bearer ${key}`,"Content-Type":"application/json"},body:JSON.stringify({type:"referral_reward",reward_id:notice.id,beneficiary_role:notice.beneficiary_role,to_email:notice.email,to_name:notice.name})});
     if(!response.ok)throw new Error("Referral reward email could not be sent");
     await mixMatchRpc("mark_referral_reward_notice",{p_credit_id:notice.id});
   }

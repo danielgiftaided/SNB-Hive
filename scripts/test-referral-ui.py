@@ -151,5 +151,28 @@ with sync_playwright() as p:
         assert page.evaluate('sessionStorage.getItem("snb_referral_access_referrer")') is None
         assert not writes,'free booking must be created by the server, not browser upserts'
         context.close()
-        print('PASS',width,'px: default sign-in, invitation signup, code persistence, sharing, cancellation popup, failed retry, free lesson and all three membership reductions/releases in My bookings',flush=True)
+        # A newly referred member sees and spends their own credit in the same wallet.
+        original_user=user
+        user={**original_user,'id':'referred','name':'New Member','email':'friend@example.test'}
+        users=[user];rows=[{'id':'referred-credit-entry','type':'referral_credit','session_id':'referral_credit','session_name':'Free Pay as you go credit','user_id':user['id'],'email':user['email'],'plan':'Referral credit','amount':0,'status':'confirmed'}];credits=[{'id':credit,'earned_at':'2026-10-18T12:00:00Z'}];discounts=[];failure=False
+        context=browser.new_context(viewport={'width':width,'height':950},timezone_id='Europe/London')
+        context.add_init_script('localStorage.setItem("snb_session",'+json.dumps(json.dumps(user))+');sessionStorage.setItem("snb_referral_access_referred","'+('a'*64)+'");')
+        context.route('https://fixture.supabase.test/**',api)
+        page=context.new_page();page.set_default_timeout(15000);page.goto('http://127.0.0.1:5174/')
+        nav=page.locator('nav:visible')
+        nav.get_by_role('button',name='My bookings' if width==1280 else 'Bookings',exact=True).click()
+        expect(page.get_by_role('heading',name='Your referral credits',exact=True)).to_be_visible()
+        for sub_id in ['SB_Z','SB_B','SB_M']:
+            page.get_by_label('Free lesson credit',exact=True).select_option(credit)
+            page.get_by_role('radio',name='£8.75 off one monthly membership payment',exact=True).check()
+            page.get_by_label('Membership and month',exact=True).select_option(sub_id)
+            page.get_by_role('button',name='Apply £8.75 membership credit',exact=True).click()
+            expect(page.get_by_role('status')).to_contain_text('£26.25 instead of £35')
+            assert membership_requests[-1]['member_id']=='referred' and membership_requests[-1]['subscription_id']==sub_id
+            page.get_by_role('button',name='Use this credit for a lesson instead',exact=True).click()
+            expect(page.get_by_role('status')).to_contain_text('available again for a free Zumba or BoxFit lesson')
+        assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
+        page.screenshot(path='/tmp/snb-referred-credit-'+str(width)+'.png',full_page=True)
+        context.close();user=original_user
+        print('PASS',width,'px: default sign-in, invitation signup, code persistence, sharing, cancellation popup, failed retry, free lesson and all three membership reductions/releases for both beneficiaries in My bookings',flush=True)
     browser.close()

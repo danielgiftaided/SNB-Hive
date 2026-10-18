@@ -110,6 +110,7 @@ try {
  payments.get('PM_INITIAL').status='confirmed';
  await webhook({resource_type:'payments',action:'confirmed',links:{payment:'PM_INITIAL'}});
  assert.equal((await data("select public.referral_dashboard('referrer') result"))[0].result.credits.length,1,'actual checkout privately binds the registered referral and confirmed payment funds one reward');
+ assert.equal((await data("select public.referral_dashboard('member') result"))[0].result.credits.length,1,'the referred Mix & Match member also earns their own credit');
  fixtureNow=subscription.start_date+'T12:00:00Z';const renewalMonth=fixtureNow.slice(0,7);
  payments.set('PM_RENEWAL',{id:'PM_RENEWAL',status:'pending_submission',amount:3500,currency:'GBP',charge_date:subscription.start_date,links:{subscription:subscription.id}});
  const event={resource_type:'payments',action:'created',links:{payment:'PM_RENEWAL',subscription:subscription.id}};
@@ -117,7 +118,7 @@ try {
  await assert.rejects(()=>enrollRecurringMembership('PM_RENEWAL',subscription.id),/email could not be sent/);
  failMail=false;await webhook(event);await webhook(event);
  let renewed=(await sqlRows()).filter(row=>row.gocardless_payment_id==='PM_RENEWAL');assert.equal(renewed.length,1);assert.equal(renewed[0].type,'membership');assert.equal(renewed[0].session_id,'mix_match');
- assert.equal(mails.length,6);assert.match(mails[4].subject,/choose your dates/);assert.ok(!mails[4].html.includes('Your booking is confirmed'));
+ assert.equal(mails.length,8);assert.match(mails[6].subject,/choose your dates/);assert.ok(!mails[6].html.includes('Your booking is confirmed'));
  const list=await (await post(membership,{action:'list',member_id:'member'})).json();assert.equal(list.months.length,1);assert.equal(list.months[0].month,renewalMonth);
  const own={action:'select',member_id:'member',membership_id:list.months[0].id};
  const selected=['zumba','boxfit'].flatMap(session_id=>mixMatchDates(session_id,renewalMonth).slice(0,2).map(booking_date=>({session_id,booking_date})));
@@ -133,9 +134,9 @@ try {
  const saved=await (await post(membership,{...own,choices:selected})).json();assert.equal(saved.success,true);
  renewed=(await sqlRows()).filter(row=>row.gocardless_payment_id==='PM_RENEWAL');assert.equal(renewed.length,4);assert.ok(renewed.every(row=>row.type==='class'&&row.status==='paid'));
  assert.equal(renewed.filter(row=>row.session_id==='zumba').length,2);assert.equal(renewed.filter(row=>row.session_id==='boxfit').length,2);assert.equal(renewed.reduce((sum,row)=>sum+Number(row.amount),0),35);
- assert.equal(mails.length,8);assert.match(mails[6].subject,/You're booked/);
+ assert.equal(mails.length,10);assert.match(mails[8].subject,/You're booked/);
  const before=JSON.stringify(renewed);await post(membership,{...own,choices:[]});await webhook(event);
- assert.equal(JSON.stringify((await sqlRows()).filter(row=>row.gocardless_payment_id==='PM_RENEWAL')),before);assert.equal(mails.length,8,'selection and webhook retries must not send duplicate confirmations or allocate extra lessons');
+ assert.equal(JSON.stringify((await sqlRows()).filter(row=>row.gocardless_payment_id==='PM_RENEWAL')),before);assert.equal(mails.length,10,'selection and webhook retries must not send duplicate confirmations or allocate extra lessons');
  await db.query("update bookings set status='cancelled' where id=$1",[renewed[0].id]);await webhook(event);
  assert.equal((await data('select status from bookings where id=$1',[renewed[0].id]))[0].status,'cancelled');
  assert.equal((await sqlRows()).filter(row=>row.gocardless_payment_id==='PM_RENEWAL').length,4,'recovery must never expand 2+2 into all weekly lessons');

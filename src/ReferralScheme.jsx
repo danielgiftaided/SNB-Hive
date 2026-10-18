@@ -50,7 +50,7 @@ export default function ReferralScheme({ user, invoke, onBooked, creditsOnly=fal
   async function share() {
     const url=referralLink(data.code);
     if (!navigator.share) return copy(url,"Referral link");
-    try {await navigator.share({title:"Join me at SNB Hive",text:"Join SNB Hive using my referral link. When your first monthly membership payment is confirmed, I receive a free Zumba or BoxFit lesson.",url});}
+    try {await navigator.share({title:"Join me at SNB Hive",text:"Join SNB Hive using my referral link. When your first monthly membership payment is confirmed, we each receive a free Zumba or BoxFit lesson credit.",url});}
     catch(e){if(e.name!=="AbortError")setMessage("You can copy your referral link instead.");}
   }
   async function redeem() {
@@ -81,7 +81,7 @@ export default function ReferralScheme({ user, invoke, onBooked, creditsOnly=fal
   }
   return <section className="ff-body space-y-5" aria-labelledby={creditsOnly ? "booking-credit-title" : "referral-title"}>
     <div><h1 id={creditsOnly ? "booking-credit-title" : "referral-title"} className="ff-display text-2xl font-semibold text-stone-800">{creditsOnly ? "Your referral credits" : "Referral Scheme"}</h1>
-      <p className="mt-2 text-sm text-stone-600">{creditsOnly ? "Use your free Pay as you go credit for Zumba or BoxFit, or reduce an eligible monthly payment by £8.75." : "Invite a friend to the Hive. When their first monthly membership payment is confirmed, you earn a free Zumba or BoxFit lesson."}</p></div>
+      <p className="mt-2 text-sm text-stone-600">{creditsOnly ? "Use your free Pay as you go credit for Zumba or BoxFit, or reduce an eligible monthly payment by £8.75." : "Invite a friend to the Hive. When their first monthly membership payment is confirmed, you both earn a free Zumba or BoxFit lesson credit."}</p></div>
     {!token && <div className="rounded-2xl border border-stone-200 bg-white p-5 space-y-3">
       <h2 className="ff-display text-xl font-semibold">Verify access to your rewards</h2>
       <p className="text-sm text-stone-600">We’ll email a code to your account address to protect your free lesson credits. You only need to do this once per browser session.</p>
@@ -108,7 +108,7 @@ export default function ReferralScheme({ user, invoke, onBooked, creditsOnly=fal
       </>}
       <div className="rounded-2xl border border-stone-200 bg-white p-5 space-y-3">
         <h2 className="ff-display text-xl font-semibold">Free Pay as you go credits</h2>
-        {data.credits.length===0 ? <p className="text-sm text-stone-600">{data.discounts?.length ? "Your credit is assigned to a membership payment. See the details below." : data.earned > 0 ? "You’ve used your available free lessons. New rewards will appear here after another friend’s first membership payment is confirmed." : "Your rewards will appear here once GoCardless confirms a referred friend’s first membership payment. Confirmation can take a few working days."}</p> : <>
+        {data.credits.length===0 ? <p className="text-sm text-stone-600">{data.discounts?.length ? "Your credit is assigned to a membership payment. See the details below." : data.earned > 0 ? "You’ve used your available credits. Invite a friend to earn another reward after their first membership payment is confirmed." : "Referral credits appear here once GoCardless confirms the new member’s first monthly membership payment. Confirmation can take a few working days."}</p> : <>
           <p className="text-sm text-stone-600">Use one credit for a free regular Zumba or BoxFit lesson. If you already have that class in a monthly membership, you can reduce an eligible membership payment from £35 to £26.25 instead. Mix & Match is included.</p>
           <div><label htmlFor="referral-credit" className="text-sm font-medium">Free lesson credit</label><select id="referral-credit" value={credit} onChange={e=>setCredit(e.target.value)} className="mt-1 w-full rounded-xl border border-stone-200 p-3 text-sm"><option value="">Choose a credit</option>{data.credits.map((c,i)=><option key={c.id} value={c.id}>Free lesson {i+1}</option>)}</select></div>
           <fieldset className="space-y-2"><legend className="text-sm font-medium mb-2">Use this credit for</legend>
@@ -132,7 +132,7 @@ export default function ReferralScheme({ user, invoke, onBooked, creditsOnly=fal
         <h2 className="ff-display text-xl font-semibold">Membership credits</h2>
         {data.discounts.map(d=><div key={d.id} className="text-sm text-stone-600"><strong>{d.session_id==="mix_match"?"Mix & Match":d.session_id==="zumba"?"Zumba":"BoxFit"} — {new Intl.DateTimeFormat("en-GB",{month:"long",year:"numeric",timeZone:"UTC"}).format(new Date(`${d.month}-01T12:00:00Z`))}</strong><p>£26.25 instead of £35 · {d.state==="applied"?"Credit applied":d.state==="queued"?"Credit reserved for this payment":"Reduced payment processing"}</p>{d.note && <p className="mt-1 text-xs">{d.note}</p>}{d.state==="queued" && <button onClick={()=>changeMembershipCredit(d,true)} disabled={saving} className="mt-2 min-h-11 text-xs underline disabled:opacity-50">Use this credit for a lesson instead</button>}{d.state==="cancelling" && <button onClick={()=>changeMembershipCredit(d,false)} disabled={saving} className="mt-2 min-h-11 text-xs underline disabled:opacity-50">Retry reduced payment</button>}</div>)}
       </div>}
-      <p className="text-xs leading-relaxed text-stone-500">For new registrations only. Single-class monthly memberships and Mix &amp; Match qualify. One reward per referred member, after their first confirmed payment; Pay as you go, tasters and Self Defence purchases do not qualify. Self-referrals are excluded. A credit can be used once, for a lesson or one £8.75 membership reduction. Rewards are personal, have no cash value and can be used subject to class availability. For a free lesson booked with this credit, cancel at least 24 hours before the class to have the credit returned.</p>
+      <p className="text-xs leading-relaxed text-stone-500">For new registrations only. Single-class monthly memberships and Mix &amp; Match qualify. One credit each for the referrer and referred member, after the new member’s first confirmed payment; Pay as you go, tasters and Self Defence purchases do not qualify. Self-referrals are excluded. A credit can be used once, for a lesson or one £8.75 membership reduction. Rewards are personal, have no cash value and can be used subject to class availability. For a free lesson booked with this credit, cancel at least 24 hours before the class to have the credit returned.</p>
     </>}
     {error && <div role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error} <button onClick={()=>load()} disabled={loading || !token} className="underline">Refresh referrals</button></div>}
     {message && <p role="status" className="rounded-xl bg-[#e9f1ec] p-3 text-sm text-[#4b5d4e]">{message}</p>}

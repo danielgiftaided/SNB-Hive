@@ -69,6 +69,21 @@ try {
     }
     console.log(`PASS ${type}: matching palette and inline app logo; ${delivered.length} recipient(s), calendar and idempotency preserved`);
   }
+  for (const role of ["referrer", "referred"]) {
+    const delivered=[];
+    globalThis.fetch=async (url,init)=>{assert.equal(url,"https://api.resend.com/emails");delivered.push({body:JSON.parse(init.body),headers:init.headers});return new Response('{"id":"fixture"}');};
+    const response=await handler(new Request("https://fixture.supabase.test/functions/v1/send-email",{method:"POST",headers:{Authorization:"Bearer fixture-service-key"},body:JSON.stringify({type:"referral_reward",reward_id:`credit-${role}`,beneficiary_role:role,to_name:"Test Member",to_email:"member@example.test"})}));
+    assert.equal(response.status,200);assert.equal(delivered.length,2);
+    assert.match(delivered[0].body.html,role==="referred"?/Your first monthly membership payment/:/Your referred member’s first monthly membership payment/);
+    assert.match(delivered[1].body.html,role==="referred"?/The referred member is eligible/:/The referrer is eligible/);
+    for(const [index,mail] of delivered.entries()){
+      assert.equal(mail.headers["Idempotency-Key"],`referral-reward-credit-${role}-${index}`);
+      for(const colour of colours)assert.ok(mail.body.html.includes(colour));
+      assert.match(mail.body.html,/£8.75/);assert.match(mail.body.html,/My bookings/);
+      assert.deepEqual(Buffer.from(mail.body.attachments.find(a=>a.content_id==="snb-hive-logo").content,"base64"),appLogo);
+    }
+  }
+  console.log("PASS both beneficiary email variants: personal reward wording, Shams notification, distinct idempotency, palette and app logo");
   globalThis.fetch = async url => url.endsWith("/rpc/prepare_signup_verification") ? new Response("true") : new Response("Fixture provider unavailable", { status: 503 });
   assert.equal((await handler(new Request("https://fixture.supabase.test/functions/v1/send-email", { method: "POST", body: JSON.stringify({ type: "verify", to_email: "member@example.test", code: "123456" }) }))).status, 500);
   console.log("PASS provider failures still report an error; no live emails sent");
