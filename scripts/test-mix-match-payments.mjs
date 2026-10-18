@@ -15,7 +15,7 @@ const temp=mkdtempSync(join(tmpdir(),'snb-mix-workflow-'));
 let handler, mails=[], providerCalls=[], billingRequests=new Map(), subscriptions=new Map(), subscriptionKeys=new Map(), payments=new Map(), billingKeys=new Map(), mailKeys=new Set(), failMail=false;
 globalThis.Deno={env:{get:key=>settings[key]},serve:fn=>{handler=fn;}};
 const response=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json'}});
-const sqlRows=async()=> (await db.query('select * from public.bookings order by id')).rows;
+const sqlRows=async()=> (await db.query("select * from public.bookings where type is distinct from 'referral_credit' order by id")).rows;
 let emailHandler;
 globalThis.fetch=async(input,init={})=>{
  const url=new URL(input),body=init.body?JSON.parse(init.body):null;
@@ -23,11 +23,11 @@ globalThis.fetch=async(input,init={})=>{
    if(failMail)return response({error:'fixture mail outage'},503);
    const key=init.headers['Idempotency-Key'];if(!key||!mailKeys.has(key)){mails.push(body);if(key)mailKeys.add(key);}return response({id:'fixture-mail'});
  }
- if(url.pathname==='/functions/v1/send-email')return emailHandler(new Request(input,{method:'POST',body:init.body}));
+ if(url.pathname==='/functions/v1/send-email')return emailHandler(new Request(input,{method:'POST',headers:init.headers,body:init.body}));
  if(url.pathname.startsWith('/rest/v1/rpc/')){
    assert.equal(init.headers.Authorization,'Bearer fixture-service');
-   const name=url.pathname.split('/').at(-1);assert.ok(['record_mix_match_renewal','mix_match_months_for_member','select_mix_match_dates','bind_referral_checkout','referral_checkout_for_booking','award_referral_reward'].includes(name));
-   const args=Object.values(body).map(value=>typeof value==='object'?JSON.stringify(value):value);
+   const name=url.pathname.split('/').at(-1);assert.ok(['record_mix_match_renewal','mix_match_months_for_member','select_mix_match_dates','bind_referral_checkout','referral_checkout_for_booking','award_referral_reward','referral_reward_notices','mark_referral_reward_notice','referral_discount_state'].includes(name));
+   const args=Object.values(body).map(value=>value!==null&&typeof value==='object'?JSON.stringify(value):value);
    try {return response((await db.query(`select public.${name}(${args.map((_,i)=>'$'+(i+1)).join(',')}) result`,args)).rows[0].result);}
    catch(error){return response({message:error.message},400);}
  }
@@ -76,6 +76,7 @@ try {
  create table bookings(id text primary key,user_id text,name text,email text,phone text,session_id text,session_name text,type text,plan text,amount numeric,status text,booking_date date,payment_group_id text,gocardless_payment_id text,gocardless_billing_request_id text,num_people integer,booking_confirmation_sent_at timestamptz,payment_confirmation_sent_at timestamptz);
  insert into users(id,name,email) values('referrer','Existing Referrer','referrer@example.test');`);
  const migration=readFileSync('supabase/migrations/20261017030000_mix_match_memberships.sql','utf8');await db.exec(migration);await db.exec(migration);await db.exec(readFileSync('supabase/migrations/20261017040000_referral_scheme.sql','utf8'));
+ await db.exec(readFileSync('supabase/migrations/20261018000000_referral_membership_credits.sql','utf8'));
  await db.exec("insert into users(id,name,email,referral_signup_code) select 'member','Test Member','member@example.test',code from snb_private.referral_codes where user_id='referrer'");
  await import('../supabase/functions/send-email/index.ts');emailHandler=handler;
  await import('../supabase/functions/gocardless-checkout/index.ts');const checkout=handler;
@@ -116,7 +117,7 @@ try {
  await assert.rejects(()=>enrollRecurringMembership('PM_RENEWAL',subscription.id),/email could not be sent/);
  failMail=false;await webhook(event);await webhook(event);
  let renewed=(await sqlRows()).filter(row=>row.gocardless_payment_id==='PM_RENEWAL');assert.equal(renewed.length,1);assert.equal(renewed[0].type,'membership');assert.equal(renewed[0].session_id,'mix_match');
- assert.equal(mails.length,4);assert.match(mails[2].subject,/choose your dates/);assert.ok(!mails[2].html.includes('Your booking is confirmed'));
+ assert.equal(mails.length,6);assert.match(mails[4].subject,/choose your dates/);assert.ok(!mails[4].html.includes('Your booking is confirmed'));
  const list=await (await post(membership,{action:'list',member_id:'member'})).json();assert.equal(list.months.length,1);assert.equal(list.months[0].month,renewalMonth);
  const own={action:'select',member_id:'member',membership_id:list.months[0].id};
  const selected=['zumba','boxfit'].flatMap(session_id=>mixMatchDates(session_id,renewalMonth).slice(0,2).map(booking_date=>({session_id,booking_date})));
@@ -132,9 +133,9 @@ try {
  const saved=await (await post(membership,{...own,choices:selected})).json();assert.equal(saved.success,true);
  renewed=(await sqlRows()).filter(row=>row.gocardless_payment_id==='PM_RENEWAL');assert.equal(renewed.length,4);assert.ok(renewed.every(row=>row.type==='class'&&row.status==='paid'));
  assert.equal(renewed.filter(row=>row.session_id==='zumba').length,2);assert.equal(renewed.filter(row=>row.session_id==='boxfit').length,2);assert.equal(renewed.reduce((sum,row)=>sum+Number(row.amount),0),35);
- assert.equal(mails.length,6);assert.match(mails[4].subject,/You're booked/);
+ assert.equal(mails.length,8);assert.match(mails[6].subject,/You're booked/);
  const before=JSON.stringify(renewed);await post(membership,{...own,choices:[]});await webhook(event);
- assert.equal(JSON.stringify((await sqlRows()).filter(row=>row.gocardless_payment_id==='PM_RENEWAL')),before);assert.equal(mails.length,6,'selection and webhook retries must not send duplicate confirmations or allocate extra lessons');
+ assert.equal(JSON.stringify((await sqlRows()).filter(row=>row.gocardless_payment_id==='PM_RENEWAL')),before);assert.equal(mails.length,8,'selection and webhook retries must not send duplicate confirmations or allocate extra lessons');
  await db.query("update bookings set status='cancelled' where id=$1",[renewed[0].id]);await webhook(event);
  assert.equal((await data('select status from bookings where id=$1',[renewed[0].id]))[0].status,'cancelled');
  assert.equal((await sqlRows()).filter(row=>row.gocardless_payment_id==='PM_RENEWAL').length,4,'recovery must never expand 2+2 into all weekly lessons');

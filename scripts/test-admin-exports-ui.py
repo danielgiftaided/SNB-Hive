@@ -27,6 +27,7 @@ members = [
          phone='+44 7960 123456'),
 ]
 bookings = [
+    dict(id='credit-entry',name='Referral wallet entry',email='credit@example.test',session_id='referral_credit',session_name='Free Pay as you go credit',type='referral_credit',plan='Referral credit',amount=0,status='confirmed'),
     dict(id='membership', name=members[0]['name'], email=members[0]['email'],
          phone=members[0]['phone'], session_id='boxfit', session_name='BoxFit',
          booking_date='2026-10-15', type='class', plan='Membership — 1 class',
@@ -76,6 +77,7 @@ with sync_playwright() as p:
         table = page.locator('table') if width >= 640 else page.locator('div.sm\\:hidden.divide-y')
         table.get_by_text('Membership - 1 class', exact=True).wait_for()
         assert table.get_by_text('Taster - bank transfer', exact=True).is_visible()
+        assert table.get_by_text('Free Pay as you go credit',exact=True).count()==0, 'Wallet entries must not count as lesson bookings'
         assert '13:00-14:00' in table.inner_text()
         assert '—' not in table.inner_text() and '–' not in table.inner_text()
         rows = exported(page)

@@ -8,10 +8,10 @@ with urlopen('http://127.0.0.1:5174/src/storage.js') as response:
     assert 'https://fixture.supabase.test' in response.read().decode()
 user={'id':'referrer','name':'Hive Member','email':'member@example.test','phone':'07000000000','expiresAt':1800000000000}
 credit='11111111-1111-4111-8111-111111111111';code='HIVE-123456ABCD'
-users=[user];rows=[];writes=[];emails=[];redemptions=[];credits=[];failure=False
+users=[user];rows=[];writes=[];emails=[];redemptions=[];credits=[];failure=False;discounts=[];membership_requests=[]
 
 def api(route):
-    global rows,users,credits
+    global rows,users,credits,discounts
     req=route.request;url=urlparse(req.url);query=parse_qs(url.query);path=url.path
     if path=='/rest/v1/users':
         if req.method=='POST':
@@ -30,7 +30,17 @@ def api(route):
         elif body['action']=='sign_out':result={'success':True}
         elif body['action']=='dashboard':
             assert body['access_token']=='a'*64
-            result={'code':code,'pending':2,'earned':1,'credits':credits}
+            result={'code':code,'pending':2,'earned':2,'credits':credits,'discounts':discounts,'memberships':[{'id':'SB_Z','session_id':'zumba','name':'Zumba','month':'2026-11','charge_date':'2026-11-02'},{'id':'SB_B','session_id':'boxfit','name':'BoxFit','month':'2026-11','charge_date':'2026-11-02'},{'id':'SB_M','session_id':'mix_match','name':'Mix & Match','month':'2026-11','charge_date':'2026-11-02'}]}
+        elif body['action']=='release_membership_credit':
+            assert body['access_token']=='a'*64
+            discounts=[];credits=[{'id':body['credit_id'],'earned_at':'2026-10-18T12:00:00Z'}];result={'success':True}
+        elif body['action']=='membership_credit':
+            assert body['access_token']=='a'*64
+            membership_requests.append(body)
+            if failure:
+                route.fulfill(status=400,content_type='application/json',body='{"error":"Refresh your memberships before applying this credit"}');return
+            discount={'id':body['credit_id'],'subscription_id':body['subscription_id'],'session_id':{'SB_Z':'zumba','SB_B':'boxfit','SB_M':'mix_match'}[body['subscription_id']],'month':'2026-11','state':'queued'}
+            discounts.append(discount);credits=[];result={'success':True,'discount':discount}
         else:
             assert body['access_token']=='a'*64
             redemptions.append(body)
@@ -67,7 +77,7 @@ with sync_playwright() as p:
         assert page.evaluate('localStorage.getItem("snb_signup_referral")') is None
         context.close()
         # Logged-in member shares and redeems a reward, preserving choices on failure.
-        users=[user];writes=[];emails=[];rows=[];redemptions=[];failure=True
+        users=[user];writes=[];emails=[];rows=[{'id':'credit-entry','type':'referral_credit','session_id':'referral_credit','session_name':'Free Pay as you go credit','user_id':user['id'],'email':user['email'],'plan':'Referral credit','amount':0,'status':'confirmed'}];redemptions=[];failure=True;discounts=[];membership_requests=[]
         context=browser.new_context(viewport={'width':width,'height':950},timezone_id='Europe/London',permissions=['clipboard-read','clipboard-write'])
         context.add_init_script('localStorage.setItem("snb_session",'+json.dumps(json.dumps(user))+');')
         context.route('https://fixture.supabase.test/**',api)
@@ -75,13 +85,15 @@ with sync_playwright() as p:
         context.add_init_script('const OriginalDate=Date;window.Date=class extends OriginalDate{constructor(...args){super(...(args.length?args:["2026-10-17T12:00:00Z"]));}static now(){return new OriginalDate("2026-10-17T12:00:00Z").getTime();}};')
         page.goto('http://127.0.0.1:5174/')
         nav=page.locator('nav:visible')
-        nav.get_by_role('button',name='Referral Scheme' if width==1280 else 'Referrals',exact=True).click()
-        expect(page.get_by_role('heading',name='Referral Scheme',exact=True)).to_be_visible()
+        nav.get_by_role('button',name='My bookings' if width==1280 else 'Bookings',exact=True).click()
+        expect(page.get_by_role('heading',name='Your referral credits',exact=True)).to_be_visible()
         expect(page.get_by_role('heading',name='Verify access to your rewards',exact=True)).to_be_visible()
         page.get_by_role('button',name='Email me an access code',exact=True).click()
         page.get_by_label('Referral access code',exact=True).fill('123456')
         page.get_by_role('button',name='Verify referral access',exact=True).click()
         assert page.evaluate('sessionStorage.getItem("snb_referral_access_referrer")')=='a'*64
+        nav.get_by_role('button',name='Referral Scheme' if width==1280 else 'Referrals',exact=True).click()
+        expect(page.get_by_role('heading',name='Referral Scheme',exact=True)).to_be_visible()
         expect(page.get_by_label('Your referral link',exact=True)).to_have_value('http://127.0.0.1:5174/?ref='+code)
         page.get_by_role('button',name='Copy link',exact=True).click()
         expect(page.get_by_role('status')).to_have_text('Referral link copied.')
@@ -109,6 +121,28 @@ with sync_playwright() as p:
         page.screenshot(path='/tmp/snb-referral-'+str(width)+'.png',full_page=True)
         nav.get_by_role('button',name='My bookings' if width==1280 else 'Bookings',exact=True).click()
         expect(page.get_by_text('Referral reward · Free lesson',exact=True)).to_be_visible()
+        # A new reward can reduce any of the three monthly membership plans.
+        for sub_id in ['SB_Z','SB_B','SB_M']:
+            credits=[{'id':credit,'earned_at':'2026-10-18T12:00:00Z'}];discounts=[];failure=True
+            nav.get_by_role('button',name='Classes',exact=True).click()
+            nav.get_by_role('button',name='My bookings' if width==1280 else 'Bookings',exact=True).click()
+            expect(page.get_by_role('heading',name='Your referral credits',exact=True)).to_be_visible()
+            page.get_by_label('Free lesson credit',exact=True).select_option(credit)
+            page.get_by_role('radio',name='£8.75 off one monthly membership payment',exact=True).check()
+            page.get_by_label('Membership and month',exact=True).select_option(sub_id)
+            page.get_by_role('button',name='Apply £8.75 membership credit',exact=True).click()
+            expect(page.get_by_role('alert')).to_contain_text('Refresh your memberships')
+            assert page.get_by_label('Membership and month',exact=True).input_value()==sub_id
+            failure=False
+            page.get_by_role('button',name='Apply £8.75 membership credit',exact=True).click()
+            expect(page.get_by_role('status')).to_contain_text('£26.25 instead of £35')
+            expect(page.get_by_text('£26.25 instead of £35 · Credit reserved for this payment',exact=True)).to_be_visible()
+            assert membership_requests[-1]['subscription_id']==sub_id and not page.get_by_role('dialog').count()
+            page.get_by_role('button',name='Use this credit for a lesson instead',exact=True).click()
+            expect(page.get_by_role('status')).to_contain_text('available again for a free Zumba or BoxFit lesson')
+            expect(page.get_by_role('radio',name='A free Zumba or BoxFit lesson',exact=True)).to_be_checked()
+        assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
+        page.evaluate('window.scrollTo(0,0)');page.screenshot(path='/tmp/snb-referral-membership-'+str(width)+'.png',full_page=True)
         nav.get_by_role('button',name='Referral Scheme' if width==1280 else 'Referrals',exact=True).click()
         expect(page.get_by_label('Your referral link',exact=True)).to_be_visible()
         assert page.get_by_role('heading',name='Verify access to your rewards',exact=True).count()==0,'access is remembered while navigating'
@@ -117,5 +151,5 @@ with sync_playwright() as p:
         assert page.evaluate('sessionStorage.getItem("snb_referral_access_referrer")') is None
         assert not writes,'free booking must be created by the server, not browser upserts'
         context.close()
-        print('PASS',width,'px: default sign-in, invitation signup, code persistence, sharing, cancellation popup, failed retry, free lesson in My bookings',flush=True)
+        print('PASS',width,'px: default sign-in, invitation signup, code persistence, sharing, cancellation popup, failed retry, free lesson and all three membership reductions/releases in My bookings',flush=True)
     browser.close()

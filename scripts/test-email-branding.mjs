@@ -10,7 +10,7 @@ const colours = ["background", "accent", "ink", "border"].map(name => {
   assert.ok(colour, `App palette includes ${name}`);
   return colour;
 });
-const types = ["verify", "welcome", "referral_access", "reset", "login_mfa", "admin_mfa", "admin", "admin_booking", "bank_transfer_booking", "booking_cancelled", "confirm_taster", "confirm_workshop", "booking_confirmation", "payment_confirmation", "mix_match_renewal", "blast"];
+const types = ["verify", "welcome", "referral_access", "referral_reward", "reset", "login_mfa", "admin_mfa", "admin", "admin_booking", "bank_transfer_booking", "booking_cancelled", "confirm_taster", "confirm_workshop", "booking_confirmation", "payment_confirmation", "mix_match_renewal", "blast"];
 const source = await readFile(new URL("../supabase/functions/send-email/index.ts", import.meta.url), "utf8");
 assert.deepEqual([...source.matchAll(/case "([^"]+)":/g)].map(match => match[1]).sort(), [...types].sort(), "Cover every notification type");
 const settings = { SUPABASE_URL:"https://fixture.supabase.test", SUPABASE_SERVICE_ROLE_KEY:"fixture-service-key", RESEND_API_KEY: "fixture-resend-key", ADMIN_EMAIL: "admin@example.test", EMAIL_LOGO_URL: "https://old.example.test/old-logo.png" };
@@ -47,7 +47,7 @@ try {
     };
     const response = await handler(new Request("https://fixture.supabase.test/functions/v1/send-email", { method: "POST", headers:{Authorization:"Bearer fixture-service-key"},body: JSON.stringify(payload) }));
     assert.equal(response.status, 200, type);
-    const dual = ["bank_transfer_booking", "booking_cancelled", "confirm_workshop", "booking_confirmation", "payment_confirmation", "mix_match_renewal"].includes(type);
+    const dual = ["bank_transfer_booking", "booking_cancelled", "confirm_workshop", "booking_confirmation", "payment_confirmation", "mix_match_renewal", "referral_reward"].includes(type);
     assert.equal(delivered.length, dual ? 2 : 1, type);
     for (const [index, { body, headers }] of delivered.entries()) {
       for (const colour of colours) assert.ok(body.html.includes(colour), `${type}: match app colour ${colour}`);

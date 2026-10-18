@@ -1,3 +1,4 @@
+import { processReferralRenewal, verifiedReferralReplacement, discountState } from "./referral-discounts.ts";
 import { qualifyReferralPayment } from "./referrals.ts";
 import { mixMatchRpc } from "./mix-match-storage.ts";
 import { MIX_MATCH_AMOUNT, MIX_MATCH_PLAN, isMixMatchPlan, mixMatchBookingIssue } from "./mix-match.ts";
@@ -92,7 +93,7 @@ export async function fillInitialMembership(group: Booking[], paymentId: string,
   await insertMissing(missing);
 }
 
-export async function sendBookingNotice(paymentId: string, type: "booking_confirmation" | "payment_confirmation") {
+export async function sendBookingNotice(paymentId: string, type: "booking_confirmation" | "payment_confirmation", verifiedAmount?:number) {
   const marker = type === "booking_confirmation" ? "booking_confirmation_sent_at" : "payment_confirmation_sent_at";
   const rows = await bookings({ gocardless_payment_id: `eq.${paymentId}`, status: type === "payment_confirmation" ? "eq.paid" : "neq.cancelled", select: "*" });
   if (!rows.length || rows.every(row => row[marker])) return;
@@ -107,7 +108,7 @@ export async function sendBookingNotice(paymentId: string, type: "booking_confir
     body: JSON.stringify({ ...rows[0], type:renewalNotice ? "mix_match_renewal" : type, session_name: names,
       membership_month:rows[0].booking_date?.slice(0, 7),
       booking_schedule: rows.some(row => isMixMatchPlan(row.plan)) ? rows.filter(row => row.booking_date && row.session_id !== "mix_match").map(row => `${row.session_name}: ${new Intl.DateTimeFormat("en-GB", { weekday:"long", day:"numeric", month:"long", year:"numeric", timeZone:"UTC" }).format(new Date(`${row.booking_date}T12:00:00Z`))}`).join("; ") : undefined,
-      amount: rows.reduce((sum, row) => sum + Number(row.amount || 0), 0),
+      amount: verifiedAmount ?? rows.reduce((sum, row) => sum + Number(row.amount || 0), 0),
       booking_dates: dates.map(date => new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${date}T12:00:00Z`))).join(", "),
     }),
   });
@@ -119,14 +120,16 @@ export async function sendBookingNotice(paymentId: string, type: "booking_confir
   });
 }
 
-export async function markSuccessfulPayment(paymentId: string, verifiedPayment?: { status: string }) {
+export async function markSuccessfulPayment(paymentId: string, verifiedPayment?: { status: string; amount?:number }) {
   const payment = verifiedPayment || (await gc(`/payments/${encodeURIComponent(paymentId)}`)).payments;
   if (!acceptedPaymentStatuses.includes(payment.status)) return false;
   await patch({ gocardless_payment_id: `eq.${paymentId}`, status: mutableStatuses }, { status: "paid" });
   // One combined booking/payment-setup confirmation, rather than a second
   // receipt at payout. Saved markers and mail-provider idempotency cover retries.
+  const reduction=(payment as any).metadata?.referral_discount_id ? await verifiedReferralReplacement(paymentId,payment) : null;
+  if(reduction && ["confirmed","paid_out"].includes(payment.status))await discountState("applied",{id:reduction.id,payment_id:paymentId});
   await qualifyReferralPayment(paymentId, payment);
-  await sendBookingNotice(paymentId, "payment_confirmation");
+  await sendBookingNotice(paymentId, "payment_confirmation",payment.amount===undefined?undefined:Number(payment.amount)/100);
   return true;
 }
 
@@ -201,7 +204,11 @@ export async function enrollRecurringMembership(paymentId: string, subscriptionI
   if (!bookingId) return;
   const [anchor] = await bookings({ id: `eq.${bookingId}`, select: "*", limit: "1" });
   if (!anchor) throw new Error("Subscription booking could not be found");
-  if (!payment.charge_date || !acceptedPaymentStatuses.includes(payment.status)) return;
+  if (!payment.charge_date) return;
+  const credit=await processReferralRenewal(paymentId,subscription,payment);
+  if(credit.redirect){await enrollRecurringMembership(credit.redirect,subscriptionId);return;}
+  if(!acceptedPaymentStatuses.includes(payment.status))return;
+  const allocationDate=credit.replacement ? `${credit.replacement.month}-01` : payment.charge_date;
   const sourceGroup = await groupFor(anchor);
   const existing = await bookings({ gocardless_payment_id: `eq.${paymentId}`, select: "*" });
   // Never create a second enrolment set for the subscription's initial payment.
@@ -211,11 +218,11 @@ export async function enrollRecurringMembership(paymentId: string, subscriptionI
     return;
   }
   if (isMixMatchPlan(anchor.plan)) {
-    if (Number(payment.amount) !== MIX_MATCH_AMOUNT || payment.currency !== "GBP") throw new Error("Mix & Match renewal must be £35 GBP");
+    if (Number(payment.amount) !== (credit.replacement ? 2625 : MIX_MATCH_AMOUNT) || payment.currency !== "GBP") throw new Error("Mix & Match renewal must be £35 GBP or a verified referral reduction");
     const renewal = await mixMatchRpc("record_mix_match_renewal", { p_details:{
       user_id:anchor.user_id, name:anchor.name, email:anchor.email, phone:anchor.phone || "",
-      payment_id:paymentId, subscription_id:subscriptionId, month:String(payment.charge_date).slice(0, 7),
-      amount:MIX_MATCH_AMOUNT, currency:"GBP",
+      payment_id:paymentId, subscription_id:subscriptionId, month:String(allocationDate).slice(0, 7),
+      amount:Number(payment.amount), currency:"GBP",
     } });
     await markSuccessfulPayment(paymentId, payment);
     if (renewal.selected_at) await sendBookingNotice(paymentId, "booking_confirmation");
@@ -227,7 +234,7 @@ export async function enrollRecurringMembership(paymentId: string, subscriptionI
     const sessionAnchor = sourceGroup.find(row => row.session_id === sessionId)!;
     const session = classPaymentConfig(sessionId);
     if (!session || session.weekday === null) continue;
-    for (const date of weeklyDatesInMonth(payment.charge_date, session.weekday)) {
+    for (const date of weeklyDatesInMonth(allocationDate, session.weekday)) {
       if (existing.some(row => row.session_id === sessionId && row.booking_date === date)) continue;
       rows.push({ id: `${groupId}-${sessionId}-${date}`, session_id: sessionId, session_name: sessionAnchor.session_name,
         user_id: anchor.user_id, name: anchor.name, email: anchor.email, phone: anchor.phone, plan: anchor.plan,
@@ -243,7 +250,11 @@ export async function enrollRecurringMembership(paymentId: string, subscriptionI
 
 export async function reconcilePayment(paymentId: string) {
   const { payments: payment } = await gc(`/payments/${encodeURIComponent(paymentId)}`);
-  if (payment.links?.subscription) {
+  if(payment.metadata?.referral_discount_id) {
+    const job=await verifiedReferralReplacement(paymentId,payment);
+    if(!job)throw new Error("This reduced payment does not match a referral credit");
+    await enrollRecurringMembership(paymentId,job.subscription_id);
+  } else if (payment.links?.subscription) {
     await enrollRecurringMembership(paymentId, payment.links.subscription);
   } else if (payment.metadata?.booking_id) {
     const result = await syncBooking(payment.metadata.booking_id, false);
@@ -265,6 +276,11 @@ export async function syncBooking(bookingId: string, tolerateEmailFailure = true
   if (anchor.gocardless_payment_id?.startsWith("PM")) {
     const { payments: payment } = await gc(`/payments/${encodeURIComponent(anchor.gocardless_payment_id)}`);
     if (!acceptedPaymentStatuses.includes(payment.status)) return { allocated: false, reason: "payment_not_authorised", payment_id: anchor.gocardless_payment_id, payment_status: payment.status };
+    if(payment.metadata?.referral_discount_id) {
+      await reconcilePayment(anchor.gocardless_payment_id);
+      const allocated=await bookings({gocardless_payment_id:`eq.${anchor.gocardless_payment_id}`,status:"eq.paid",select:"id",limit:"1"});
+      return {allocated:allocated.length>0};
+    }
     if (payment.metadata?.booking_id && payment.metadata.booking_id !== originalId && !payment.links?.subscription) throw new Error("Payment does not match this booking");
     verifiedPayment = payment;
     if (payment.links?.subscription) {

@@ -8,7 +8,7 @@ import { emailMarketingEligible } from "./marketing.js";
 import { SELF_DEFENCE_CAPACITY, selfDefenceQuote } from "../supabase/functions/_shared/self-defence.ts";
 import { useCheckoutPolicy } from "./use-checkout-policy.jsx";
 import TermsContent from "./TermsContent.jsx";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   Calendar, MapPin, Clock, Check, X, ArrowRight, ChevronLeft,
   Loader2, Sparkles, RotateCcw, Music2, Flame, Dumbbell, Flower2,
@@ -389,6 +389,7 @@ function BookingActions({ booking, onStatusChange }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const isReferral = booking.plan === "Referral reward";
+  if (booking.type === "referral_credit") return <p className="text-xs text-stone-500">Managed through Referral Scheme.</p>;
   if (isReferral && isCancelled) return <p className="text-xs text-stone-500">Rebook returned credits in Referral Scheme.</p>;
 
   return (
@@ -2137,6 +2138,10 @@ function cancellationEmail(booking, fallback = {}) {
   };
 }
 
+function referralViewKey(bookings,user) {
+  return bookings.filter(booking=>bookingBelongsToUser(booking,user)).map(booking=>`${booking.id}:${booking.status}:${booking.gocardlessPaymentId||""}`).sort().join("|");
+}
+
 function MyBookings({ bookings, currentUser, onCancel, onDatesSaved }) {
   const [confirmCancel, setConfirmCancel] = useState(null);
   const [cancelling, setCancelling] = useState(null);
@@ -2147,7 +2152,7 @@ function MyBookings({ bookings, currentUser, onCancel, onDatesSaved }) {
   const mine = bookings
     .filter(b => bookingBelongsToUser(b, currentUser))
     .filter(customerBookingIsVisible)
-    .filter(booking => booking.sessionId !== "mix_match")
+    .filter(booking => booking.sessionId !== "mix_match" && booking.type !== "referral_credit")
     .filter(isUpcoming);
   const recoveryIds = bookingSyncIds(bookings.filter(b => bookingBelongsToUser(b, currentUser) && isUpcoming(b)));
   async function recoverPendingPayments() {
@@ -2166,6 +2171,7 @@ function MyBookings({ bookings, currentUser, onCancel, onDatesSaved }) {
   }, [recoveryIds.length]);
   return (
     <div className="max-w-md mx-auto flex flex-col gap-3">
+      {bookings.some(b=>b.type==="referral_credit" && bookingBelongsToUser(b,currentUser)) && <ReferralScheme creditsOnly refreshKey={referralViewKey(bookings,currentUser)} user={currentUser} invoke={callEdgeFunction} onBooked={onDatesSaved}/>}
       <MixMatchRenewals user={currentUser} bookings={bookings} invoke={callEdgeFunction} onSaved={onDatesSaved}/>
       {mine.length===0
         ? <div className="text-center py-12">
@@ -3028,7 +3034,8 @@ function AdminPage() {
   const [mfaSentMsg, setMfaSentMsg] = useState("");
   const [showAdminPw, setShowAdminPw] = useState(false);
 
-  const { bookings, setBookings, loading, loadError, reloadBookings } = useBookings(unlocked);
+  const { bookings:allBookings, setBookings, loading, loadError, reloadBookings } = useBookings(unlocked);
+  const bookings=useMemo(()=>allBookings.filter(booking=>booking.type!=="referral_credit"),[allBookings]);
   const [recoveringBookings, setRecoveringBookings] = useState(false);
   const [bookingRecoveryNotice, setBookingRecoveryNotice] = useState("");
   const [bookingRecoveryIssues, setBookingRecoveryIssues] = useState([]);
@@ -4012,7 +4019,7 @@ function BookingApp() {
             : tab==="retreats"
               ? <ComingSoon/>
               : tab==="referrals"
-                ? <ReferralScheme user={currentUser} invoke={callEdgeFunction} onBooked={reloadBookings}/>
+                ? <ReferralScheme refreshKey={referralViewKey(bookings,currentUser)} user={currentUser} invoke={callEdgeFunction} onBooked={reloadBookings}/>
               : tab==="account"
                 ? <AccountPage currentUser={currentUser} onUpdate={s => setCurrentUser(s)}/>
                 : tab==="studio-hire"

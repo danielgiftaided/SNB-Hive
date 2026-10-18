@@ -1,4 +1,4 @@
-import { enrollRecurringMembership, fulfillBillingRequest, reconcilePayment } from "../_shared/gocardless-bookings.ts";
+import { enrollRecurringMembership, fulfillBillingRequest, reconcilePayment, gc } from "../_shared/gocardless-bookings.ts";
 
 async function validSignature(body: string, signature: string | null) {
   const secret = Deno.env.get("GOCARDLESS_WEBHOOK_SECRET");
@@ -23,6 +23,12 @@ Deno.serve(async request => {
         if (!result.allocated && result.reason === "checkout_pending") throw new Error("Fulfilled checkout is not visible yet");
       }
       if (event.resource_type === "payments" && event.links?.payment) {
+        // A cancelled full-price collection can be the first acknowledgement
+        // of our one-off referral replacement after a lost provider response.
+        if(event.action === "cancelled") {
+          const subscriptionId=event.links.subscription || (await gc(`/payments/${encodeURIComponent(event.links.payment)}`)).payments.links?.subscription;
+          if(subscriptionId)await enrollRecurringMembership(event.links.payment,subscriptionId);
+        }
         // Renewals allocate the month's dates as soon as the scheduled payment
         // is created/submitted, independently of collection and payout timing.
         if (["created", "submitted", "confirmed", "paid_out"].includes(event.action)) {
