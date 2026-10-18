@@ -10,7 +10,7 @@ const colours = ["background", "accent", "ink", "border"].map(name => {
   assert.ok(colour, `App palette includes ${name}`);
   return colour;
 });
-const types = ["verify", "welcome", "referral_access", "reset", "login_mfa", "admin_mfa", "admin", "admin_booking", "bank_transfer_booking", "booking_cancelled", "confirm_taster", "confirm_workshop", "booking_confirmation", "payment_confirmation", "mix_match_renewal", "blast"];
+const types = ["verify", "welcome", "referral_access", "referral_reward", "reset", "login_mfa", "admin_mfa", "admin", "admin_booking", "bank_transfer_booking", "booking_cancelled", "confirm_taster", "confirm_workshop", "booking_confirmation", "payment_confirmation", "mix_match_renewal", "blast"];
 const source = await readFile(new URL("../supabase/functions/send-email/index.ts", import.meta.url), "utf8");
 assert.deepEqual([...source.matchAll(/case "([^"]+)":/g)].map(match => match[1]).sort(), [...types].sort(), "Cover every notification type");
 const settings = { SUPABASE_URL:"https://fixture.supabase.test", SUPABASE_SERVICE_ROLE_KEY:"fixture-service-key", RESEND_API_KEY: "fixture-resend-key", ADMIN_EMAIL: "admin@example.test", EMAIL_LOGO_URL: "https://old.example.test/old-logo.png" };
@@ -47,7 +47,7 @@ try {
     };
     const response = await handler(new Request("https://fixture.supabase.test/functions/v1/send-email", { method: "POST", headers:{Authorization:"Bearer fixture-service-key"},body: JSON.stringify(payload) }));
     assert.equal(response.status, 200, type);
-    const dual = ["bank_transfer_booking", "booking_cancelled", "confirm_workshop", "booking_confirmation", "payment_confirmation", "mix_match_renewal"].includes(type);
+    const dual = ["bank_transfer_booking", "booking_cancelled", "confirm_workshop", "booking_confirmation", "payment_confirmation", "mix_match_renewal", "referral_reward"].includes(type);
     assert.equal(delivered.length, dual ? 2 : 1, type);
     for (const [index, { body, headers }] of delivered.entries()) {
       for (const colour of colours) assert.ok(body.html.includes(colour), `${type}: match app colour ${colour}`);
@@ -69,6 +69,21 @@ try {
     }
     console.log(`PASS ${type}: matching palette and inline app logo; ${delivered.length} recipient(s), calendar and idempotency preserved`);
   }
+  for (const role of ["referrer", "referred"]) {
+    const delivered=[];
+    globalThis.fetch=async (url,init)=>{assert.equal(url,"https://api.resend.com/emails");delivered.push({body:JSON.parse(init.body),headers:init.headers});return new Response('{"id":"fixture"}');};
+    const response=await handler(new Request("https://fixture.supabase.test/functions/v1/send-email",{method:"POST",headers:{Authorization:"Bearer fixture-service-key"},body:JSON.stringify({type:"referral_reward",reward_id:`credit-${role}`,beneficiary_role:role,to_name:"Test Member",to_email:"member@example.test"})}));
+    assert.equal(response.status,200);assert.equal(delivered.length,2);
+    assert.match(delivered[0].body.html,role==="referred"?/Your first monthly membership payment/:/Your referred member’s first monthly membership payment/);
+    assert.match(delivered[1].body.html,role==="referred"?/The referred member is eligible/:/The referrer is eligible/);
+    for(const [index,mail] of delivered.entries()){
+      assert.equal(mail.headers["Idempotency-Key"],`referral-reward-credit-${role}-${index}`);
+      for(const colour of colours)assert.ok(mail.body.html.includes(colour));
+      assert.match(mail.body.html,/£8.75/);assert.match(mail.body.html,/My bookings/);
+      assert.deepEqual(Buffer.from(mail.body.attachments.find(a=>a.content_id==="snb-hive-logo").content,"base64"),appLogo);
+    }
+  }
+  console.log("PASS both beneficiary email variants: personal reward wording, Shams notification, distinct idempotency, palette and app logo");
   globalThis.fetch = async url => url.endsWith("/rpc/prepare_signup_verification") ? new Response("true") : new Response("Fixture provider unavailable", { status: 503 });
   assert.equal((await handler(new Request("https://fixture.supabase.test/functions/v1/send-email", { method: "POST", body: JSON.stringify({ type: "verify", to_email: "member@example.test", code: "123456" }) }))).status, 500);
   console.log("PASS provider failures still report an error; no live emails sent");

@@ -100,6 +100,16 @@ function messagesFor(p: Payload): Message[] {
         paragraph("The Classes page shows current dates, times and availability. You can view confirmed bookings in My bookings and manage your details in Account.") + invitation +
         paragraph("If you need a hand getting started or have a question about a class, just reply to this email. We look forward to meeting you!") + paragraph("Shams and the SNB Hive team")) }];
     }
+    case "referral_reward": {
+      const referred = p.beneficiary_role === "referred";
+      const introduction = referred
+        ? `Hi ${value(p.to_name,"there")}, welcome to SNB Hive! Your first monthly membership payment has now been confirmed. As you joined through a referral, you are eligible for one free Pay as you go credit.`
+        : `Hi ${value(p.to_name,"there")}, thank you for sharing SNB Hive! Your referred member’s first monthly membership payment has now been confirmed, so you are eligible for one free Pay as you go credit.`;
+      return [
+        {to,subject:"You’ve earned a free SNB Hive class credit",html:shell(referred ? "Your referral welcome credit" : "Your referral has qualified","A free lesson, with our thanks",paragraph(introduction)+paragraph("Your credit is in My bookings. Use it for a regular Zumba or BoxFit lesson, or apply it to an eligible monthly membership (including Mix & Match) to reduce one £35 payment by £8.75 to £26.25. Subsequent monthly payments remain £35. GoCardless processing cutoffs may mean the next eligible collection is used."))},
+        {to:BOOKING_EMAIL,subject:`Referral reward earned: ${value(p.to_name)}`,html:shell("A member earned a referral credit","Free Pay as you go credit earned",paragraph(`A referred member’s first monthly membership payment has been confirmed. The ${referred ? "referred member" : "referrer"} is eligible for one free Pay as you go credit in My bookings, redeemable for Zumba or BoxFit, or an £8.75 reduction on one eligible monthly membership payment.`)+details([[referred ? "Referred member" : "Referrer",p.to_name],["Email",p.to_email],["Reward reference",p.reward_id]]))},
+      ];
+    }
     case "referral_access":
       return [{ to,subject:"Your SNB Hive referral access code",html:shell("Verify access to your referral rewards","Your referral access code",paragraph(`Hi ${value(p.to_name,"there")}, enter this code in Referral Scheme to access your invitations and free lesson credits. If you did not request this, ignore this email.`)+codeBox(p.code)) }];
     case "reset":
@@ -153,8 +163,8 @@ function messagesFor(p: Payload): Message[] {
     case "mix_match_renewal": {
       const month = /^\d{4}-\d{2}$/.test(value(p.membership_month)) ? new Intl.DateTimeFormat("en-GB", { month:"long", year:"numeric", timeZone:"Europe/London" }).format(new Date(`${value(p.membership_month)}-01T12:00:00Z`)) : "this month";
       return [
-        { to, subject:"Mix & Match membership renewed — choose your dates", html:shell("Your monthly membership is ready", "Choose your four classes", paragraph(`Hi ${value(p.name, "there")}, your £35 Mix & Match membership has renewed for ${month}. Your Direct Debit payment setup has been accepted; GoCardless will collect it automatically.`) + paragraph("Open My bookings in the booking app and choose exactly two Zumba dates and two BoxFit dates in your membership month. No lesson dates are reserved until you save your choices. There is no extra payment when you choose your dates.")) },
-        { to:BOOKING_EMAIL, subject:`Mix & Match renewal: ${value(p.name)} — ${month}`, html:shell("A Mix & Match membership renewed", "Membership renewed — dates to be chosen", details([["Member",p.name],["Email",p.email],["Membership month",month],["Amount","£35"],["Classes","2 Zumba and 2 BoxFit — awaiting date selection"]])) },
+        { to, subject:"Mix & Match membership renewed — choose your dates", html:shell("Your monthly membership is ready", "Choose your four classes", paragraph(`Hi ${value(p.name, "there")}, your £${Number(p.amount ?? 35).toFixed(2)} Mix & Match membership has renewed for ${month}. Your Direct Debit payment setup has been accepted; GoCardless will collect it automatically.`) + paragraph("Open My bookings in the booking app and choose exactly two Zumba dates and two BoxFit dates in your membership month. No lesson dates are reserved until you save your choices. There is no extra payment when you choose your dates.")) },
+        { to:BOOKING_EMAIL, subject:`Mix & Match renewal: ${value(p.name)} — ${month}`, html:shell("A Mix & Match membership renewed", "Membership renewed — dates to be chosen", details([["Member",p.name],["Email",p.email],["Membership month",month],["Amount",`£${Number(p.amount ?? 35).toFixed(2)}`],["Classes","2 Zumba and 2 BoxFit — awaiting date selection"]])) },
       ];
     }
     case "blast":
@@ -197,7 +207,7 @@ Deno.serve(async request => {
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
   try {
     const payload = await request.json();
-    if (payload.type === "referral_access" && (!Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || request.headers.get("Authorization") !== `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`)) return json({error:"Not authorized"},403);
+    if (["referral_access","referral_reward"].includes(payload.type) && (!Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || request.headers.get("Authorization") !== `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`)) return json({error:"Not authorized"},403);
     if (["verify", "login_mfa"].includes(payload.type)) {
       await signupRpc("prepare_signup_verification", { p_email: value(payload.to_email).trim().toLowerCase(),
         p_code_hash: await signupCodeHash(payload.to_email, payload.code) });
@@ -231,7 +241,7 @@ Deno.serve(async request => {
     }
     const messages = messagesFor(payload);
     const category = payload.type === "booking_confirmation" ? "booking" : payload.type === "payment_confirmation" ? "payment" : payload.type === "mix_match_renewal" ? "mix-renewal" : "";
-    await Promise.all(messages.map((message, index) => send(message, category && payload.gocardless_payment_id ? `${category}-${value(payload.gocardless_payment_id)}-${index}` : payload.plan === "Referral reward" && payload.id ? `referral-booking-${value(payload.id)}-${index}` : undefined)));
+    await Promise.all(messages.map((message, index) => send(message, category && payload.gocardless_payment_id ? `${category}-${value(payload.gocardless_payment_id)}-${index}` : payload.type === "referral_reward" && payload.reward_id ? `referral-reward-${value(payload.reward_id)}-${index}` : payload.plan === "Referral reward" && payload.id ? `referral-booking-${value(payload.id)}-${index}` : undefined)));
     console.log(`[send-email] sent type=${value(payload.type)} messages=${messages.length}`);
     return json({ success: true });
   } catch (error) {

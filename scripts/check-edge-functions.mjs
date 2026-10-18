@@ -15,6 +15,7 @@ const functions = [
   "supabase/functions/mix-match-membership/index.ts",
   "supabase/functions/referral-scheme/index.ts",
   "supabase/functions/_shared/referrals.ts",
+  "supabase/functions/_shared/referral-discounts.ts",
   "supabase/functions/_shared/mix-match.ts",
   "supabase/functions/_shared/mix-match-storage.ts",
 ];

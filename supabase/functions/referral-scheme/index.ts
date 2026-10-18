@@ -1,8 +1,9 @@
+import { referralMembershipOptions, applyReferralMembershipCredit, discountState } from "../_shared/referral-discounts.ts";
 import { corsHeaders, json } from "../_shared/http.ts";
 import { mixMatchRpc } from "../_shared/mix-match-storage.ts";
 import { classPaymentConfig } from "../_shared/class-config.ts";
 import { bookings } from "../_shared/gocardless-bookings.ts";
-import { sendReferralBookingNotice, referralHash } from "../_shared/referrals.ts";
+import { sendReferralBookingNotice, sendReferralRewardNotices, referralHash } from "../_shared/referrals.ts";
 
 // Dashboard/redemption require an opaque token issued after a server-generated
 // email challenge. A browser member ID/session alone cannot spend credits.
@@ -39,7 +40,24 @@ Deno.serve(async request => {
       // Retry a missed confirmation without making another reservation.
       const pending = await bookings({ user_id:`eq.${p.member_id}`,plan:"eq.Referral reward",status:"eq.confirmed",booking_confirmation_sent_at:"is.null",select:"*" });
       for (const row of pending) { try { await sendReferralBookingNotice(row); } catch { /* Retry on next visit. */ } }
-      return json(dashboard);
+      let noticePending=false;
+      try {await sendReferralRewardNotices(p.member_id);} catch {noticePending=true;}
+      const discounts=await discountState("list",{member_id:p.member_id});
+      let memberships=[],membershipError="";
+      if(dashboard.credits.length) {
+        try {memberships=await referralMembershipOptions(p.member_id);} catch(error) {membershipError=error instanceof Error?error.message:"Memberships could not be checked";}
+      }
+      return json({...dashboard,discounts,memberships,membership_error:membershipError,reward_email_pending:noticePending});
+    }
+    if(p.action==="release_membership_credit") {
+      if(typeof p.credit_id!=="string"||!/^[a-f0-9-]{36}$/i.test(p.credit_id))return json({error:"Choose a membership credit"},400);
+      await discountState("release",{member_id:p.member_id,credit_id:p.credit_id});
+      return json({success:true});
+    }
+    if(p.action==="membership_credit") {
+      if(typeof p.credit_id!=="string"||!/^[a-f0-9-]{36}$/i.test(p.credit_id)||typeof p.subscription_id!=="string"||!/^SB[a-zA-Z0-9_-]+$/.test(p.subscription_id))return json({error:"Choose a free credit and an eligible membership"},400);
+      const job=await applyReferralMembershipCredit(p.member_id,p.credit_id,p.subscription_id);
+      return json({success:true,discount:job});
     }
     if (p.action !== "redeem" || typeof p.credit_id !== "string" || !/^[a-f0-9-]{36}$/i.test(p.credit_id) ||
       typeof p.booking_date !== "string" || !classPaymentConfig(p.session_id)?.dates.includes(p.booking_date)) return json({ error:"Choose an available Zumba or BoxFit date" },400);

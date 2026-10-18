@@ -55,6 +55,7 @@ globalThis.fetch = async (input, init = {}) => {
     if (url.pathname.startsWith("/subscriptions/")) return json({ subscriptions: subscriptions.get(url.pathname.split("/").at(-1)) });
     throw new Error(`Unexpected provider route ${url.pathname}`);
   }
+  if (url.pathname === "/rest/v1/rpc/referral_discount_state") return json(null);
   if (url.pathname === "/rest/v1/rpc/referral_checkout_for_booking") return json(null);
   if (url.pathname === "/functions/v1/send-email") {
     const notice = JSON.parse(init.body); notices.push(notice);
