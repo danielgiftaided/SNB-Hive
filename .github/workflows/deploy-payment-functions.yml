@@ -22,6 +22,7 @@ on:
       - "supabase/migrations/20261017030000_mix_match_memberships.sql"
       - "supabase/migrations/20261017040000_referral_scheme.sql"
       - "supabase/migrations/20261018000000_referral_membership_credits.sql"
+      - "supabase/migrations/20261019000000_class_times.sql"
       - "supabase/config.toml"
       - ".github/workflows/deploy-payment-functions.yml"
   workflow_dispatch:
@@ -190,7 +191,7 @@ jobs:
         run: |
           node --input-type=module <<'NODE'
           import { readFileSync, writeFileSync } from 'node:fs';
-          const files = ['supabase/migrations/20261017040000_referral_scheme.sql', 'supabase/migrations/20261018000000_referral_membership_credits.sql'];
+          const files = ['supabase/migrations/20261017040000_referral_scheme.sql', 'supabase/migrations/20261018000000_referral_membership_credits.sql', 'supabase/migrations/20261019000000_class_times.sql'];
           // Apply the original and follow-on definitions atomically. A redeploy
           // must never briefly expose redemption without the reservation guard.
           const query = 'begin;\n' + files.map(file => readFileSync(file, 'utf8').replace(/^begin;[ \t]*$/gm, '').replace(/^commit;[ \t]*$/gm, '')).join('\n') + '\ncommit;' +

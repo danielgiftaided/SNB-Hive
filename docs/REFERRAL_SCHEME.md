@@ -37,7 +37,7 @@ This does not migrate the rest of the app to server-verified authentication/RLS.
 
 ## Deployment
 
-The existing Edge Functions workflow applies the original referral migration followed by `20261018000000_referral_membership_credits.sql`, applies those two files in one transaction so reservation protection is never temporarily removed on redeployment, checks the original nine and four new service RPCs, deploys `referral-scheme` and then the updated mailer/payment handlers. Deploy this backend successfully **before the frontend**, since referred signup and membership checkout now depend on the migration. Re-running the migration preserves codes, existing attribution and rewards. No new secrets or GoCardless templates are needed. No live changes or messages are made by the fixture tests.
+The existing Edge Functions workflow applies the original referral migration followed by `20261018000000_referral_membership_credits.sql`, then `20261019000000_class_times.sql` for current class times, applies those files in one transaction so reservation protection is never temporarily removed on redeployment, checks the original nine and four new service RPCs, deploys `referral-scheme` and then the updated mailer/payment handlers. Deploy this backend successfully **before the frontend**, since referred signup and membership checkout now depend on the migration. Re-running the migration preserves codes, existing attribution and rewards. No new secrets or GoCardless templates are needed. No live changes or messages are made by the fixture tests.
 
 ## Verification
 

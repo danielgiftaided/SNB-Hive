@@ -92,7 +92,7 @@ try{
  await member('legacy-owner');await member('legacy-friend',await code('legacy-owner'));
  await db.exec("alter table snb_private.referrals add column reward_notice_sent_at timestamptz; update snb_private.referrals set earned_at=now(),payment_id='PM_LEGACY',booking_id='legacy-used',redemption_count=2,reward_notice_sent_at=now() where referred_id='legacy-friend'; insert into snb_private.referral_redemptions select 'legacy-used',id,referrer_id from snb_private.referrals where referred_id='legacy-friend';");
  const legacyId=(await data("select id from snb_private.referrals where referred_id='legacy-friend'"))[0].id;
- await db.exec(readFileSync('supabase/migrations/20261018000000_referral_membership_credits.sql','utf8'));
+ await db.exec(readFileSync('supabase/migrations/20261018000000_referral_membership_credits.sql','utf8'));await db.exec(readFileSync('supabase/migrations/20261019000000_class_times.sql','utf8'));
  assert.equal((await dashboard('legacy-owner')).credits.length,0,'upgrade preserves an already spent credit');
  const legacyCredit=(await data('select * from snb_private.referral_credits where id=$1',[legacyId]))[0];assert.equal(legacyCredit.booking_id,'legacy-used');assert.equal(legacyCredit.redemption_count,2);assert.ok(legacyCredit.reward_notice_sent_at,'upgrade preserves notice acknowledgement and old UUID');
  assert.equal((await dashboard('legacy-friend')).credits.length,1,'already qualified referred members get one independent credit');
@@ -323,6 +323,47 @@ try{
  for(const signature of ['referral_discount_state(text,jsonb)','referral_reward_notices(text,text)','mark_referral_reward_notice(uuid)','sync_referral_credit_entry(uuid)'])assert.equal((await data('select has_function_privilege($1,$2,$3) allowed',['anon','public.'+signature,'EXECUTE']))[0].allowed,false);
  console.log('PASS bank-submission race, accurate postponed month, queued-credit release, no double use, provider-customer ownership and private billing RPCs');
  console.log('PASS actual £26.25 replacements for Zumba, BoxFit and Mix & Match; submitted-payment cutoff; one-off saving only; outage/lost-response recovery; preserved bookings/cancellations; unchanged £35 subscriptions');
+ // The SQL gates must agree with the advertised times, including London DST.
+ async function boundaryCredit(label) {
+   await member(label,existingCode);
+   await rpc('bind_referral_checkout',{p_billing_request_id:'BRQ_'+label,p_booking_id:'root-'+label,p_member_id:label});
+   await rpc('award_referral_reward',{p_details:{billing_request_id:'BRQ_'+label,payment_id:'PM_'+label,status:'confirmed',amount:3500,currency:'GBP',created_at:fixtureNow}});
+   return (await data("select c.id from snb_private.referral_credits c join snb_private.referrals r on r.id=c.referral_id where r.referred_id=$1 and c.beneficiary_role='referrer'",[label]))[0].id;
+ }
+ const plusDays=(date,days)=>{const stamp=new RealDate(date+'T12:00:00Z');stamp.setUTCDate(stamp.getUTCDate()+days);return stamp.toISOString().slice(0,10);};
+ for(const [session,date,finishUtc,startUtc] of [
+   ['zumba','2101-01-07','12:30:00','11:30:00'],['boxfit','2101-01-06','14:30:00','13:30:00'],
+   ['zumba','2101-05-06','11:30:00','10:30:00'],['boxfit','2101-05-05','13:30:00','12:30:00'],
+ ]) {
+   fixtureNow=plusDays(date,-3)+'T00:00:00Z';
+   const label='clock-'+session+'-'+date,creditId=await boundaryCredit(label);
+   const claim={p_member_id:'existing',p_credit_id:creditId,p_session_id:session,p_booking_date:date};
+   fixtureNow=date+'T'+finishUtc+'Z';
+   await assert.rejects(rpc('redeem_referral_reward',claim),/available Zumba or BoxFit date/,'SQL rejects a referral at the new exact finish');
+   fixtureNow=new RealDate(new RealDate(fixtureNow).getTime()-1000).toISOString();
+   const free=await rpc('redeem_referral_reward',claim);
+   fixtureNow=date+'T'+finishUtc+'Z';await db.query("update bookings set status='cancelled' where id=$1",[free.booking_id]);
+   // The exact 24-hour cancellation boundary returns the credit, one second
+   // later consumes it. A fresh credit/booking isolates each boundary.
+   for(const secondsLate of [0,1]) {
+     fixtureNow=plusDays(date,-3)+'T00:00:00Z';
+     const cancellationCredit=await boundaryCredit(label+'-cancel-'+secondsLate);
+     const booking=await rpc('redeem_referral_reward',{...claim,p_credit_id:cancellationCredit});
+     fixtureNow=new RealDate(new RealDate(plusDays(date,-1)+'T'+startUtc+'Z').getTime()+secondsLate*1000).toISOString();
+     await db.query("update bookings set status='cancelled' where id=$1",[booking.booking_id]);
+     const restored=(await data('select booking_id from snb_private.referral_credits where id=$1',[cancellationCredit]))[0].booking_id;
+     assert.equal(restored===null,secondsLate===0,'24-hour return uses the new start time in London');
+   }
+   const mixMember='mix-'+label;await member(mixMember);
+   const renewal=await rpc('record_mix_match_renewal',{p_details:{payment_id:'PM_'+mixMember,subscription_id:'SB_'+mixMember,amount:3500,currency:'GBP',month:date.slice(0,7),user_id:mixMember,name:mixMember,email:mixMember+'@example.test'}});
+   const other=session==='zumba'?'boxfit':'zumba',nextOther=plusDays(date,session==='zumba'?6:1);
+   const choices=[{session_id:session,booking_date:date},{session_id:session,booking_date:plusDays(date,7)},{session_id:other,booking_date:nextOther},{session_id:other,booking_date:plusDays(nextOther,7)}];
+   const save={p_member_id:mixMember,p_membership_id:renewal.id,p_choices:choices};
+   fixtureNow=date+'T'+finishUtc+'Z';await assert.rejects(rpc('select_mix_match_dates',save),/available dates/,'Mix & Match SQL rejects the exact new finish');
+   fixtureNow=new RealDate(new RealDate(fixtureNow).getTime()-1000).toISOString();
+   assert.equal((await rpc('select_mix_match_dates',save)).already_selected,false,'Mix & Match SQL accepts one second before the new finish');
+ }
+ console.log('PASS SQL Zumba/BoxFit exact finish and 24-hour referral cancellation boundaries in both BST/GMT, plus Mix & Match allocation cutoff');
  const workflow=readFileSync('.github/workflows/deploy-payment-functions.yml','utf8');assert.ok(workflow.indexOf('name: Ensure referral rewards')<workflow.indexOf('name: Deploy GoCardless checkout'));assert.ok(workflow.includes('referral_ready !== true'));assert.ok(workflow.includes('supabase functions deploy referral-scheme'));
  const deployStep=workflow.split('      - name: Ensure referral rewards are available\n')[1].split('      - name: Deploy referral scheme')[0];
  const deployScripts=[...deployStep.matchAll(/<<'NODE'\n([\s\S]*?)          NODE/g)].map(m=>m[1].split('\n').map(line=>line.slice(10)).join('\n'));assert.equal(deployScripts.length,2);

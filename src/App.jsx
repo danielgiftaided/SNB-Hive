@@ -25,7 +25,7 @@ import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../supabase
 import { membershipDatesFrom } from "../supabase/functions/_shared/membership-bookings.ts";
 import { checkoutErrorDetail, singleMembershipBooking } from "./checkout.js";
 import { downloadCSV, plainDashes } from "./csv.js";
-import { CLASS_PAYMENTS, CLASS_TASTERS, PAYG_AMOUNT, TASTER_AMOUNT, SELF_DEFENCE_DATES, SELF_DEFENCE_PRICE, CLASS_BANK_ACCOUNT, classPaymentConfig, classDatesInMonth, classBookingSchedule, upcomingBookingDates, bookingToday } from "../supabase/functions/_shared/class-config.ts";
+import { CLASS_PAYMENTS, classTimeLabel, CLASS_TASTERS, PAYG_AMOUNT, TASTER_AMOUNT, SELF_DEFENCE_DATES, SELF_DEFENCE_PRICE, CLASS_BANK_ACCOUNT, classPaymentConfig, classDatesInMonth, classBookingSchedule, upcomingBookingDates, bookingToday } from "../supabase/functions/_shared/class-config.ts";
 
 /* =====================================================================
    CONFIG — edit these to customise the app.
@@ -58,7 +58,7 @@ const OPEN_DAY = {
 const WORKSHOPS = [];
 
 const DEFAULT_CLASSES = [
-  { id:"zumba",    name:"Zumba",                  tagline:"High-energy dance cardio",  day:"Fridays", time:"12:00–13:00", capacity:12, icon:"music",   color:"#C99A4B",
+  { id:"zumba",    name:"Zumba",                  tagline:"High-energy dance cardio",  day:"Fridays", time:classTimeLabel("zumba"), capacity:12, icon:"music",   color:"#C99A4B",
     venue:"Hackney Central",              venueMap:"https://www.google.com/maps/search/?api=1&query=Hackney+Central+London",
     whatToBring:"Wear comfortable clothes and grip socks", icsStart:"20260925T110000", icsEnd:"20260925T114500", description:"Zumba is about much more than fitness. It's about community, confidence, and feeling good. Dance has been shown to support memory, coordination, and emotional wellbeing, and music and dance can help get through some of the most challenging times in life.\n\nIt has the power to bring people together, lift spirits, and remind us that exercise doesn't have to feel like a chore — it can be something you genuinely look forward to.\n\nZumba is based on repetitive movements throughout each song, so you don't need to be an experienced dancer or technically advanced to join in. It's all about having fun while getting fit.\n\nThe routines are repeated for about 6 weeks, which allows people to learn the moves and build their confidence and then new routines are introduced gradually over time. That repetition helps build confidence because your body begins to associate the movements with the music, allowing you to learn naturally without pressure. It's a welcoming, supportive environment." },
   { id:"somatic",  name:"Somatic",                 tagline:"Move, breathe, reconnect",  day:"TBC", time:"TBC", capacity:20, icon:"flower",  color:"#7C9885", tasterStatus:"tbc",
@@ -67,7 +67,7 @@ const DEFAULT_CLASSES = [
   { id:"strength", name:"Strength & Conditioning", tagline:"Build strength, build power", day:"TBC", time:"TBC", capacity:20, icon:"dumbbell",color:"#1F4A42", tasterStatus:"tbc", 
     venue:"Hackney Central", venueMap:"https://www.google.com/maps/search/?api=1&query=Hackney+Central+London",
     whatToBring:"Gym clothes and trainers and bring a water bottle.", icsStart:"20260924T110000", icsEnd:"20260924T114500", description:"Strength training is one of the most beneficial forms of exercise for women, particularly as we navigate the demands of motherhood, work and daily life.\n\nThis class focuses on building functional strength, improving mobility and helping women feel stronger and more capable in their everyday activities.\n\nUsing bodyweight exercises, resistance bands and light equipment, sessions are designed to be accessible while still providing an effective workout.\n\nBenefits include:\n• Increased muscle tone and strength\n• Support with sustainable fat loss and body composition goals\n• Improved posture and reduced aches and pains\n• Better balance and stability\n• Increased energy levels\n• Stronger bones and joints\n• Improved confidence in daily movement\n• Support for healthy ageing and long-term wellbeing\n\nRather than focusing on appearance alone, this class encourages women to appreciate what their bodies can do and develop strength that carries into everyday life.\n\nSuitable for all fitness levels and can be adapted to individual needs." },
-  { id: "boxfit", name: "BoxFit", tagline: "Cardio, conditioning & pad work", day: "Thursdays", time: "13:00–14:00", capacity: 18, icon: "flame", color: "#D06B4F",
+  { id: "boxfit", name: "BoxFit", tagline: "Cardio, conditioning & pad work", day: "Thursdays", time: classTimeLabel("boxfit"), capacity: 18, icon: "flame", color: "#D06B4F",
     venue: "Hackney Central", venueMap: "https://www.google.com/maps/search/?api=1&query=Hackney+Central+London", whatToBring: "Bring boxing gloves and pads if you have them. Wear comfortable workout clothes and trainers. Bring a water bottle", description: "A high-energy boxing-inspired fitness class combining cardio, conditioning and boxing drills. Suitable for beginners and all fitness levels."},
   { id:"self_defence", name:"Self Defence", tagline:"Build confidence and self-defence skills", day:"3-week course", time:"Wednesdays, 12:00–14:00", capacity:SELF_DEFENCE_CAPACITY, icon:"shield", color:"#6F596E", bookingKind:"gocardless_course", price:SELF_DEFENCE_PRICE, courseDates:SELF_DEFENCE_DATES,
     venue:"Hackney Central", venueMap:"https://www.google.com/maps/search/?api=1&query=Hackney+Central+London",
@@ -1449,7 +1449,7 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
         });
         // Send confirmation email with calendar invite (non-blocking)
         callEdgeFunction("send-email", {
-          type: "confirm_taster",
+          type: "confirm_taster", session_id:session.id,
           to_email: currentUser.email, to_name: currentUser.name,
           session_name: session.name, day: session.day, time: session.time,
           venue: session.venue || "", what_to_bring: session.whatToBring || "",
@@ -2132,7 +2132,7 @@ function cancellationEmail(booking, fallback = {}) {
   return {
     type:"booking_cancelled", to_email:booking.email || fallback.email, to_name:booking.name || fallback.name,
     user_name:booking.name || fallback.name, user_email:booking.email || fallback.email, user_phone:booking.phone || fallback.phone,
-    session_name:booking.sessionName, num_people: booking.sessionId === "self_defence" ? bookingPlaceCount(booking) : undefined,
+    session_id:booking.sessionId, session_name:booking.sessionName, num_people: booking.sessionId === "self_defence" ? bookingPlaceCount(booking) : undefined,
     booking_date:session?.courseDates ? session.courseDates.map(formatBookingDate).join(", ") : booking.bookingDate ? formatBookingDate(booking.bookingDate) : [session?.day, session?.time].filter(Boolean).join(" · ") || "Not specified",
     cancelled_at:new Date().toLocaleString("en-GB"),
   };

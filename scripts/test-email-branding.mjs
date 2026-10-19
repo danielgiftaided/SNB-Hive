@@ -41,9 +41,9 @@ try {
       code: "123456", phone: "07000000000", user_phone: "07000000000", session_name: "BoxFit",
       plan: "Membership — 1 class", amount: 35, status: "paid", booking_date: "Thursday 15 October 2026",
       booking_dates: "Thursday 15 October 2026, Thursday 22 October 2026, Thursday 29 October 2026",
-      day: "Thursday 15 October 2026", time: "13:00–14:00", venue: "6 Dispensary Lane, London E8 1FT",
+      day: "Thursday 15 October 2026", time: "13:30–14:30", venue: "6 Dispensary Lane, London E8 1FT",
       subject: "Studio update", message: "Welcome <script>alert(1)</script> to the studio.", price: 35, num_people: 1,
-      gocardless_payment_id: "PM_FIXTURE", ics_start: "20261015T120000Z", ics_end: "20261015T130000Z",
+      gocardless_payment_id: "PM_FIXTURE", ics_start: "20261015T123000Z", ics_end: "20261015T133000Z",
     };
     const response = await handler(new Request("https://fixture.supabase.test/functions/v1/send-email", { method: "POST", headers:{Authorization:"Bearer fixture-service-key"},body: JSON.stringify(payload) }));
     assert.equal(response.status, 200, type);
@@ -84,6 +84,16 @@ try {
     }
   }
   console.log("PASS both beneficiary email variants: personal reward wording, Shams notification, distinct idempotency, palette and app logo");
+  for (const [session_id,time] of [["zumba","11:30–12:30"],["boxfit","13:30–14:30"]]) {
+    for (const type of ["booking_confirmation","payment_confirmation","booking_cancelled"]) {
+      const delivered=[];
+      globalThis.fetch=async (url,init)=>{assert.equal(url,"https://api.resend.com/emails");delivered.push(JSON.parse(init.body));return new Response('{"id":"fixture"}');};
+      const result=await handler(new Request("https://fixture.supabase.test/functions/v1/send-email",{method:"POST",body:JSON.stringify({type,session_id,session_name:session_id,plan:"Pay as you go",amount:10,to_email:"member@example.test",email:"member@example.test",booking_date:"2026-10-23",time:"old browser time"})}));
+      assert.equal(result.status,200);assert.equal(delivered.length,2);
+      for(const mail of delivered){assert.ok(mail.html.includes(time),`${session_id} ${type}: current class time reaches member and Shams`);assert.ok(!mail.html.includes("old browser time"));}
+    }
+  }
+  console.log("PASS live/taster class booking, payment and cancellation emails use current canonical times for member and Shams");
   globalThis.fetch = async url => url.endsWith("/rpc/prepare_signup_verification") ? new Response("true") : new Response("Fixture provider unavailable", { status: 503 });
   assert.equal((await handler(new Request("https://fixture.supabase.test/functions/v1/send-email", { method: "POST", body: JSON.stringify({ type: "verify", to_email: "member@example.test", code: "123456" }) }))).status, 500);
   console.log("PASS provider failures still report an error; no live emails sent");

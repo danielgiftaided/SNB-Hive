@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Gift, Copy, Share2, Loader2 } from "lucide-react";
-import { classPaymentConfig } from "../supabase/functions/_shared/class-config.ts";
+import { classTimeLabel, classPaymentConfig } from "../supabase/functions/_shared/class-config.ts";
 import { useBookingTime } from "./use-booking-day.js";
 import { useCheckoutPolicy } from "./use-checkout-policy.jsx";
 import { referralLink, referralAccess, saveReferralAccess, clearReferralAccess } from "./referrals.js";
@@ -121,7 +121,7 @@ export default function ReferralScheme({ user, invoke, onBooked, creditsOnly=fal
             <select id="referral-membership" value={membership} onChange={e=>setMembership(e.target.value)} className="w-full rounded-xl border border-stone-200 p-3 text-sm"><option value="">Choose a membership</option>{data.memberships?.map(m=><option key={m.id} value={m.id}>{m.name} — {new Intl.DateTimeFormat("en-GB",{month:"long",year:"numeric",timeZone:"UTC"}).format(new Date(`${m.month}-01T12:00:00Z`))} — £26.25</option>)}</select>
             <p className="text-xs text-stone-500">One credit reduces one monthly collection by £8.75. Your usual classes stay included and later payments remain £35. If bank processing has already started, the next eligible month is used.</p>
           </> : <>
-          <div><label htmlFor="referral-class" className="text-sm font-medium">Class</label><select id="referral-class" value={session} onChange={e=>{setSession(e.target.value);setDate("");}} className="mt-1 w-full rounded-xl border border-stone-200 p-3 text-sm"><option value="zumba">Zumba — Fridays, 12:00–13:00</option><option value="boxfit">BoxFit — Thursdays, 13:00–14:00</option></select></div>
+          <div><label htmlFor="referral-class" className="text-sm font-medium">Class</label><select id="referral-class" value={session} onChange={e=>{setSession(e.target.value);setDate("");}} className="mt-1 w-full rounded-xl border border-stone-200 p-3 text-sm"><option value="zumba">Zumba — Fridays, {classTimeLabel("zumba")}</option><option value="boxfit">BoxFit — Thursdays, {classTimeLabel("boxfit")}</option></select></div>
           <p className="text-xs text-stone-500">Hackney Central</p>
           <div><label htmlFor="referral-date" className="text-sm font-medium">Lesson date</label><select id="referral-date" value={date} onChange={e=>setDate(e.target.value)} className="mt-1 w-full rounded-xl border border-stone-200 p-3 text-sm"><option value="">Choose a date</option>{dates.map(d=><option key={d} value={d}>{dateLabel(d)}</option>)}</select></div>
           </>}

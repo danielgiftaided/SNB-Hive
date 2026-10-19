@@ -37,10 +37,10 @@ const checkout = (session, plan) => handler(new Request("https://fixture.supabas
 try {
   await import("../supabase/functions/gocardless-checkout/index.ts");
   for (const [session, day, before, finish, added] of [
-    ["boxfit", "2026-10-15", "2026-10-15T12:59:59Z", "2026-10-15T13:00:00Z", "2026-11-12"],
-    ["zumba", "2026-10-16", "2026-10-16T11:59:59Z", "2026-10-16T12:00:00Z", "2026-11-13"],
-    ["boxfit", "2026-11-05", "2026-11-05T13:59:59Z", "2026-11-05T14:00:00Z", "2026-12-03"],
-    ["zumba", "2026-11-06", "2026-11-06T12:59:59Z", "2026-11-06T13:00:00Z", "2026-12-04"],
+    ["boxfit", "2026-10-15", "2026-10-15T13:29:59Z", "2026-10-15T13:30:00Z", "2026-11-12"],
+    ["zumba", "2026-10-16", "2026-10-16T11:29:59Z", "2026-10-16T11:30:00Z", "2026-11-13"],
+    ["boxfit", "2026-11-05", "2026-11-05T14:29:59Z", "2026-11-05T14:30:00Z", "2026-12-03"],
+    ["zumba", "2026-11-06", "2026-11-06T12:29:59Z", "2026-11-06T12:30:00Z", "2026-12-04"],
   ]) {
     for (const plan of ["payg", "taster", "membership"]) {
       rows = [root(session, day, plan)]; now = before; providerPosts = [];

@@ -36,7 +36,7 @@ for(const changed of [
   rows.map((row,index)=>index===0?{...row,amount:'invalid'}:row),
   rows.map((row,index)=>index===3?{...row,plan:'Membership - 1 class'}:row),
 ]) assert.ok(mixMatchBookingIssue(changed[0],changed,now));
-const before=new Date('2026-10-22T12:59:59Z'),after=new Date('2026-10-22T13:00:00Z');
+const before=new Date('2026-10-22T13:29:59Z'),after=new Date('2026-10-22T13:30:00Z');
 assert.equal(mixMatchSelectionIssue(selection,'2026-10',before),null,'a class remains eligible until its London finish');
 assert.ok(mixMatchSelectionIssue(selection,'2026-10',after),'the month stops being available when fewer than two BoxFit dates remain');
 assert.deepEqual(mixMatchMonths(new Date('2026-10-30T13:00:00Z')),['2026-11']);

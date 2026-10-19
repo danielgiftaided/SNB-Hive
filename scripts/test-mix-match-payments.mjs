@@ -76,7 +76,7 @@ try {
  create table bookings(id text primary key,user_id text,name text,email text,phone text,session_id text,session_name text,type text,plan text,amount numeric,status text,booking_date date,payment_group_id text,gocardless_payment_id text,gocardless_billing_request_id text,num_people integer,booking_confirmation_sent_at timestamptz,payment_confirmation_sent_at timestamptz);
  insert into users(id,name,email) values('referrer','Existing Referrer','referrer@example.test');`);
  const migration=readFileSync('supabase/migrations/20261017030000_mix_match_memberships.sql','utf8');await db.exec(migration);await db.exec(migration);await db.exec(readFileSync('supabase/migrations/20261017040000_referral_scheme.sql','utf8'));
- await db.exec(readFileSync('supabase/migrations/20261018000000_referral_membership_credits.sql','utf8'));
+ await db.exec(readFileSync('supabase/migrations/20261018000000_referral_membership_credits.sql','utf8'));await db.exec(readFileSync('supabase/migrations/20261019000000_class_times.sql','utf8'));
  await db.exec("insert into users(id,name,email,referral_signup_code) select 'member','Test Member','member@example.test',code from snb_private.referral_codes where user_id='referrer'");
  await import('../supabase/functions/send-email/index.ts');emailHandler=handler;
  await import('../supabase/functions/gocardless-checkout/index.ts');const checkout=handler;
@@ -103,7 +103,7 @@ try {
  await webhook({resource_type:'billing_requests',action:'fulfilled',links:{billing_request:'BRQ1'}});
  let booked=await sqlRows();assert.equal(booked.length,4);assert.ok(booked.every(row=>row.status==='paid'&&row.gocardless_payment_id==='PM_INITIAL'));
  assert.equal(mails.length,2);assert.deepEqual(mails.map(mail=>mail.to[0]).sort(),['member@example.test','shams@snbhive.com']);
- assert.ok(mails[0].html.includes('Zumba:')&&mails[0].html.includes('BoxFit:'));
+ assert.ok(mails[0].html.includes('Zumba:')&&mails[0].html.includes('BoxFit:'));assert.ok(mails[0].html.includes('11:30–12:30')&&mails[0].html.includes('13:30–14:30'),'combined class receipts include both current London times');
  assert.equal(subscriptions.size,1);const subscription=[...subscriptions.values()][0];assert.equal(subscription.amount,3500);assert.equal(subscription.day_of_month,1);assert.equal(subscription.name,MIX_MATCH_PLAN);
  const nextMonth=new Date(`${month}-01T12:00:00Z`);nextMonth.setUTCMonth(nextMonth.getUTCMonth()+1);assert.equal(subscription.start_date,nextMonth.toISOString().slice(0,10));
  await webhook({resource_type:'billing_requests',action:'fulfilled',links:{billing_request:'BRQ1'}});assert.equal(subscriptions.size,1);assert.equal(mails.length,2);assert.equal((await sqlRows()).length,4);

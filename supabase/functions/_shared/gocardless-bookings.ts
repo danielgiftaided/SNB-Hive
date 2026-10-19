@@ -2,7 +2,7 @@ import { processReferralRenewal, verifiedReferralReplacement, discountState } fr
 import { qualifyReferralPayment } from "./referrals.ts";
 import { mixMatchRpc } from "./mix-match-storage.ts";
 import { MIX_MATCH_AMOUNT, MIX_MATCH_PLAN, isMixMatchPlan, mixMatchBookingIssue } from "./mix-match.ts";
-import { classPaymentConfig, classDatesInMonth, SELF_DEFENCE_DATES } from "./class-config.ts";
+import { classTimeLabel, classPaymentConfig, classDatesInMonth, SELF_DEFENCE_DATES } from "./class-config.ts";
 import { weeklyDatesInMonth } from "./membership-bookings.ts";
 import { MEMBERSHIP_MONTHLY_AMOUNT } from "./membership.ts";
 
@@ -107,7 +107,7 @@ export async function sendBookingNotice(paymentId: string, type: "booking_confir
     headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({ ...rows[0], type:renewalNotice ? "mix_match_renewal" : type, session_name: names,
       membership_month:rows[0].booking_date?.slice(0, 7),
-      booking_schedule: rows.some(row => isMixMatchPlan(row.plan)) ? rows.filter(row => row.booking_date && row.session_id !== "mix_match").map(row => `${row.session_name}: ${new Intl.DateTimeFormat("en-GB", { weekday:"long", day:"numeric", month:"long", year:"numeric", timeZone:"UTC" }).format(new Date(`${row.booking_date}T12:00:00Z`))}`).join("; ") : undefined,
+      booking_schedule: rows.some(row => isMixMatchPlan(row.plan)) ? rows.filter(row => row.booking_date && row.session_id !== "mix_match").map(row => `${row.session_name}: ${new Intl.DateTimeFormat("en-GB", { weekday:"long", day:"numeric", month:"long", year:"numeric", timeZone:"UTC" }).format(new Date(`${row.booking_date}T12:00:00Z`))} · ${classTimeLabel(row.session_id)}`).join("; ") : undefined,
       amount: verifiedAmount ?? rows.reduce((sum, row) => sum + Number(row.amount || 0), 0),
       booking_dates: dates.map(date => new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${date}T12:00:00Z`))).join(", "),
     }),

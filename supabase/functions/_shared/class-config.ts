@@ -5,15 +5,23 @@ export const CLASS_PAYMENTS = {
     name: "Zumba",
     dates: ["2026-10-09", "2026-10-16", "2026-10-23", "2026-10-30"],
     weekday: 5,
-    endTime: "13:00",
+    startTime: "11:30",
+    endTime: "12:30",
   },
   boxfit: {
     name: "BoxFit",
     dates: ["2026-10-15", "2026-10-22", "2026-10-29"],
     weekday: 4,
-    endTime: "14:00",
+    startTime: "13:30",
+    endTime: "14:30",
   },
 } as const;
+
+export function classTimeLabel(id: unknown): string | null {
+  if (typeof id !== "string" || !Object.hasOwn(CLASS_PAYMENTS, id)) return null;
+  const config = CLASS_PAYMENTS[id as keyof typeof CLASS_PAYMENTS];
+  return `${config.startTime}–${config.endTime}`;
+}
 
 export const UPCOMING_CLASS_COUNT = 4;
 export const PAYG_AMOUNT = 1000;

@@ -38,7 +38,7 @@ def setup(browser, width, before, admin=False):
     context.add_init_script(storage + '.setItem(' + json.dumps(key) + ',' + json.dumps(json.dumps(value)) + ')')
     page = context.new_page()
     page.set_default_timeout(10000)
-    page.clock.install(time=before)
+    page.clock.install(time=before - timedelta(minutes=1))
     page.clock.pause_at(before)
     page.goto('http://127.0.0.1:5174/admin' if admin else 'http://127.0.0.1:5174/')
     if admin: page.get_by_role('button', name=re.compile('^Classes')).click()
@@ -48,10 +48,10 @@ def setup(browser, width, before, admin=False):
 with sync_playwright() as p:
     browser = p.chromium.launch(executable_path='/usr/bin/chromium', headless=True, args=['--no-sandbox'])
     for session, name, moment, width in [
-        ('boxfit', 'BoxFit', '2026-10-15T12:59:59+00:00', 1280),
-        ('zumba', 'Zumba', '2026-10-16T11:59:59+00:00', 390),
-        ('boxfit', 'BoxFit', '2026-11-05T13:59:59+00:00', 390),
-        ('zumba', 'Zumba', '2026-11-06T12:59:59+00:00', 1280),
+        ('boxfit', 'BoxFit', '2026-10-15T13:29:59+00:00', 1280),
+        ('zumba', 'Zumba', '2026-10-16T11:29:59+00:00', 390),
+        ('boxfit', 'BoxFit', '2026-11-05T14:29:59+00:00', 390),
+        ('zumba', 'Zumba', '2026-11-06T12:29:59+00:00', 1280),
     ]:
         before = datetime.fromisoformat(moment)
         date = before.date()
@@ -65,6 +65,9 @@ with sync_playwright() as p:
         admin_context, admin = setup(browser, width, before, admin=True)
         lesson_dates = class_card(admin, name, True).get_by_role('combobox', name='Lesson date', exact=True)
         assert values(lesson_dates.locator('option')) == expected
+        expected_time = '11:30–12:30' if session == 'zumba' else '13:30–14:30'
+        assert expected_time in class_card(page, name).inner_text()
+        assert expected_time in class_card(admin, name, True).inner_text()
         class_card(page, name).get_by_role('button', name='Book', exact=True).click()
         assert values(page.get_by_role('checkbox')) == expected
         page.get_by_role('button', name='Continue to payment', exact=True).click()
@@ -83,6 +86,10 @@ with sync_playwright() as p:
         page.get_by_role('region', name='Tasters', exact=True).get_by_role('button', name='Book', exact=True).click()
         dialog = page.get_by_role('dialog', name='Book a taster', exact=True)
         dialog.get_by_role('combobox', name='Taster class', exact=True).select_option(session)
+        assert expected_time in dialog.inner_text()
+        admin_tasters=admin.get_by_role('region',name='Tasters',exact=True)
+        admin_tasters.get_by_role('combobox',name='Taster class',exact=True).select_option(session)
+        assert expected_time in admin_tasters.inner_text()
         assert values(dialog.get_by_role('radio')) == expected
         dialog.get_by_role('button', name='Continue to payment', exact=True).click()
         page.get_by_role('dialog', name='Cancellation Policy', exact=True).wait_for()
