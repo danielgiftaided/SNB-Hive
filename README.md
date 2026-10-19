@@ -170,6 +170,29 @@ Vercel dashboard → your project → **Settings → Domains → Add Domain**
 
 Every time you push a change to GitHub, Vercel redeploys automatically.
 
+Production builds include `app-version.json` with the same release ID embedded
+in the JavaScript. The app checks it before mounting, when a saved tab returns
+(including browser back/forward restoration), when connectivity returns, and
+once a minute while visible. A newer release loads automatically through a
+cache-busting navigation; login storage and referral/payment URL parameters
+are preserved. Updates wait while a form has unsaved input, a booking dialog
+is open, payment confirmation is running, or the user has interacted within
+10 seconds. Closing the form/dialog lets a pending update proceed. Failed or
+slow checks leave the app usable; repeated stale HTML cannot cause a reload
+loop. Vite development mode does not run release checks.
+
+`vercel.json` requires fresh validation of HTML and unversioned public files,
+keeps those responses out of the CDN cache, and disables storage of the release
+manifest. Content-hashed files under `/assets/` remain cached
+for a year. Keep these rules if deploying through another host or CDN.
+The first deployment of this mechanism cannot update JavaScript already open
+from a release that predates these checks; those tabs need one normal reload.
+Future releases are detected automatically.
+
+Run `npm run test:app-updates` with Python Playwright and Chromium available to
+exercise two actual production builds, restored tabs, update deferral and
+failed/stale responses. All booking/email requests are intercepted fixtures.
+
 ---
 
 ## 6. Admin dashboard

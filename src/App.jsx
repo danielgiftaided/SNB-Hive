@@ -1208,7 +1208,7 @@ function TasterBookingModal({ classes, bookings, currentUser, onConfirm, onClose
     } finally { setSaving(false); }
   }
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+    <div data-app-update-block className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
       <div role="dialog" aria-modal="true" aria-labelledby="taster-booking-title" className="ff-body bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md max-h-[92vh] overflow-y-auto p-5 flex flex-col gap-4">
         <div className="flex items-center justify-between gap-3">
           <h4 id="taster-booking-title" className="ff-display text-xl font-semibold" style={{ color: INK }}>Book a taster</h4>
@@ -1226,7 +1226,7 @@ function TasterBookingModal({ classes, bookings, currentUser, onConfirm, onClose
 
 function WaitlistConfirmationModal({ session, onClose }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+    <div data-app-update-block className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
       <div className="ff-body bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100">
           <div className="w-5"/>
@@ -1578,7 +1578,7 @@ function BookingModal({ session, type, currentUser, bookings, onClose, onConfirm
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+    <div data-app-update-block className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
       {policyDialog}
       <div className="ff-body bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md max-h-[92vh] overflow-y-auto">
         <div className="sticky top-0 bg-white flex items-center justify-between px-5 py-4 border-b border-stone-100">
@@ -1976,7 +1976,7 @@ function WorkshopBookingModal({ workshop, currentUser, onClose, onConfirm }) {
 
   if (done) {
     return (
-      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+      <div data-app-update-block className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
         <div className="ff-body bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md p-6 text-center">
           <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor:"#D4EBD9" }}>
             <Check size={26} style={{ color:TEAL }}/>
@@ -2011,7 +2011,7 @@ function WorkshopBookingModal({ workshop, currentUser, onClose, onConfirm }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+    <div data-app-update-block className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
       <div className="ff-body bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md p-6 flex flex-col gap-4 max-h-[85vh] overflow-y-auto">
         <div className="flex justify-between items-center">
           <h3 className="ff-display text-xl font-semibold" style={{ color:INK }}>{workshop.name}</h3>
@@ -2092,7 +2092,7 @@ function WorkshopBookingModal({ workshop, currentUser, onClose, onConfirm }) {
 
 function OpenDayModal({ onClose, onRegister }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+    <div data-app-update-block className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
       <div className="ff-body bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-sm p-6 flex flex-col items-center text-center gap-4">
         <button onClick={onClose} className="self-end -mt-2 -mr-2 text-stone-400"><X size={20}/></button>
         <div className="w-14 h-14 rounded-full flex items-center justify-center -mt-6" style={{ backgroundColor:"#E9F1EC" }}>
@@ -2280,7 +2280,7 @@ function AdminDashboard({ bookings, onMarkPaid, onMarkPending, onCancel, onResto
   const retreatCount = active.filter(b=>b.type==="retreat").length;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-2 sm:p-4">
+    <div data-app-update-block className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-2 sm:p-4">
       <div className="ff-body bg-white rounded-2xl w-full max-w-4xl max-h-[92vh] overflow-y-auto">
         <div className="sticky top-0 bg-white flex items-center justify-between px-5 py-4 border-b border-stone-100 z-10">
           <h4 className="ff-display text-lg font-semibold flex items-center gap-2" style={{ color:INK }}>
@@ -2581,7 +2581,7 @@ function PilatesEnquiryModal({ onClose }) {
   const subject = encodeURIComponent("Reformer Pilates booking enquiry");
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+    <div data-app-update-block className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
       <div className="ff-body bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md p-6 flex flex-col gap-5">
         <div className="flex items-start justify-between gap-4">
           <div>

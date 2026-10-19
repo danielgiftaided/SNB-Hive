@@ -79,7 +79,7 @@ export default function ReferralScheme({ user, invoke, onBooked, creditsOnly=fal
       await load();onBooked?.();
     }catch(e){setError(e.message);}finally{setSaving(false);}
   }
-  return <section className="ff-body space-y-5" aria-labelledby={creditsOnly ? "booking-credit-title" : "referral-title"}>
+  return <section aria-busy={saving || checking} className="ff-body space-y-5" aria-labelledby={creditsOnly ? "booking-credit-title" : "referral-title"}>
     <div><h1 id={creditsOnly ? "booking-credit-title" : "referral-title"} className="ff-display text-2xl font-semibold text-stone-800">{creditsOnly ? "Your referral credits" : "Referral Scheme"}</h1>
       <p className="mt-2 text-sm text-stone-600">{creditsOnly ? "Use your free Pay as you go credit for Zumba or BoxFit, or reduce an eligible monthly payment by £8.75." : "Invite a friend to the Hive. When their first monthly membership payment is confirmed, you both earn a free Zumba or BoxFit lesson credit."}</p></div>
     {!token && <div className="rounded-2xl border border-stone-200 bg-white p-5 space-y-3">
