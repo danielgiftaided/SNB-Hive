@@ -1,7 +1,7 @@
 # Class booking changes
 
 - Boxing is removed from the available class catalogue. Historical bookings remain intact.
-- BoxFit is live with an active Book button and the same £10 PAYG / £35 monthly GoCardless plans as Zumba. October dates are **Thursday 15 October, Thursday 22 October and Thursday 29 October 2026, 13:00–14:00**. The card shows Thursdays and the class time; the exact dates appear after pressing Book. Dates come from the shared payment configuration so the picker, checkout and enrolments agree. All lessons and membership renewals use Thursdays from 15 October onward.
+- BoxFit is live with an active Book button and the same £10 PAYG / £35 monthly GoCardless plans as Zumba. October dates are **Thursday 15 October, Thursday 22 October and Thursday 29 October 2026, 13:30–14:30**. The card shows Thursdays and the class time; the exact dates appear after pressing Book. Dates come from the shared payment configuration so the picker, checkout and enrolments agree. All lessons and membership renewals use Thursdays from 15 October onward.
 - BoxFit's historical tasters no longer appear in the Classes register, counts or date list and do not block a member from booking the new paid classes. Their booking/member records remain available in booking history. The new GoCardless tasters do count in the live class register/capacity.
 - Self Defence offers 1–11 places per purchase, limited to available capacity: £150 per pair plus £80 for an extra place until 31 October 2026 23:59:59 London, then £90 per place. The full course runs on Wednesday 18 November, Wednesday 25 November and Wednesday 2 December 2026, 12:00–14:00. Existing waitlist entries do not block a course booking or count as reserved places.
 - Customer and admin cards share the order Zumba, BoxFit, Tasters, Self Defence, Reformer Pilates, Somatic, Strength & Conditioning, with two columns on larger screens and one on mobile. Both use the same timetable, course details and upcoming date source. Unconfirmed classes have no invented lesson dates. The customer Tasters card is absent when neither class remains eligible.
@@ -77,7 +77,7 @@ Confirm after deployment that the BoxFit Classes selector offers 15, 22 and 29 O
 
 ## Automatic date rollover
 
-The browser and checkout function share a rolling list of **four upcoming weekly dates** for each live class. BoxFit dates expire at **14:00 Europe/London** and Zumba dates at **13:00 Europe/London** on their class day. At the exact finish, that date is removed and the next weekly date is appended, including dates across month/year boundaries. Tasters use exactly the same list and cutoff as their live class. London BST/GMT is resolved from the timezone, not a fixed UTC offset. Open pickers refresh at aligned minute boundaries (including the finish minute) and immediately on focus/visibility changes. The server applies the same current-time validation, and dates are rechecked after the cancellation popup before saving a new checkout.
+The browser and checkout function share a rolling list of **four upcoming weekly dates** for each live class. BoxFit dates expire at **14:30 Europe/London** and Zumba dates at **12:30 Europe/London** on their class day. At the exact finish, that date is removed and the next weekly date is appended, including dates across month/year boundaries. Tasters use exactly the same list and cutoff as their live class. London BST/GMT is resolved from the timezone, not a fixed UTC offset. Open pickers refresh at aligned minute boundaries (including the finish minute) and immediately on focus/visibility changes. The server applies the same current-time validation, and dates are rechecked after the cancellation popup before saving a new checkout.
 
 My bookings retains its calendar-day history behaviour; finishing a class removes its date from new booking choices without deleting an existing reservation. A course shows its remaining dates and closes when all dates have passed. Stored bookings, amounts, statuses, membership/payment references, undated records and admin history are retained. Initial membership recovery uses the original booking month even when its dates are now historical.
 
@@ -184,3 +184,16 @@ python scripts/test-booking-date-ui.py
 ```
 
 Both browser scripts refuse non-fixture settings and intercept the fixture API. The class regression covers the removed Zumba taster offer, Thursday BoxFit, desktop/mobile layouts, course save/payment retries, legacy payment/cancellation emails, paginated admin history and CSV, failed-refresh preservation, verified checkout returns, PAYG selection and monthly proration/allocation. The date regression simulates London midnight from a different browser timezone, checks stale selections and expired bookings disappear without database writes, opens November automatically, preserves membership signup protection and closes completed courses.
+
+
+## Class times from 19 October 2026
+
+Live and taster Zumba run Fridays **11:30–12:30**, and live and taster BoxFit
+run Thursdays **13:30–14:30**, all Europe/London time. The shared class config
+provides both card/email labels and end-of-class rollover. Existing booking
+dates and payment references are retained; Self Defence times are unchanged.
+Apply `20261019000000_class_times.sql` after the existing Mix & Match/referral
+migrations so database allocation deadlines and the referral 24-hour credit
+return rule agree with the new schedule. The Edge Function deployment workflow
+reapplies it last, atomically with referral definitions, on every deployment.
+Deploy these backend changes before publishing the frontend.

@@ -1,5 +1,5 @@
 import { corsHeaders, json } from "../_shared/http.ts";
-import { CLASS_BANK_ACCOUNT } from "../_shared/class-config.ts";
+import { CLASS_BANK_ACCOUNT, classTimeLabel } from "../_shared/class-config.ts";
 import { EMAIL_LOGO_CONTENT } from "../_shared/email-logo.ts";
 import { whatsappGroupUrl } from "../_shared/whatsapp-config.ts";
 
@@ -64,6 +64,8 @@ function bookingRows(p: Payload): [string, unknown][] {
     ["Phone", p.user_phone ?? p.phone], ["Class", p.session_name],
     ["Booking type", p.plan], ["Amount", `£${value(p.amount, "0")}`],
   ];
+  const classTime = classTimeLabel(p.session_id ?? p.sessionId) || p.time;
+  if (classTime && !p.booking_schedule) rows.push(["Class time (London)", classTime]);
   if (p.num_people) rows.push(["Places", p.num_people]);
   if (p.booking_dates || p.booking_date) rows.splice(4, 0, ["Lesson date(s)", p.booking_schedule || p.booking_dates || p.booking_date]);
   return rows;
@@ -127,7 +129,7 @@ function messagesFor(p: Payload): Message[] {
         ["Account name", CLASS_BANK_ACCOUNT.accountName], ["Account number", CLASS_BANK_ACCOUNT.accountNumber],
         ["Sort code", CLASS_BANK_ACCOUNT.sortCode], ["Reference", p.user_name ?? p.to_name],
       ]);
-      const customer = { to, subject: `Booking received — ${value(p.session_name)} (awaiting bank transfer)`, html: shell("Your booking is saved", "Your place is reserved — please pay by bank transfer", paragraph(`Hi ${value(p.to_name, "there")}, please transfer £${value(p.amount)} using your name as the reference. Your booking is awaiting payment until we receive your transfer.`) + details([...bookingRows(p), ["Time", p.time], ["Venue", p.venue]]) + transfer) };
+      const customer = { to, subject: `Booking received — ${value(p.session_name)} (awaiting bank transfer)`, html: shell("Your booking is saved", "Your place is reserved — please pay by bank transfer", paragraph(`Hi ${value(p.to_name, "there")}, please transfer £${value(p.amount)} using your name as the reference. Your booking is awaiting payment until we receive your transfer.`) + details([...bookingRows(p), ["Venue", p.venue]]) + transfer) };
       const admin = { to: BOOKING_EMAIL, subject: `New ${kind} booking: ${value(p.user_name)} — ${value(p.session_name)}`, html: shell(`A member booked a ${kind}`, "Booking — awaiting bank transfer", details([...bookingRows(p), ["Status", p.status], ["Transfer reference", p.user_name]])) };
       return [customer, admin];
     }
@@ -136,13 +138,15 @@ function messagesFor(p: Payload): Message[] {
         ["Member", p.user_name], ["Email", p.user_email], ["Phone", p.user_phone],
         ["Class", p.session_name], ["Lesson date", p.booking_date], ["Cancelled", p.cancelled_at],
       ];
+      const classTime = classTimeLabel(p.session_id ?? p.sessionId) || p.time;
+      if (classTime) cancellationDetails.push(["Class time (London)",classTime]);
       if (p.num_people) cancellationDetails.push(["Places", p.num_people]);
       const customer = { to, subject: `Your ${value(p.session_name)} booking has been cancelled`, html: shell("Your booking has been cancelled", "Booking cancellation confirmed", paragraph(`Hi ${value(p.to_name, "there")}, this email confirms that your booking has been cancelled. Your place in ${value(p.session_name)} is no longer reserved.`) + details(cancellationDetails.slice(3))) };
       const admin = { to: BOOKING_EMAIL, subject: `Booking cancelled: ${value(p.user_name)} — ${value(p.session_name)}`, html: shell("A booking was cancelled", `${value(p.session_name)} booking cancelled`, paragraph("A booking has just been cancelled. Their details are below.") + details(cancellationDetails)) };
       return [customer, admin];
     }
     case "confirm_taster":
-      return [{ to, subject: `Your ${value(p.session_name)} booking is confirmed! 🐝`, html: shell("Your class booking is confirmed", `You're booked for ${value(p.session_name)}!`, paragraph(`Hi ${value(p.to_name, "there")}, your place is confirmed. We can't wait to see you!`) + details([["Class", p.session_name], ["When", `${value(p.day)} · ${value(p.time)}`], ["Venue", p.venue], ["What to bring", p.what_to_bring]])), attachments: calendarAttachment(p) }];
+      return [{ to, subject: `Your ${value(p.session_name)} booking is confirmed! 🐝`, html: shell("Your class booking is confirmed", `You're booked for ${value(p.session_name)}!`, paragraph(`Hi ${value(p.to_name, "there")}, your place is confirmed. We can't wait to see you!`) + details([["Class", p.session_name], ["When", `${value(p.day)} · ${value(classTimeLabel(p.session_id ?? p.sessionId) || p.time)}`], ["Venue", p.venue], ["What to bring", p.what_to_bring]])), attachments: calendarAttachment(p) }];
     case "confirm_workshop": {
       const customer = { to, subject: `You're in — ${value(p.session_name)} is booked! 🎨🐝`, html: shell("Your workshop booking is confirmed", `You're coming to ${value(p.session_name)}!`, paragraph(`Hi ${value(p.to_name, "there")}, your workshop place is confirmed. Payment instructions: £${value(p.price)} to SNB Hive Ltd, sort code 04-06-05, account 33053251.`) + details([["Workshop", p.session_name], ["When", `${value(p.day)} · ${value(p.time)}`], ["Venue", p.venue], ["People", p.num_people]])), attachments: calendarAttachment(p) };
       const admin = { to: BOOKING_EMAIL, subject: `🎨 New workshop booking: ${value(p.to_name)} — ${value(p.session_name)}`, html: shell("A workshop was booked", `New booking for ${value(p.session_name)}`, details([["Name", p.to_name], ["Email", p.to_email], ["People", p.num_people], ["Total", `£${value(p.price)}`], ["Guests", p.guests]])) };

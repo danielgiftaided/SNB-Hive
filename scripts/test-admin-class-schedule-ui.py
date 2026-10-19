@@ -3,7 +3,7 @@ import copy
 import json
 import re
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from urllib.request import urlopen
 from playwright.sync_api import sync_playwright
 from taster_fixtures import taster_availability
@@ -60,8 +60,8 @@ with sync_playwright() as p:
             page = context.new_page()
             page.on('pageerror', lambda error: errors.append(str(error)))
             page.set_default_timeout(10000)
-            page.clock.install(time=datetime(2026, 10, 15, 12, 59, 0, tzinfo=timezone.utc))
-            page.clock.pause_at(datetime(2026, 10, 15, 12, 59, 0, tzinfo=timezone.utc))
+            page.clock.install(time=datetime(2026, 10, 15, 13, 29, 0, tzinfo=timezone.utc) - timedelta(minutes=1))
+            page.clock.pause_at(datetime(2026, 10, 15, 13, 29, 0, tzinfo=timezone.utc))
             page.goto('http://127.0.0.1:5174/admin' if admin else 'http://127.0.0.1:5174/')
             if admin: page.get_by_role('button', name=re.compile('^Classes')).click()
             page.get_by_role('heading', name='BoxFit', exact=True).wait_for()
@@ -75,7 +75,7 @@ with sync_playwright() as p:
                 assert all(boxes[i]['y'] < boxes[i+1]['y'] for i in range(6))
             page.clock.resume()
             page.screenshot(path=f'/tmp/snb-class-sync-{width}-{"admin" if admin else "customer"}.png', full_page=True)
-            page.clock.pause_at(datetime(2026, 10, 15, 12, 59, 30, tzinfo=timezone.utc))
+            page.clock.pause_at(datetime(2026, 10, 15, 13, 29, 30, tzinfo=timezone.utc))
             contexts.append(context)
             pages.append(page)
         customer, admin = pages

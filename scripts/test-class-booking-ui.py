@@ -89,7 +89,7 @@ with sync_playwright() as p:
   assert date not in card(page,'BoxFit').inner_text()
  assert 'October' not in card(page,'BoxFit').inner_text()
  assert 'Thursdays' in card(page,'BoxFit').inner_text()
- assert '13:00–14:00' in card(page,'BoxFit').inner_text()
+ assert '13:30–14:30' in card(page,'BoxFit').inner_text()
  assert 'half-priced tasters' not in page.locator('main').inner_text()
  assert page.get_by_role('link',name='Shams@snbhive.com').get_attribute('href')=='mailto:Shams@snbhive.com'
  page.screenshot(path='/tmp/snb-class-cards-desktop.png',full_page=True)

@@ -63,7 +63,7 @@ try {
     if(type==="booking_cancelled") assert.ok(emails.every(email=>email.subject.includes("cancelled")));
   }
   emails=[];
-  assert.equal((await emailHandler(post({type:"bank_transfer_booking",to_email:member.email,to_name:member.name,user_name:member.name,user_email:member.email,session_name:"Zumba taster",plan:"Taster (bank transfer)",amount:5,booking_dates:"Friday 23 October 2026",time:"12:00–13:00"}))).status,200);
+  assert.equal((await emailHandler(post({type:"bank_transfer_booking",to_email:member.email,to_name:member.name,user_name:member.name,user_email:member.email,session_name:"Zumba taster",plan:"Taster (bank transfer)",amount:5,booking_dates:"Friday 23 October 2026",time:"11:30–12:30"}))).status,200);
   assert.deepEqual(emails.map(email=>email.to[0]).sort(),[member.email,"shams@snbhive.com"].sort());
   for(const entry of ["£5","33053251","040605",member.name,"23 October 2026"]) assert.ok(emails[0].html.includes(entry),entry);
   assert.match(emails[1].subject,/taster booking/);

@@ -78,13 +78,13 @@ with sync_playwright() as p:
         table.get_by_text('Membership - 1 class', exact=True).wait_for()
         assert table.get_by_text('Taster - bank transfer', exact=True).is_visible()
         assert table.get_by_text('Free Pay as you go credit',exact=True).count()==0, 'Wallet entries must not count as lesson bookings'
-        assert '13:00-14:00' in table.inner_text()
+        assert '13:30-14:30' in table.inner_text()
         assert '—' not in table.inner_text() and '–' not in table.inner_text()
         rows = exported(page)
         assert rows[0] == ['Name', 'Email', 'Phone', 'Session', 'Date', 'Time', 'Plan', 'Amount', 'Status', 'Booked at']
         assert all(len(row) == 10 for row in rows) and len(rows) == 3
         assert rows[1] == [members[0]['name'], members[0]['email'], '="447960123456"', 'BoxFit',
-                           '2026-10-15', '13:00-14:00', 'Membership - 1 class', '30', 'cancelled', '2026-10-12T12:00:00Z']
+                           '2026-10-15', '13:30-14:30', 'Membership - 1 class', '30', 'cancelled', '2026-10-12T12:00:00Z']
         assert rows[2][7] == '0', 'Zero amounts must not become blank'
         assert rows[2][2] == '="+44 7960 123456"'
         page.get_by_placeholder('Search name, email, class…').fill('Free booking')
