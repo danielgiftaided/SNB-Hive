@@ -29,7 +29,8 @@
     "test:mix-match": "node scripts/test-mix-match.mjs",
     "test:mix-match-payments": "node scripts/test-mix-match-payments.mjs",
     "test:referral-scheme": "node scripts/test-referral-scheme.mjs",
-    "test:signup-welcome": "node scripts/test-signup-welcome.mjs"
+    "test:signup-welcome": "node scripts/test-signup-welcome.mjs",
+    "test:app-updates": "PYTHONDONTWRITEBYTECODE=1 python scripts/test-app-updates.py"
   },
   "dependencies": {
     "@fontsource/cormorant-garamond": "5.3.0",
