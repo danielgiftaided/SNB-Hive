@@ -228,14 +228,20 @@ change the email function automatically deploy the new version through GitHub
 Actions. This prevents the deployed mailer from falling behind the email types
 used by the app.
 
-All notifications share the booking app's cream and sage email template. The
-transparent pink and gold app logo is bundled as an inline email attachment,
+All notifications to members and Shams, including the admin sign-in code,
+share the booking app's cream and sage layout and delivery code in
+`supabase/functions/_shared/email-branding.ts`. Admin authentication sends
+through this shared module directly, using its existing mail credentials.
+The transparent pink and gold app logo is bundled as an inline email attachment,
 so messages do not depend on a separate website image or `EMAIL_LOGO_URL`.
 After changing `public/logo-pink-gold.png`, run `npm run sync:email-logo` and
 `npm run test:email-branding`, and commit the generated
 `supabase/functions/_shared/email-logo.ts` alongside the updated app asset.
-The existing Edge Function workflow redeploys the mailer when either its
-template or bundled logo changes.
+The existing Edge Function workflow redeploys both `send-email` and `admin-auth`
+when the shared template or bundled logo changes. The branding tests exercise
+every notification type, both member/admin recipients and the actual admin
+sign-in route, including verification of the generated sign-in code. They also
+check that provider sends cannot bypass the shared branded delivery module.
 
 There is deliberately no default admin password in the browser bundle.
 

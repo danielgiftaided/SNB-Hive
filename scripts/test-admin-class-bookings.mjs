@@ -37,7 +37,7 @@ try {
     const url=new URL(input),body=init.body?JSON.parse(init.body):null;
     if(url.hostname==='api.resend.com'){
       assert.equal(url.pathname,'/emails');
-      if(body.subject.includes('admin login code'))loginCode=body.html.match(/letter-spacing:8px">(\d{6})/)[1];
+      if(body.subject.includes('admin login code'))loginCode=body.html.match(/<strong[^>]*>(\d{6})<\/strong>/)[1];
       else {if(mailFailure)return response({error:'fixture email outage'},503);messages.push({body,headers:init.headers});}
       return response({id:'fixture-mail'});
     }

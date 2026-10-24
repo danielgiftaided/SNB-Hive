@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { readFile, mkdir, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { readFile, readdir, mkdir, writeFile } from "node:fs/promises";
 import { EMAIL_LOGO_CONTENT } from "../supabase/functions/_shared/email-logo.ts";
 
 const appLogo = await readFile(new URL("../public/logo-pink-gold.png", import.meta.url));
@@ -97,6 +98,67 @@ try {
   globalThis.fetch = async url => url.endsWith("/rpc/prepare_signup_verification") ? new Response("true") : new Response("Fixture provider unavailable", { status: 503 });
   assert.equal((await handler(new Request("https://fixture.supabase.test/functions/v1/send-email", { method: "POST", body: JSON.stringify({ type: "verify", to_email: "member@example.test", code: "123456" }) }))).status, 500);
   console.log("PASS provider failures still report an error; no live emails sent");
+
+  // Exercise the real admin login route, which used to bypass the branded
+  // mailer entirely. Credentials/code verification still use the same flow.
+  settings.ADMIN_PASSWORD_SALT = "fixture-salt";
+  settings.ADMIN_PASSWORD_HASH = createHash("sha256").update("fixture-saltfixture-password").digest("hex");
+  settings.ADMIN_MFA_SECRET = "fixture-mfa-secret";
+  settings.SENDER_EMAIL = "sender@example.test";
+  const direct = [];
+  globalThis.fetch = async (url, init) => {
+    assert.equal(url, "https://api.resend.com/emails");
+    direct.push({ body:JSON.parse(init.body), headers:init.headers });
+    return new Response('{"id":"fixture-admin-code"}');
+  };
+  await import("../supabase/functions/admin-auth/index.ts");
+  const auth = handler;
+  const authenticate = data => auth(new Request("https://fixture.supabase.test/functions/v1/admin-auth", {method:"POST",body:JSON.stringify(data)}));
+  assert.equal((await authenticate({step:"login",email:settings.ADMIN_EMAIL,password:"wrong"})).status,401);
+  assert.equal(direct.length,0,"Invalid credentials do not trigger a code email");
+  const login = await authenticate({step:"login",email:settings.ADMIN_EMAIL,password:"fixture-password"});
+  assert.equal(login.status,200);
+  const challenge = (await login.json()).challenge;
+  assert.equal(direct.length,1);
+  const adminMail = direct[0].body;
+  assert.equal(adminMail.subject,"Your SNB Hive admin login code");
+  assert.deepEqual(adminMail.to,[settings.ADMIN_EMAIL]);
+  assert.equal(adminMail.reply_to,settings.SENDER_EMAIL);
+  assert.equal(adminMail.from,`Shams B <${settings.SENDER_EMAIL}>`);
+  for (const colour of colours) assert.ok(adminMail.html.includes(colour),`Actual admin sign-in: app colour ${colour}`);
+  assert.match(adminMail.html,/src="cid:snb-hive-logo"/);
+  assert.match(adminMail.html,/Cormorant Garamond/);
+  assert.match(adminMail.html,/Inter,Arial/);
+  assert.equal(adminMail.attachments.length,1);
+  assert.equal(adminMail.attachments[0].content_id,"snb-hive-logo");
+  assert.deepEqual(Buffer.from(adminMail.attachments[0].content,"base64"),appLogo);
+  const code=adminMail.html.match(/<strong[^>]*>(\d{6})<\/strong>/)?.[1];
+  assert.ok(code,"Branded admin email includes the generated code");
+  assert.equal((await authenticate({step:"verify_mfa",email:settings.ADMIN_EMAIL,challenge,code:"000000"})).status,401);
+  const verified=await authenticate({step:"verify_mfa",email:settings.ADMIN_EMAIL,challenge,code});
+  assert.equal(verified.status,200);
+  assert.ok((await verified.json()).access_token,"Branded code still issues the signed admin session");
+  if(previewDir)await writeFile(`${previewDir}/admin-auth-direct.json`,JSON.stringify(adminMail));
+  const {sendBrandedEmail,signInCodeMessage}=await import("../supabase/functions/_shared/email-branding.ts");
+  assert.equal(adminMail.html,signInCodeMessage(settings.ADMIN_EMAIL,code,true).html,"Direct admin route uses the same code template as send-email");
+  await assert.rejects(sendBrandedEmail({to:"admin@example.test",subject:"fixture",html:"<p>Unbranded</p>"}),/branded email layout is required/);
+  assert.equal(direct.length,1,"Unbranded messages are rejected before provider delivery");
+  globalThis.fetch=async()=>new Response("Fixture provider unavailable",{status:503});
+  assert.equal((await authenticate({step:"login",email:settings.ADMIN_EMAIL,password:"fixture-password"})).status,500,"Mail failures still stop sign-in rather than claiming a code was sent");
+  console.log("PASS actual admin sign-in: matching palette, layout, inline app logo and shared code template; valid MFA/session and sender preserved; plain emails blocked");
+
+  // Inventory every function so a separate direct sender cannot quietly skip
+  // the shared branded transport again.
+  const directory=new URL("../supabase/functions/",import.meta.url);
+  const providerSenders=[];
+  for(const file of await readdir(directory,{recursive:true})){
+    if(!file.endsWith(".ts"))continue;
+    const code=await readFile(new URL(file,directory),"utf8");
+    if(code.includes("https://api.resend.com/emails"))providerSenders.push(file);
+  }
+  assert.deepEqual(providerSenders,["_shared/email-branding.ts"]);
+  console.log("PASS email route inventory: every app provider send goes through the shared branded transport; no live emails sent");
+
 } finally {
   globalThis.fetch = previousFetch;
   if (previousDeno === undefined) delete globalThis.Deno;
