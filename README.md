@@ -218,6 +218,57 @@ supabase functions deploy admin-auth
 supabase functions deploy send-email --no-verify-jwt
 ```
 
+### Admin sign-in says it is not configured
+
+`[admin-auth] Admin authentication is not configured` means at least one of
+`ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH` or `ADMIN_MFA_SECRET` is missing or empty.
+The function stops before it checks the password or tries to send an email.
+
+In the correct Supabase project, open **Edge Functions → Secrets** and restore
+only the missing settings. `ADMIN_EMAIL` is the admin's sign-in email;
+`ADMIN_PASSWORD_HASH` must be the SHA-256 hash of the existing salt followed by
+the intended password. Preserve an existing `ADMIN_PASSWORD_SALT` when restoring
+its matching hash. `ADMIN_MFA_SECRET` is a separate long random signing secret,
+not the admin password or a six-digit code. Generate a missing signing secret
+locally with a password manager or a cryptographic random generator; do not
+share its value in chat, logs or the repository.
+
+If `ADMIN_PASSWORD_HASH` and `ADMIN_MFA_SECRET` are both absent, run this in
+a private local terminal from the repository folder:
+
+```bash
+node scripts/generate-admin-config.mjs
+```
+
+Enter and confirm your chosen admin password (entry is hidden). The helper makes
+a matching random salt/password hash and a separate random MFA signing secret,
+saving all three to `.env.admin.local` with owner-only permissions. It does not
+send anything, print values or overwrite an existing file. The file is excluded
+by `.gitignore`. Open it privately and add its three name/value pairs to Supabase
+**Edge Functions → Secrets**, preserving your existing `ADMIN_EMAIL`,
+`RESEND_API_KEY` and other settings. Use the chosen password to sign in. This
+replaces the admin password configuration only; customer passwords are unaffected.
+
+If a working hash or salt already exists, restore its matching settings rather
+than generating replacements unnecessarily. The helper is intended for setup or
+an intentional admin password reset, not for recovering a missing MFA secret alone.
+
+Save the restored settings and try signing in again. Restoring configuration
+for the already deployed function does not require a frontend release. If the
+names already exist, check for empty values and confirm the project is the one
+used by the deployed app.
+
+The handler now logs the exact missing **names only**. The frontend distinguishes
+this configuration problem from email-delivery failures, including errors from
+the older handler. The deployment workflow checks the names of required admin
+and email settings before replacing `admin-auth`; listing secret metadata does
+not inspect values or prove that the credentials work. Missing names or an
+unreadable response stop deployment. These safeguards do not create or repair
+live secrets automatically.
+
+Run `npm run test:admin-auth-config` for isolated missing-setting, sign-in/MFA,
+error-display and deployment-guard checks. No real accounts or emails are used.
+
 The app uses its own member sessions rather than Supabase Auth, so `send-email`
 must be deployed without Supabase JWT verification. The function sends booking
 cancellation confirmations to both the member and `ADMIN_EMAIL` (which defaults

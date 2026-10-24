@@ -222,6 +222,9 @@ function isEdgeFunctionMissing(error) {
 
 function emailDeliveryError(error, action = "sign-in code") {
   const message = String(error?.message || error || "").toLowerCase();
+  if (message.includes("admin authentication is not configured") || message.includes("admin_auth_not_configured")) {
+    return "Admin sign-in needs configuring in Supabase. Check ADMIN_EMAIL, ADMIN_PASSWORD_HASH and ADMIN_MFA_SECRET.";
+  }
   if (isEdgeFunctionMissing(error)) {
     return "The email service isn't connected to this site. Please contact shams@snbhive.com for help.";
   }

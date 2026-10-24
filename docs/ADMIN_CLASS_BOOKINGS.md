@@ -30,7 +30,11 @@ The existing Deploy Edge Functions workflow, on merge to main, applies
 must also include this change. The existing taster and course migrations are
 prerequisites; the workflow retains its existing prerequisite steps.
 
-No new secrets are required. Successful admin password + email-code verification
+No new secret names are required. Existing `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH`,
+`ADMIN_MFA_SECRET` and `RESEND_API_KEY` must be configured; the deployment checks
+that their names exist before replacing admin-auth, without reading values.
+See README section 6 for recovery if admin sign-in reports missing settings.
+Successful admin password + email-code verification
 now issues a signed eight-hour token using `ADMIN_MFA_SECRET`; the server checks
 its signature, expiry, purpose and configured `ADMIN_EMAIL` before invoking the
 service-only booking RPC. The browser never receives the service key. The new

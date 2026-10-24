@@ -9,6 +9,7 @@ on:
       - "supabase/functions/gocardless-sync/**"
       - "supabase/functions/send-email/**"
       - "supabase/functions/admin-auth/**"
+      - "scripts/check-admin-secret-names.mjs"
       - "supabase/functions/admin-class-booking/**"
       - "supabase/functions/marketing-unsubscribe/**"
       - "supabase/functions/mix-match-membership/**"
@@ -239,6 +240,12 @@ jobs:
           if (!Array.isArray(result) || result.length !== 1 || result[0]?.manual_bookings_ready !== true) throw new Error('Manual booking storage was not confirmed.');
           console.log('Manual class booking storage ready.');
           NODE
+
+      # Listing names does not retrieve secret values. Do not print metadata.
+      - name: Check required admin secret names
+        run: |
+          supabase secrets list --project-ref "$SUPABASE_PROJECT_REF" --output json > "$RUNNER_TEMP/admin-secret-names.json"
+          node scripts/check-admin-secret-names.mjs "$RUNNER_TEMP/admin-secret-names.json"
 
       - name: Deploy admin authentication
         run: supabase functions deploy admin-auth --no-verify-jwt --project-ref "$SUPABASE_PROJECT_REF"

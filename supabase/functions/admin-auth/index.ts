@@ -3,7 +3,6 @@ import { corsHeaders, json } from "../_shared/http.ts";
 
 const encoder = new TextEncoder();
 const RESEND_API = "https://api.resend.com/emails";
-const ADMIN_EMAIL = (Deno.env.get("ADMIN_EMAIL") || "").trim().toLowerCase();
 const SENDER_EMAIL = Deno.env.get("SENDER_EMAIL") || "shams@snbhive.com";
 
 function bytesToHex(bytes: Uint8Array) {
@@ -63,16 +62,23 @@ Deno.serve(async request => {
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   try {
-    const passwordHash = (Deno.env.get("ADMIN_PASSWORD_HASH") || "").toLowerCase();
+    const missing = ["ADMIN_EMAIL", "ADMIN_PASSWORD_HASH", "ADMIN_MFA_SECRET"]
+      .filter(name => !Deno.env.get(name)?.trim());
+    if (missing.length) {
+      // Names only: never log passwords, hashes, signing secrets or codes.
+      console.error("[admin-auth] Missing required settings:", missing.join(", "));
+      return json({ error: "Admin authentication is not configured. Check the admin secrets in Supabase.", code: "ADMIN_AUTH_NOT_CONFIGURED" }, 503);
+    }
+    const adminEmail = Deno.env.get("ADMIN_EMAIL")!.trim().toLowerCase();
+    const passwordHash = Deno.env.get("ADMIN_PASSWORD_HASH")!.trim().toLowerCase();
     const passwordSalt = Deno.env.get("ADMIN_PASSWORD_SALT") || "";
     const challengeSecret = Deno.env.get("ADMIN_MFA_SECRET") || "";
-    if (!ADMIN_EMAIL || !passwordHash || !challengeSecret) throw new Error("Admin authentication is not configured");
 
     const body = await request.json();
     const email = String(body.email || "").trim().toLowerCase();
     if (body.step === "login") {
       const suppliedHash = await sha256(passwordSalt + String(body.password || ""));
-      if (!safeEqual(email, ADMIN_EMAIL) || !safeEqual(suppliedHash, passwordHash)) {
+      if (!safeEqual(email, adminEmail) || !safeEqual(suppliedHash, passwordHash)) {
         return json({ error: "Invalid credentials" }, 401);
       }
       const code = crypto.getRandomValues(new Uint32Array(1))[0] % 900000 + 100000;
@@ -87,10 +93,10 @@ Deno.serve(async request => {
         return json({ error: "Invalid or expired code" }, 401);
       }
       const challenge = JSON.parse(decodeBase64url(payload));
-      const valid = challenge.email === ADMIN_EMAIL && email === ADMIN_EMAIL && challenge.expiresAt >= Date.now() &&
+      const valid = challenge.email === adminEmail && email === adminEmail && challenge.expiresAt >= Date.now() &&
         safeEqual(challenge.codeHash, await sha256(String(body.code || "")));
       if (!valid) return json({ error: "Invalid or expired code" }, 401);
-      return json({ success: true, admin: { email: ADMIN_EMAIL }, ...await issueAdminSession(ADMIN_EMAIL) });
+      return json({ success: true, admin: { email: adminEmail }, ...await issueAdminSession(adminEmail) });
     }
     return json({ error: "Invalid authentication step" }, 400);
   } catch (error) {
