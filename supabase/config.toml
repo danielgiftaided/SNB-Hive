@@ -27,3 +27,7 @@ verify_jwt = false
 # Public access challenge; dashboard/redemption check server-issued member tokens.
 [functions.referral-scheme]
 verify_jwt = false
+
+# The handler verifies the signed admin MFA session before using service access.
+[functions.admin-class-booking]
+verify_jwt = false

@@ -91,7 +91,7 @@ export function userHasBookedRegularClass(bookings, user, sessionId) {
   return bookings.some(booking => {
     const plan = String(booking.plan || "").toLowerCase();
     return booking.sessionId === sessionId && bookingBelongsToUser(booking, user) &&
-      !isTasterBooking(booking) && (plan.includes("pay as you go") || plan.includes("membership")) &&
+      !isTasterBooking(booking) && (plan.includes("pay as you go") || plan.includes("membership") || plan.startsWith("class (manual")) &&
       (["paid", "confirmed"].includes(booking.status) ||
         (["pending_payment", "cancelled"].includes(booking.status) && /^PM/.test(String(booking.gocardlessPaymentId || ""))));
   });
@@ -101,7 +101,7 @@ export function userHasBookedRegularClass(bookings, user, sessionId) {
 // existing paid tasters reserve a place on their selected live class date.
 export function bookingIsClassRegistration(booking) {
   return bookingIsActive(booking) && booking.status !== "waitlisted" &&
-    !(booking.sessionId === "boxfit" && isTasterBooking(booking) && !isGoCardlessTaster(booking));
+    !(booking.sessionId === "boxfit" && isTasterBooking(booking) && !isGoCardlessTaster(booking) && !String(booking.plan || "").toLowerCase().startsWith("taster (manual"));
 }
 
 // Cancellation does not restore eligibility. An unfinished checkout can resume

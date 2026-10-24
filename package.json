@@ -8,6 +8,7 @@
     "build":   "vite build",
     "preview": "vite preview",
     "sync:email-logo": "node scripts/sync-email-logo.mjs",
+    "test:admin-class-bookings": "node scripts/test-admin-class-bookings.mjs",
     "test:email-branding": "node scripts/test-email-branding.mjs",
     "check:edge-functions": "node scripts/check-edge-functions.mjs",
     "test:gocardless-checkout": "node scripts/test-gocardless-checkout.mjs",

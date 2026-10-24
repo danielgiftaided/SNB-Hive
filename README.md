@@ -9,6 +9,8 @@ live BoxFit and £90 Self Defence GoCardless course are in
 
 Registration opt-ins, communication preferences, WhatsApp invitation placement and marketing unsubscribe deployment are documented in [Marketing preferences](docs/MARKETING_PREFERENCES.md).
 
+Manual admin enrollment and deployment are documented in [Admin class bookings](docs/ADMIN_CLASS_BOOKINGS.md).
+
 ## Mobile app
 
 The staged plan for turning this web app into downloadable iOS and Android
