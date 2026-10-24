@@ -1,3 +1,4 @@
+import AdminAddMember from "./AdminAddMember.jsx";
 import ReferralScheme from "./ReferralScheme.jsx";
 import { captureReferralCode, clearReferralCode, normaliseReferralCode, referralAccess, clearReferralAccess } from "./referrals.js";
 import MixMatchRenewals from "./MixMatchRenewals.jsx";
@@ -1026,7 +1027,7 @@ async function openSinglePaymentCheckout(booking, date = booking.bookingDate) {
   window.location.assign(result.authorisation_url);
 }
 
-function TasterCard({ classes, bookings, onBook, admin = false, currentUser, bookingForm = false, busy = false }) {
+function TasterCard({ classes, bookings, onBook, admin = false, currentUser, bookingForm = false, busy = false, onAddMember }) {
   const now = useBookingTime();
   const today = bookingToday(now);
   const [classId, setClassId] = useState(classes[0]?.id);
@@ -1102,6 +1103,7 @@ function TasterCard({ classes, bookings, onBook, admin = false, currentUser, boo
       )}
       {admin ? (
         <div className="ff-body border-t border-stone-100 pt-3 text-sm">
+          <button disabled={busy || full || !selectedDate} onClick={() => onAddMember({ session:cls, date:selectedDate, kind:"taster" })} className="mb-3 rounded-full bg-[#1F4A42] text-white px-4 py-2 text-sm disabled:opacity-50">{full ? "Class full" : "Add member"}</button>
           <p className="font-semibold text-stone-600 mb-2">Taster registrations ({registrations.length})</p>
           {registrations.length === 0 ? <p className="text-stone-400">No taster bookings for this date.</p> :
             registrations.map(booking => <div key={booking.id} className="flex flex-wrap items-center justify-between gap-2 py-2 border-t border-stone-100">
@@ -2898,7 +2900,7 @@ function StudioHireForm({ currentUser }) {
 
 /* ---- ADMIN PAGE (accessed at /admin — never linked from the user site) ---- */
 
-function AdminClassCard({ cls, bookings, onMoveBooking }) {
+function AdminClassCard({ cls, bookings, onMoveBooking, onAddMember, busy }) {
   const Icon = ICONS[cls.icon] || Sparkles;
   const now = useBookingTime();
   const today = bookingToday(now);
@@ -2980,6 +2982,8 @@ function AdminClassCard({ cls, bookings, onMoveBooking }) {
         </p></>}
       </div>
 
+      {!viewingHistory && upcomingDates.length > 0 && <div className="px-4 pb-3"><button disabled={busy || full} onClick={() => onAddMember({ session:cls, date:selectedDate, kind:cls.id === "self_defence" ? "course" : "class" })} className="ff-body rounded-full bg-[#1F4A42] text-white px-4 py-2 text-sm disabled:opacity-50">{full ? "Class full" : "Add member"}</button></div>}
+
       {/* Registered members list */}
       <div className="px-4 pb-4">
         {clsBookings.length === 0 ? (
@@ -3038,7 +3042,8 @@ function AdminPage() {
   const bookings=useMemo(()=>allBookings.filter(booking=>booking.type!=="referral_credit"),[allBookings]);
   const [recoveringBookings, setRecoveringBookings] = useState(false);
   const [bookingRecoveryNotice, setBookingRecoveryNotice] = useState("");
-  const [bookingRecoveryIssues, setBookingRecoveryIssues] = useState([]);
+  const [manualBooking, setManualBooking] = useState(null);
+  const [manualNotice, setManualNotice] = useState("");
   const attemptedBookingRecovery = useRef(false);
   const [members, setMembers]     = useState([]);
   const [enquiries, setEnquiries] = useState([]);
@@ -3080,6 +3085,7 @@ function AdminPage() {
   function handleAdminSignOut() {
     sessionStorage.removeItem("snb_admin_session");
     setAdminSession(null);
+    setManualBooking(null);
     setLoginStep("credentials");
     setEmail(""); setPassword(""); setMfaCode("");
   }
@@ -3117,7 +3123,7 @@ function AdminPage() {
       const cleanEmail = email.trim().toLowerCase();
       const res = await callEdgeFunction("admin-auth", { step: "verify_mfa", email: cleanEmail, code: mfaCode, challenge: mfaChallenge });
       if (res.success) {
-        const session = { email: res.admin.email, loginAt: Date.now() };
+        const session = { email: res.admin.email, loginAt: Date.now(), accessToken:res.access_token, expiresAt:res.expires_at };
         sessionStorage.setItem("snb_admin_session", JSON.stringify(session));
         setAdminSession(session);
       }
@@ -3169,9 +3175,8 @@ function AdminPage() {
   }
 
   async function recoverExistingBookings() {
-    setRecoveringBookings(true); setBookingRecoveryNotice(""); setBookingRecoveryIssues([]);
+    setRecoveringBookings(true); setBookingRecoveryNotice("");
     let restored = 0, unchecked = 0;
-    const issues = [];
     const ids = bookingSyncIds(bookings);
     try {
       for (const id of ids) {
@@ -3180,15 +3185,12 @@ function AdminPage() {
           if (result.allocated) restored++;
           else {
             unchecked++;
-            issues.push({ id, message: bookingSyncIssue(result) });
           }
         } catch (error) {
           unchecked++;
-          issues.push({ id, message: error instanceof Error ? error.message : "The payment check could not be completed." });
         }
       }
       await reloadBookings();
-      setBookingRecoveryIssues(issues);
       setBookingRecoveryNotice(ids.length
         ? `${restored} completed booking group(s) restored and marked Paid. ${unchecked} group(s) need checking in GoCardless. No new payment was requested.`
         : "No Direct Debit booking groups were eligible for checking. Check the booking plan and type.");
@@ -3337,12 +3339,10 @@ function AdminPage() {
       <div className="max-w-5xl mx-auto px-4 py-6 flex flex-col gap-6">
         <BookingLoadNotice error={loadError} onRetry={reloadBookings}/>
         {bookingRecoveryNotice && <p role="status" className="ff-body text-sm text-stone-600">{bookingRecoveryNotice}</p>}
-        {bookingRecoveryIssues.length > 0 && <section aria-label="Booking recovery issues" className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-          <h2 className="ff-body text-sm font-semibold text-stone-700 mb-2">Bookings needing attention</h2>
-          <ul className="ff-body text-sm text-stone-700 list-disc pl-5 space-y-2">
-            {bookingRecoveryIssues.map(issue => <li key={issue.id} className="break-words">Booking {issue.id}: {issue.message}</li>)}
-          </ul>
-        </section>}
+        {manualNotice && <p role="status" className="ff-body text-sm text-stone-600">{manualNotice}</p>}
+        {manualBooking && <AdminAddMember {...manualBooking} members={members} adminSession={adminSession} invoke={callEdgeFunction}
+          onClose={() => setManualBooking(null)} onReauthenticate={handleAdminSignOut}
+          onSaved={booking => { setManualNotice(`${booking.name} has been added to ${booking.session_name}.`); reloadBookings(); }}/>}
 
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
@@ -3600,8 +3600,8 @@ function AdminPage() {
         {adminTab === "classes" && (
           <div className="grid sm:grid-cols-2 gap-4 w-full max-w-3xl mx-auto">
             {CLASS_CATALOGUE.map(cls => cls.id === "tasters"
-              ? <TasterCard key={cls.id} classes={TASTER_CLASSES} bookings={bookings} admin/>
-              : <AdminClassCard key={cls.id} cls={cls} bookings={bookings} onMoveBooking={moveBooking}/>)}
+              ? <TasterCard key={cls.id} classes={TASTER_CLASSES} bookings={bookings} admin busy={loading || !!loadError} onAddMember={setManualBooking}/>
+              : <AdminClassCard key={cls.id} cls={cls} bookings={bookings} onMoveBooking={moveBooking} busy={loading || !!loadError} onAddMember={setManualBooking}/>)}
           </div>
         )}
 

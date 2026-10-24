@@ -153,8 +153,9 @@ function messagesFor(p: Payload): Message[] {
       return [customer, admin];
     }
     case "booking_confirmation": {
-      const customer = { to, subject: `You're booked — ${value(p.session_name)} 🐝`, html: shell("Your class places are reserved", "Your booking is confirmed", paragraph(p.plan === "Referral reward" ? `Hi ${value(p.name, "there")}, your free referral lesson is booked. No payment is needed. See you in class!` : `Hi ${value(p.name, "there")}, your payment setup is complete and your places are reserved for the dates below. ${p.status === "paid" ? "Your booking is marked Paid." : "We're checking your original payment setup."} You do not need to book or pay again.`) + details(bookingRows(p))) };
-      const admin = { to: BOOKING_EMAIL, subject: `New booking: ${value(p.name)} — ${value(p.session_name)}`, html: shell("Class places reserved", p.plan === "Referral reward" ? "Free referral lesson booked" : p.status === "paid" ? "Booking confirmed — paid" : "Booking confirmed — awaiting payment", details([...bookingRows(p), ["Status", p.plan === "Referral reward" ? "Free referral lesson" : p.status === "paid" ? "Paid" : "Awaiting payment"]])) };
+      const manual=String(p.plan || "").toLowerCase().includes("(manual");
+      const customer = { to, subject: `You're booked — ${value(p.session_name)} 🐝`, html: shell("Your class places are reserved", "Your booking is confirmed", paragraph(manual ? `Hi ${value(p.name,"there")}, the SNB Hive team has added you to the class below. ${Number(p.amount)>0?"Your payment has been recorded separately.":"Your place is complimentary."} No Direct Debit payment is requested for this booking.` : p.plan === "Referral reward" ? `Hi ${value(p.name, "there")}, your free referral lesson is booked. No payment is needed. See you in class!` : `Hi ${value(p.name, "there")}, your payment setup is complete and your places are reserved for the dates below. ${p.status === "paid" ? "Your booking is marked Paid." : "We're checking your original payment setup."} You do not need to book or pay again.`) + details(bookingRows(p))) };
+      const admin = { to: BOOKING_EMAIL, subject: `New booking: ${value(p.name)} — ${value(p.session_name)}`, html: shell("Class places reserved", manual ? "Manual class booking confirmed" : p.plan === "Referral reward" ? "Free referral lesson booked" : p.status === "paid" ? "Booking confirmed — paid" : "Booking confirmed — awaiting payment", details([...bookingRows(p), ["Status", manual ? (Number(p.amount)>0?"Paid externally":"Complimentary") : p.plan === "Referral reward" ? "Free referral lesson" : p.status === "paid" ? "Paid" : "Awaiting payment"]])) };
       return [customer, admin];
     }
     case "payment_confirmation": {
@@ -211,7 +212,7 @@ Deno.serve(async request => {
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
   try {
     const payload = await request.json();
-    if (["referral_access","referral_reward"].includes(payload.type) && (!Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || request.headers.get("Authorization") !== `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`)) return json({error:"Not authorized"},403);
+    if ((["referral_access","referral_reward"].includes(payload.type) || (payload.type === "booking_confirmation" && String(payload.plan || "").toLowerCase().includes("(manual"))) && (!Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || request.headers.get("Authorization") !== `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`)) return json({error:"Not authorized"},403);
     if (["verify", "login_mfa"].includes(payload.type)) {
       await signupRpc("prepare_signup_verification", { p_email: value(payload.to_email).trim().toLowerCase(),
         p_code_hash: await signupCodeHash(payload.to_email, payload.code) });
@@ -245,7 +246,7 @@ Deno.serve(async request => {
     }
     const messages = messagesFor(payload);
     const category = payload.type === "booking_confirmation" ? "booking" : payload.type === "payment_confirmation" ? "payment" : payload.type === "mix_match_renewal" ? "mix-renewal" : "";
-    await Promise.all(messages.map((message, index) => send(message, category && payload.gocardless_payment_id ? `${category}-${value(payload.gocardless_payment_id)}-${index}` : payload.type === "referral_reward" && payload.reward_id ? `referral-reward-${value(payload.reward_id)}-${index}` : payload.plan === "Referral reward" && payload.id ? `referral-booking-${value(payload.id)}-${index}` : undefined)));
+    await Promise.all(messages.map((message, index) => send(message, category && payload.gocardless_payment_id ? `${category}-${value(payload.gocardless_payment_id)}-${index}` : payload.type === "referral_reward" && payload.reward_id ? `referral-reward-${value(payload.reward_id)}-${index}` : category === "booking" && String(payload.plan || "").toLowerCase().includes("(manual") && payload.id ? `manual-booking-${value(payload.id)}-${index}` : payload.plan === "Referral reward" && payload.id ? `referral-booking-${value(payload.id)}-${index}` : undefined)));
     console.log(`[send-email] sent type=${value(payload.type)} messages=${messages.length}`);
     return json({ success: true });
   } catch (error) {

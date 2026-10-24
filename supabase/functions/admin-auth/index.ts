@@ -1,3 +1,4 @@
+import { issueAdminSession } from "../_shared/admin-session.ts";
 import { corsHeaders, json } from "../_shared/http.ts";
 
 const encoder = new TextEncoder();
@@ -89,7 +90,7 @@ Deno.serve(async request => {
       const valid = challenge.email === ADMIN_EMAIL && email === ADMIN_EMAIL && challenge.expiresAt >= Date.now() &&
         safeEqual(challenge.codeHash, await sha256(String(body.code || "")));
       if (!valid) return json({ error: "Invalid or expired code" }, 401);
-      return json({ success: true, admin: { email: ADMIN_EMAIL } });
+      return json({ success: true, admin: { email: ADMIN_EMAIL }, ...await issueAdminSession(ADMIN_EMAIL) });
     }
     return json({ error: "Invalid authentication step" }, 400);
   } catch (error) {
