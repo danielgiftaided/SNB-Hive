@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; form-action 'none'; base-uri 'none'">
+  <title>SNB Hive — local admin setup</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #ede7dd; color: #2b2e2c; font: 16px/1.5 system-ui, sans-serif; }
+    main { max-width: 650px; margin: 36px auto; padding: 26px; border-radius: 16px; background: #fff; }
+    h1 { margin-top: 0; font: 32px Georgia, serif; }
+    label, .setting-name { display: block; font-weight: 600; margin-top: 18px; }
+    input { width: 100%; padding: 12px; margin-top: 6px; border: 1px solid #aaa; border-radius: 8px; font: inherit; }
+    button { padding: 11px 18px; margin-top: 16px; border: 0; border-radius: 24px; color: #fff; background: #4b5d4e; font: inherit; cursor: pointer; }
+    button:disabled { opacity: .6; }
+    button:focus-visible, input:focus-visible { outline: 3px solid #c99a4b; outline-offset: 3px; }
+    .secondary { background: #ede7dd; color: #2b2e2c; }
+    .setting { padding: 0 0 18px; border-bottom: 1px solid #d6cfbf; }
+    .setting input { font-family: monospace; font-size: 14px; }
+    .note { color: #5c5844; font-size: 14px; }
+    #error { color: #a11; }
+    code { overflow-wrap: anywhere; }
+    [hidden] { display: none !important; }
+    @media (max-width: 680px) { main { margin: 12px; padding: 20px; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>SNB Hive admin access setup</h1>
+  <p>Open this downloaded file directly in your browser. It works locally, with no installation and no network requests.</p>
+  <p>Use your existing admin password if you want to keep it. This creates the settings expected by the current sign-in function; it does not recover the previous function.</p>
+  <form id="setup" autocomplete="off">
+    <label for="password">Admin password</label>
+    <input id="password" type="password" autocomplete="new-password" required>
+    <label for="confirmation">Confirm admin password</label>
+    <input id="confirmation" type="password" autocomplete="new-password" required>
+    <p id="error" role="alert" hidden></p>
+    <button id="generate" type="submit">Generate admin settings</button>
+  </form>
+  <section id="result" aria-labelledby="result-title" hidden>
+    <h2 id="result-title">Add these three settings in Supabase</h2>
+    <p>Open your SNB Hive project → Edge Functions → Secrets. Add each setting below using its exact name and copied value. Keep your existing <code>ADMIN_EMAIL</code>, email and payment settings.</p>
+    <div class="setting">
+      <label class="setting-name" for="salt">ADMIN_PASSWORD_SALT</label>
+      <input id="salt" readonly spellcheck="false" autocomplete="off">
+      <button type="button" data-copy="salt">Copy salt value</button>
+    </div>
+    <div class="setting">
+      <label class="setting-name" for="hash">ADMIN_PASSWORD_HASH</label>
+      <input id="hash" readonly spellcheck="false" autocomplete="off">
+      <button type="button" data-copy="hash">Copy password hash value</button>
+    </div>
+    <div class="setting">
+      <label class="setting-name" for="signing">ADMIN_MFA_SECRET</label>
+      <input id="signing" readonly spellcheck="false" autocomplete="off">
+      <button type="button" data-copy="signing">Copy MFA secret value</button>
+    </div>
+    <p>Save all three settings, then sign in with your existing admin email and the password you entered above. A frontend release is not needed to use these settings with the already deployed sign-in function.</p>
+    <p class="note">These values contain admin secrets. Copy them only into your Supabase project. This helper does not save your password or settings to browser storage, send them anywhere, or change customer passwords.</p>
+    <button id="clear" type="button" class="secondary">Clear and start again</button>
+  </section>
+  <p id="status" role="status"></p>
+</main>
+<script>
+  const byId = id => document.getElementById(id);
+  const hex = bytes => Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+  const random = () => hex(crypto.getRandomValues(new Uint8Array(32)));
+  let generating = false;
+  byId('setup').addEventListener('submit', async event => {
+    event.preventDefault();
+    if (generating) return;
+    const password = byId('password').value, confirmation = byId('confirmation').value;
+    const fail = message => { byId('error').textContent = message; byId('error').hidden = false; };
+    byId('error').hidden = true;
+    if (!password) return fail('Enter your admin password.');
+    if (password !== confirmation) return fail('The passwords do not match. Please check them.');
+    if (!globalThis.crypto?.subtle) return fail('Open the downloaded file directly in an up-to-date browser. Browser cryptography is not available here.');
+    generating = true; byId('generate').disabled = true;
+    try {
+      const salt = random();
+      const hash = hex(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(salt + password))));
+      byId('salt').value = salt; byId('hash').value = hash; byId('signing').value = random();
+      byId('password').value = ''; byId('confirmation').value = '';
+      byId('setup').hidden = true; byId('result').hidden = false;
+      byId('status').textContent = 'Settings generated locally. Add all three to Supabase.';
+      byId('salt').focus();
+    } catch {
+      fail('The browser could not generate the settings. Please try again in an up-to-date browser.');
+    } finally { generating = false; byId('generate').disabled = false; }
+  });
+  document.querySelectorAll('[data-copy]').forEach(button => button.addEventListener('click', async () => {
+    const input = byId(button.dataset.copy);
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(input.value);
+      byId('status').textContent = 'Value copied. Paste it into the matching Supabase secret.';
+    } catch {
+      input.focus(); input.select();
+      byId('status').textContent = 'Value selected. Use your browser’s Copy command, then paste it into Supabase.';
+    }
+  }));
+  byId('clear').addEventListener('click', () => {
+    ['password', 'confirmation', 'salt', 'hash', 'signing'].forEach(id => { byId(id).value = ''; });
+    byId('result').hidden = true; byId('setup').hidden = false; byId('error').hidden = true;
+    byId('status').textContent = 'All fields cleared.'; byId('password').focus();
+  });
+</script>
+</body>
+</html>

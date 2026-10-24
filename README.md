@@ -233,8 +233,26 @@ not the admin password or a six-digit code. Generate a missing signing secret
 locally with a password manager or a cryptographic random generator; do not
 share its value in chat, logs or the repository.
 
-If `ADMIN_PASSWORD_HASH` and `ADMIN_MFA_SECRET` are both absent, run this in
-a private local terminal from the repository folder:
+If the previous deployed authentication function worked without these settings,
+the current error can be a compatibility problem introduced by deploying the
+repository's implementation over that function. This repository does not contain
+its earlier source. Re-deploying an older repository commit does not establish
+that the original live function has been restored. The recovery below configures
+the replacement and can use the **same admin email and password**, without
+claiming to recover the original implementation.
+
+If `ADMIN_PASSWORD_HASH` and `ADMIN_MFA_SECRET` are both absent, download
+[`tools/admin-setup.html`](tools/admin-setup.html) and open the saved file directly
+in your browser. This standalone helper is not part of the deployed app. Enter
+your existing admin password twice to keep using it, generate settings, then
+copy the three generated name/value pairs into **Supabase → Edge Functions →
+Secrets**. Keep `ADMIN_EMAIL` and the other existing settings. Save all three
+and retry sign-in. No Node installation or frontend release is required.
+The file makes no network requests, uses browser cryptography and does not store
+or send passwords/settings. The generated salt must be saved alongside its hash.
+This is a recovery option for the current function, not a rollback.
+
+Alternatively, run this in a private local terminal from the repository folder:
 
 ```bash
 node scripts/generate-admin-config.mjs
@@ -267,7 +285,11 @@ unreadable response stop deployment. These safeguards do not create or repair
 live secrets automatically.
 
 Run `npm run test:admin-auth-config` for isolated missing-setting, sign-in/MFA,
-error-display and deployment-guard checks. No real accounts or emails are used.
+error-display and deployment-guard checks. `npm run test:admin-browser-setup`
+checks the standalone helper on desktop/mobile, including using its settings
+against the actual password/MFA/session handler with a fixture password. This
+browser test uses a loopback-only fixture server because the managed test browser
+disables local-file navigation. No real accounts or emails are used.
 
 The app uses its own member sessions rather than Supabase Auth, so `send-email`
 must be deployed without Supabase JWT verification. The function sends booking
