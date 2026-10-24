@@ -1,8 +1,8 @@
 import { issueAdminSession } from "../_shared/admin-session.ts";
+import { sendBrandedEmail, signInCodeMessage } from "../_shared/email-branding.ts";
 import { corsHeaders, json } from "../_shared/http.ts";
 
 const encoder = new TextEncoder();
-const RESEND_API = "https://api.resend.com/emails";
 const ADMIN_EMAIL = (Deno.env.get("ADMIN_EMAIL") || "").trim().toLowerCase();
 const SENDER_EMAIL = Deno.env.get("SENDER_EMAIL") || "shams@snbhive.com";
 
@@ -44,18 +44,7 @@ async function createChallenge(email: string, code: string, secret: string) {
 }
 
 async function sendCode(email: string, code: string) {
-  const apiKey = Deno.env.get("RESEND_API_KEY");
-  if (!apiKey) throw new Error("RESEND_API_KEY is not configured");
-  const response = await fetch(RESEND_API, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      from: `Shams B <${SENDER_EMAIL}>`, to: [email], reply_to: SENDER_EMAIL,
-      subject: "Your SNB Hive admin login code",
-      html: `<p>Your SNB Hive admin sign-in code is:</p><p style="font-size:32px;font-weight:bold;letter-spacing:8px">${code}</p><p>It expires in 15 minutes. If this was not you, you can ignore this email.</p>`,
-    }),
-  });
-  if (!response.ok) throw new Error(`Resend ${response.status}: ${await response.text()}`);
+  await sendBrandedEmail({ ...signInCodeMessage(email, code, true), replyTo: SENDER_EMAIL });
 }
 
 Deno.serve(async request => {

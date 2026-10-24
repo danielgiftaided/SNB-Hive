@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 
 const functions = [
+  "supabase/functions/_shared/email-branding.ts",
   "supabase/functions/admin-class-booking/index.ts",
   "supabase/functions/_shared/admin-session.ts",
   "supabase/functions/gocardless-checkout/index.ts",
