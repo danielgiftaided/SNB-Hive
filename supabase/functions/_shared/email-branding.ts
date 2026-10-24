@@ -75,4 +75,3 @@ export async function sendBrandedEmail(message: Message, idempotencyKey?: string
   });
   if (!response.ok) throw new Error(`Resend ${response.status}: ${await response.text()}`);
 }
-
