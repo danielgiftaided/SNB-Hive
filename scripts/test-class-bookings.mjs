@@ -106,10 +106,11 @@ try {
 
   await import("../supabase/functions/gocardless-checkout/index.ts");
   const checkoutHandler=handler;
-  let booking={...row}, calls=[], recoveries=[], paymentAttempts=0, flowAttempts=0;
+  let booking={...row, user_id:member.id}, calls=[], recoveries=[], paymentAttempts=0, flowAttempts=0;
   globalThis.fetch=async (input,init={})=>{
     const url=new URL(input);
     if(url.pathname==="/rest/v1/bookings") return json([booking]);
+    if(url.pathname==="/rest/v1/rpc/bind_referral_checkout") return json(null);
     if (url.pathname==="/billing_requests/BR1") {recoveries.push(url.pathname);return json({billing_requests:{id:"BR1"}});}
     if (url.pathname==="/billing_request_flows/F1") {recoveries.push(url.pathname);return json({billing_request_flows:{authorisation_url:"https://pay.example.test/BR1"}});}
     calls.push({path:url.pathname,body:JSON.parse(init.body),headers:init.headers});
@@ -148,7 +149,7 @@ try {
     assert.match(calls[0].body.billing_requests.payment_request.description,/BoxFit class/);
   }
   for (const [date,expected] of [["2026-10-15",2625],["2026-10-22",1750],["2026-10-29",875]]) {
-    booking={...row,session_id:"boxfit",plan:"Membership — 1 class",booking_date:date,amount:expected/100};calls=[];
+    booking={...row,user_id:member.id,session_id:"boxfit",plan:"Membership — 1 class",booking_date:date,amount:expected/100};calls=[];
     assert.equal((await checkoutHandler(post({...checkoutPayload,session_id:"boxfit",plan:"membership"}))).status,200);
     assert.equal(calls[0].body.billing_requests.payment_request.amount,expected);
     assert.match(calls[0].body.billing_requests.payment_request.description,/BoxFit membership/);

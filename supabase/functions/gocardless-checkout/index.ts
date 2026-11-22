@@ -2,14 +2,14 @@ import { mixMatchRpc } from "../_shared/mix-match-storage.ts";
 import { MIX_MATCH_AMOUNT, MIX_MATCH_PLAN, MIX_MATCH_TEMPLATE_ID, mixMatchBookingIssue, mixMatchDates } from "../_shared/mix-match.ts";
 import { selfDefenceQuote, SELF_DEFENCE_CAPACITY } from "../_shared/self-defence.ts";
 import { corsHeaders, json } from "../_shared/http.ts";
-import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../_shared/membership.ts";
-import { classPaymentConfig, classDatesInMonth, coursePaymentConfig, SELF_DEFENCE_DATES, SELF_DEFENCE_PRICE, CLASS_TASTERS, PAYG_AMOUNT, TASTER_AMOUNT } from "../_shared/class-config.ts";
+import { isClassMembershipPlan, MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../_shared/membership.ts";
+import { bookingToday, classPaymentConfig, classDatesInMonth, coursePaymentConfig, SELF_DEFENCE_DATES, SELF_DEFENCE_PRICE, CLASS_TASTERS, PAYG_AMOUNT, TASTER_AMOUNT } from "../_shared/class-config.ts";
+import { bookings, listProvider } from "../_shared/gocardless-bookings.ts";
 import { templatePaymentRequest } from "../_shared/template-checkout.ts";
 import { tasterPaymentRequest } from "../_shared/taster-checkout.ts";
 import { GoCardlessCheckoutError } from "../_shared/gocardless-checkout-error.ts";
 import {
   bookingRowsValidationIssue,
-  canStartCheckoutAfterLookupFailure,
   checkoutMetadata,
   type BookingValidationIssue,
   type CheckoutPlan,
@@ -95,22 +95,38 @@ async function getVerifiedBooking(id: string, plan: CheckoutPlan) {
       await new Promise(resolve => setTimeout(resolve, BOOKING_LOOKUP_DELAY_MS));
     }
   }
-  // Unlike PAYG, membership pricing is not derived from the booking row. A
-  // just-created row can occasionally remain invisible to the function's
-  // PostgREST connection beyond the retry window even though the browser
-  // insert completed. Let that narrow case continue with the stable booking
-  // id; do not relax validation for rows that were found but are invalid.
-  if (canStartCheckoutAfterLookupFailure(plan, lastIssue)) {
-    console.warn("Starting fixed-price membership checkout before booking lookup became visible", {
-      booking_id: id,
-      attempts: BOOKING_LOOKUP_ATTEMPTS,
-    });
-    return {
-      booking: { id, payment_group_id: id },
-      group: [] as Record<string, unknown>[],
-    };
-  }
   return { error: lastIssue };
+}
+
+async function existingMembershipIssue(memberId: string, sessionId: string, groupId: string) {
+  const today = bookingToday();
+  const roots = new Set<string>();
+  const pageSize = 500;
+  for (let offset = 0; ; offset += pageSize) {
+    const rows = await bookings({
+      user_id: `eq.${memberId}`, session_id: `eq.${sessionId}`, plan: "ilike.*membership*",
+      select: "id,payment_group_id,plan,status,booking_date,gocardless_payment_id,gocardless_billing_request_id",
+      order: "id.asc", limit: String(pageSize), offset: String(offset),
+    });
+    for (const row of rows) {
+      const root = row.payment_group_id || row.id;
+      if (root === groupId || !isClassMembershipPlan(row.plan)) continue;
+      const reserved = row.status === "paid" || row.status === "confirmed" ||
+        (row.status === "pending_payment" && /^PM/.test(row.gocardless_payment_id || ""));
+      if (reserved && (!row.booking_date || row.booking_date >= today)) {
+        return "You already have a membership booking for this class. Check My bookings.";
+      }
+      if (reserved || row.gocardless_payment_id || row.gocardless_billing_request_id) roots.add(root);
+    }
+    if (rows.length < pageSize) break;
+  }
+  // Recurring subscriptions can still be live before their next lesson rows exist.
+  if (roots.size && (await listProvider("subscriptions")).some(subscription =>
+    roots.has(subscription.metadata?.booking_id) &&
+    !["cancelled", "finished", "customer_approval_denied"].includes(subscription.status))) {
+    return "You already have a GoCardless subscription for this class. Check your subscription before rebooking.";
+  }
+  return null;
 }
 
 async function gc(path: string, body: unknown, idempotencyKey: string) {
@@ -261,6 +277,11 @@ Deno.serve(async request => {
     const requestOrigin = request.headers.get("origin");
     const redirectUri = allowedRedirect(return_url, expectedOrigin, requestOrigin);
     const exitUri = allowedRedirect(exit_url, expectedOrigin, requestOrigin);
+    if (plan === "membership") {
+      if (!booking.user_id) return json({ error: "The member for this booking could not be verified." }, 400);
+      const issue = await existingMembershipIssue(booking.user_id, session_id, booking.payment_group_id);
+      if (issue) return json({ error: issue }, 409);
+    }
     if (plan === "taster" && tasterDate !== booking.booking_date) {
       await changeUnfinishedTasterDate(booking, String(tasterDate));
       booking.booking_date = tasterDate;
