@@ -22,7 +22,7 @@ import { useBookings } from "./use-bookings.js";
 import { useBookingDay, useBookingTime } from "./use-booking-day.js";
 import { useTasterEligibility } from "./use-taster-eligibility.js";
 import { bookingIsActive, customerBookingIsVisible, bookingPlaceCount, bookingIsUpcoming, bookingIsClassRegistration, bookingBelongsToUser, classPaymentIsPending, classUsesGoCardless, bookingSyncIds, bookingSyncIssue, bookingMatchesClassDate, classBookingDates, UNDATED_BOOKING, isTasterBooking, isGoCardlessTaster, isGoCardlessCourse, userHasBookedRegularClass, userTasterBooking, tasterBookingUsed } from "./booking-utils.js";
-import { MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../supabase/functions/_shared/membership.ts";
+import { isClassMembershipPlan, MEMBERSHIP_MONTHLY_AMOUNT, proratedMembershipAmount } from "../supabase/functions/_shared/membership.ts";
 import { membershipDatesFrom } from "../supabase/functions/_shared/membership-bookings.ts";
 import { checkoutErrorDetail, singleMembershipBooking } from "./checkout.js";
 import { downloadCSV, plainDashes } from "./csv.js";
@@ -3829,9 +3829,10 @@ function BookingApp() {
   }
   function getUserBookingType(id) {
     if (!currentUser) return null;
-    const b = bookings.find(b => b.sessionId===id && b.status !== "waitlisted" && bookingIsActive(b) && !isTasterBooking(b)
+    const upcoming = bookings.filter(b => b.sessionId===id && b.status !== "waitlisted" && bookingIsActive(b) && !isTasterBooking(b)
       && bookingBelongsToUser(b, currentUser) &&
-      ((String(b.plan || "").toLowerCase().includes("membership") && !isMixMatchPlan(b.plan)) || bookingIsUpcoming(b, today, getSessionInfo(id)?.courseDates)));
+      bookingIsUpcoming(b, today, getSessionInfo(id)?.courseDates));
+    const b = upcoming.find(b => isClassMembershipPlan(b.plan)) || upcoming[0];
     if (!b) return null;
     const plan = (b.plan || "").toLowerCase();
     if (plan.includes("waitlist")) return "waitlist";

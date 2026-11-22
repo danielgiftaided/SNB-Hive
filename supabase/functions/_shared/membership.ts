@@ -1,5 +1,11 @@
+import { isMixMatchPlan } from "./mix-match.ts";
+
 export const MEMBERSHIP_MONTHLY_AMOUNT = 3500;
 const LESSONS_PER_MEMBERSHIP_MONTH = 4;
+
+export function isClassMembershipPlan(plan: unknown) {
+  return typeof plan === "string" && plan.toLowerCase().includes("membership") && !isMixMatchPlan(plan);
+}
 
 /**
  * Return the value of the weekly lessons on and after the chosen first lesson.

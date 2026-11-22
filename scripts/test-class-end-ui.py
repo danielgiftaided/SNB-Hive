@@ -105,4 +105,32 @@ with sync_playwright() as p:
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         context.close(); admin_context.close()
         print(f'PASS {name} {date} {width}px: exact finish swaps one date for the next week in user/admin/taster pickers; stale policy selections cannot write or pay; saved history retained')
+
+    # The browser is in Los Angeles, but the previous lesson is already
+    # yesterday at midnight in London while BST is still in effect.
+    before = datetime.fromisoformat('2026-10-23T23:00:00+00:00')
+    old = dict(id='old-zumba', session_id='zumba', session_name='Zumba', type='class',
+               user_id=user['id'], email=user['email'], name=user['name'], amount=35,
+               plan='Membership — 1 class', status='paid', booking_date='2026-10-23')
+    cancelled = dict(old, id='cancelled-zumba', booking_date='2026-10-30', status='cancelled')
+    rows = [old, cancelled]
+    snapshot = copy.deepcopy(rows)
+    context, page = setup(browser, 1280, before)
+    zumba = class_card(page, 'Zumba')
+    zumba.get_by_role('button', name='Book', exact=True).click()
+    page.get_by_role('button', name=re.compile('^Monthly membership')).click()
+    page.get_by_role('button', name='Continue to payment', exact=True).click()
+    page.get_by_role('dialog', name='Cancellation Policy', exact=True).get_by_role('button', name='Back', exact=True).click()
+    assert rows == snapshot
+    context.close()
+
+    upcoming = dict(cancelled, id='upcoming-zumba', status='paid')
+    payg = dict(upcoming, id='upcoming-payg', plan='Pay as you go')
+    rows = [old, cancelled, payg, upcoming]
+    context, page = setup(browser, 390, before)
+    booked = class_card(page, 'Zumba').get_by_role('button', name='Booked', exact=True)
+    booked.wait_for()
+    assert booked.is_disabled()
+    context.close()
+    print('PASS London-midnight membership rebooking with past/cancelled history, and upcoming membership protection alongside PAYG')
     browser.close()

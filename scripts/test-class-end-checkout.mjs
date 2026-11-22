@@ -13,25 +13,34 @@ const env = { SUPABASE_URL: "https://fixture.supabase.test", SUPABASE_SERVICE_RO
 globalThis.Deno = { env: { get: key => env[key] }, serve: fn => { handler = fn; } };
 const originalFetch = globalThis.fetch;
 const json = value => new Response(JSON.stringify(value));
-let rows = [], providerPosts = [];
+let rows = [], history = [], subscriptions = [], providerPosts = [];
 globalThis.fetch = async (input, init = {}) => {
   const url = new URL(input);
-  if (url.hostname === "fixture.supabase.test") return json(init.method === "PATCH" ? [] : url.searchParams.has("id") ? [rows[0]] : rows);
+  if (url.pathname === "/rest/v1/rpc/bind_referral_checkout") return json(null);
+  if (url.pathname === "/rest/v1/bookings") {
+    if (url.searchParams.has("user_id")) {
+      assert.equal(url.searchParams.get("user_id"), "eq.member-1");
+      assert.equal(url.searchParams.get("session_id"), `eq.${rows[0].session_id}`);
+      return json([...rows, ...history]);
+    }
+    return json(init.method === "PATCH" ? [] : url.searchParams.has("id") ? rows.slice(0, 1) : rows);
+  }
+  if (url.pathname === "/subscriptions") return json({ subscriptions, meta: { cursors: {} } });
   if (url.pathname.startsWith("/billing_request_templates")) return json({ billing_request_templates: [
     { id: "BRT_BOX", name: "Boxfit Taster", payment_request_currency: "GBP", mandate_request_scheme: "bacs" },
     { id: "BRT_ZUMBA", name: "Zumba Taster", payment_request_currency: "GBP", mandate_request_scheme: "bacs" },
   ], meta: { cursors: {} } });
   assert.equal(init.method, "POST");
-  providerPosts.push({ path: url.pathname, body: JSON.parse(init.body) });
+  providerPosts.push({ path: url.pathname, body: JSON.parse(init.body), key: init.headers["Idempotency-Key"] });
   if (url.pathname === "/billing_requests") return json({ billing_requests: { id: "BR_END" } });
   if (url.pathname === "/billing_request_flows") return json({ billing_request_flows: { authorisation_url: "https://pay.example.test/end" } });
   throw new Error(`Unexpected route ${url.pathname}`);
 };
-const root = (session, date, plan) => ({ id: "finish-booking", payment_group_id: "finish-booking", session_id: session,
+const root = (session, date, plan) => ({ id: "finish-booking", payment_group_id: "finish-booking", user_id: "member-1", session_id: session,
   booking_date: date, plan: plan === "taster" ? "Taster (GoCardless)" : plan === "membership" ? "Membership — 1 class" : "Pay as you go",
   amount: plan === "taster" ? 5 : plan === "membership" ? 35 : 10, status: "pending_payment" });
 const checkout = (session, plan) => handler(new Request("https://fixture.supabase.test/functions/v1/gocardless-checkout", {
-  method: "POST", body: JSON.stringify({ booking_id: rows[0].id, session_id: session, plan,
+  method: "POST", body: JSON.stringify({ booking_id: "finish-booking", session_id: session, plan,
     return_url: "https://app.example.test/payment-complete", exit_url: "https://app.example.test/" }),
 }));
 try {
@@ -64,4 +73,37 @@ try {
   assert.equal((await checkout("zumba", "membership")).status, 400, "initial membership cannot silently allocate the next month");
   assert.equal(providerPosts.length, 0);
   console.log("PASS exact BST/GMT class-end rejection for PAYG/tasters/memberships, appended dates accepted and five-lesson monthly allocation/pricing preserved");
+
+  rows = [];
+  assert.equal((await checkout("zumba", "membership")).status, 400, "membership requires a verified saved booking");
+  assert.equal(providerPosts.length, 0);
+
+  now = "2026-10-23T23:00:00Z"; // 24 October in London, still 23 October UTC.
+  rows = [root("zumba", "2026-10-30", "membership")];
+  const old = { ...rows[0], id: "old-membership", payment_group_id: "old-membership",
+    booking_date: "2026-10-23", status: "paid", gocardless_payment_id: "PM_OLD" };
+  const cancelled = { ...old, id: "cancelled-lesson", booking_date: "2026-10-30", status: "cancelled" };
+  history = [old, cancelled];
+  const previousSubscription = { metadata: { booking_id: old.id }, status: "active" };
+  subscriptions = [previousSubscription];
+  let result = await checkout("zumba", "membership");
+  assert.equal(result.status, 409);
+  assert.match((await result.json()).error, /already have a GoCardless subscription/);
+  assert.equal(providerPosts.length, 0);
+
+  subscriptions = [{ ...previousSubscription, status: "cancelled" }];
+  for (const status of ["paid", "confirmed", "pending_payment"]) {
+    history = [old, { ...cancelled, status }];
+    result = await checkout("zumba", "membership");
+    assert.equal(result.status, 409);
+    assert.match((await result.json()).error, /already have a membership booking/);
+    assert.equal(providerPosts.length, 0);
+  }
+  history = [old, cancelled];
+  const saved = JSON.stringify(history);
+  assert.equal((await checkout("zumba", "membership")).status, 200);
+  assert.equal((await checkout("zumba", "membership")).status, 200);
+  assert.deepEqual(providerPosts.slice(0, 2), providerPosts.slice(2), "membership retries use the same provider keys and payload");
+  assert.equal(JSON.stringify(history), saved);
+  console.log("PASS London-date membership rebooking, paid/confirmed reservation and live subscription guards, history and retry keys");
 } finally { globalThis.fetch = originalFetch; globalThis.Date = RealDate; delete globalThis.Deno; }

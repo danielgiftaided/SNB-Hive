@@ -43,6 +43,18 @@ export async function gc(path: string, init: RequestInit = {}) {
   return result;
 }
 
+export async function listProvider(resource: "subscriptions" | "payments") {
+  const rows: any[] = [];
+  let after = "";
+  for (let page = 0; page < 20; page++) {
+    const result = await gc(`/${resource}?${new URLSearchParams({ limit: "100", ...(after ? { after } : {}) })}`);
+    rows.push(...result[resource]);
+    after = result.meta?.cursors?.after;
+    if (!after) return rows;
+  }
+  throw new Error("There are too many payment records to verify safely. Please contact Shams.");
+}
+
 export async function groupFor(anchor: Booking) {
   if (anchor.payment_group_id) return bookings({ payment_group_id: `eq.${anchor.payment_group_id}`, select: "*" });
   const [fresh] = await bookings({ id: `eq.${anchor.id}`, select: "*", limit: "1" });

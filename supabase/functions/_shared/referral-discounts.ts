@@ -1,5 +1,5 @@
 import { mixMatchRpc } from "./mix-match-storage.ts";
-import { bookings, gc } from "./gocardless-bookings.ts";
+import { bookings, gc, listProvider } from "./gocardless-bookings.ts";
 import { bookingToday } from "./class-config.ts";
 
 export const REFERRAL_SAVING = 875;
@@ -11,15 +11,6 @@ const nextMonth = (month:string) => new Date(Date.UTC(Number(month.slice(0,4)),N
 // GET-only discovery. Public booking rows are merely search hints; mandate
 // customer email must match the private registration email before any billing
 // action is offered. The user's £35 subscription is never amended or paused.
-async function listProvider(resource:string) {
-  const rows:any[]=[];let after="";
-  for(let page=0;page<20;page++) {
-    const result=await gc(`/${resource}?${new URLSearchParams({limit:"100",...(after?{after}:{})})}`);
-    rows.push(...result[resource]);after=result.meta?.cursors?.after;
-    if(!after)return rows;
-  }
-  throw new Error("There are too many payment records to verify safely. Please contact Shams.");
-}
 export async function referralMembershipOptions(memberId:string) {
   const identity=await discountState("identity",{member_id:memberId});
   const rows=await bookings({user_id:`eq.${memberId}`,select:"*"});
